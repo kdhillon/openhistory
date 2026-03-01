@@ -1,0 +1,8 @@
+node_modules/
+.env
+*.env.local
+dist/
+.DS_Store
+
+# Generated data file — produced by export script
+frontend/src/data/seed.geojson
