@@ -2,6 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
+  preview: {
+    allowedHosts: ['openhistory.app', 'www.openhistory.app'],
+  },
   server: {
     proxy: {
       '/api': {
