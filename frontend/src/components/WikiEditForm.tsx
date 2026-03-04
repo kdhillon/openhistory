@@ -9,7 +9,7 @@ import { patchFeature } from '../lib/api';
 
 interface Props {
   feature: FeatureProperties;
-  field: 'date' | 'location';
+  field: 'date' | 'location' | 'capital' | 'sovereign';
   wikiAuth: string | null;
   onAuth: (username: string | null) => void;
   onSuccess: (updates: Partial<FeatureProperties>) => void;

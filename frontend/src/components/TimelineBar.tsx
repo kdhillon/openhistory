@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { YEAR_MIN, YEAR_MAX } from '../types';
 import {
   displayDate, encodeDate, normalizeDateInt,
-  DATE_MIN, DATE_MAX, STEP_DAY, STEP_MONTH, STEP_YEAR,
+  DATE_MIN, DATE_MAX, STEP_MONTH, STEP_YEAR,
 } from '../hooks/useTimeline';
 
 interface Props {
@@ -77,8 +77,8 @@ export function TimelineBar({
 
   const cancel = useCallback(() => setEditing(false), []);
 
-  const jumpBack    = useCallback(() => onSeek(normalizeDateInt(currentDateInt - JUMP_STEPS * stepSize)), [currentDateInt, stepSize, onSeek]);
-  const jumpForward = useCallback(() => onSeek(normalizeDateInt(currentDateInt + JUMP_STEPS * stepSize)), [currentDateInt, stepSize, onSeek]);
+  const jumpBack    = useCallback(() => { for (let i = 0; i < JUMP_STEPS; i++) onStep(-1); }, [onStep]);
+  const jumpForward = useCallback(() => { for (let i = 0; i < JUMP_STEPS; i++) onStep(1);  }, [onStep]);
 
   return (
     <div style={styles.bar}>

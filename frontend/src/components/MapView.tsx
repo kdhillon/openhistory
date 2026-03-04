@@ -160,7 +160,7 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
         data: { type: 'FeatureCollection', features: [] },
       });
 
-      const circlePaint: maplibregl.CirclePaintSpecification = {
+      const circlePaint = {
         'circle-color': ['coalesce', ['get', '_color'], '#9E9E9E'],
         'circle-radius': ['case',
           ['has', '_radius'],                                 ['get', '_radius'],
@@ -179,7 +179,7 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
         'circle-opacity': ['number', ['get', '_opacity'], 1.0],
       };
 
-      const labelLayout: maplibregl.SymbolLayoutSpecification = {
+      const labelLayout = {
         'text-field': ['get', 'title'],
         'text-size': ['case', ['==', ['get', 'primaryCategory'], 'war'], 22, 14],
         'text-offset': [0, 1.2],
@@ -188,7 +188,7 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
         'text-optional': true,
       };
 
-      const labelPaint: maplibregl.SymbolPaintSpecification = {
+      const labelPaint = {
         'text-color': '#ffffff',
         'text-halo-color': 'rgba(0,0,0,0.75)',
         'text-halo-width': 1.5,
@@ -208,7 +208,7 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
           'circle-stroke-color': ['coalesce', ['get', '_color'], '#9E9E9E'],
           'circle-opacity': ['number', ['get', '_opacity'], 1.0],
           'circle-stroke-opacity': ['number', ['get', '_opacity'], 1.0],
-        } as maplibregl.CirclePaintSpecification,
+        },
       });
       map.addLayer({
         id: 'labels-polity',
@@ -233,11 +233,11 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
           'icon-size': 0.9,
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
-        } as maplibregl.SymbolLayoutSpecification,
+        },
         paint: {
           'icon-color': ['coalesce', ['get', '_color'], '#9E9E9E'],
           'icon-opacity': ['number', ['get', '_opacity'], 1.0],
-        } as maplibregl.SymbolPaintSpecification,
+        },
       });
 
       // Location circles: regions, countries, major cities
@@ -256,10 +256,10 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
           'icon-size': ['interpolate', ['linear'], ['coalesce', ['get', '_radius'], 7], 5, 0.6, 7, 0.75, 9, 0.9, 12, 1.1],
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
-        } as maplibregl.SymbolLayoutSpecification,
+        },
         paint: {
           'icon-opacity': ['number', ['get', '_opacity'], 1.0],
-        } as maplibregl.SymbolPaintSpecification,
+        },
       });
 
       // Labels for events + major locations
