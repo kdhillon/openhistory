@@ -83,7 +83,13 @@ CREATE TABLE IF NOT EXISTS events (
   sitelinks_count       INT,
   data_version          INTEGER          NOT NULL DEFAULT 2,
   pipeline_run          TEXT,
-  created_at            TIMESTAMPTZ      NOT NULL DEFAULT NOW()
+  created_at            TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
+  -- Generated column for efficient interval overlap queries (GiST stabbing query).
+  -- Allows O(log n) range lookups via the idx_events_year_range GiST index.
+  year_range            int4range
+    GENERATED ALWAYS AS (
+      int4range(year_start, COALESCE(year_end, year_start), '[]')
+    ) STORED
 );
 
 CREATE INDEX IF NOT EXISTS events_year_start_idx             ON events (year_start);
@@ -92,3 +98,4 @@ CREATE INDEX IF NOT EXISTS events_data_version_idx           ON events (data_ver
 CREATE INDEX IF NOT EXISTS idx_events_location_wikidata_qid  ON events (location_wikidata_qid);
 CREATE INDEX IF NOT EXISTS idx_events_p31_qids               ON events USING GIN (p31_qids);
 CREATE INDEX IF NOT EXISTS idx_events_part_of_qids           ON events USING GIN (part_of_qids);
+CREATE INDEX IF NOT EXISTS idx_events_year_range             ON events USING GIST (year_range);

@@ -13,6 +13,7 @@ Endpoints:
 import os
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 import psycopg2
 import psycopg2.extras
 
@@ -22,6 +23,8 @@ DATABASE_URL = os.environ.get(
 )
 
 app = FastAPI(title="OurStory API", version="0.1.0")
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,
@@ -129,6 +132,102 @@ def build_event_feature(cur, event_id: str) -> dict | None:
             "pipelineRun": row["pipeline_run"],
         },
     }
+
+
+def build_event_features_bulk(cur, year_min: int, year_max: int) -> list[dict]:
+    """
+    Return all events overlapping [year_min, year_max] as GeoJSON Features.
+    Uses the GiST year_range index for O(log n + k) lookup.
+    Total: 2 DB queries regardless of window size.
+    """
+    cur.execute("""
+        SELECT
+          e.id, e.slug, e.title, e.wikipedia_title, e.wikipedia_summary, e.wikipedia_url,
+          e.year_start, e.month_start, e.day_start,
+          e.year_end, e.month_end, e.day_end,
+          e.date_is_fuzzy, e.date_range_min, e.date_range_max,
+          e.location_level,
+          CASE WHEN e.location_level = 'point' THEN e.lng ELSE l.lng END AS lng,
+          CASE WHEN e.location_level = 'point' THEN e.lat ELSE l.lat END AS lat,
+          e.location_name,
+          l.slug AS location_slug,
+          e.categories, e.p31_qids, e.part_of_qids,
+          e.sitelinks_count, e.data_version, e.pipeline_run
+        FROM events e
+        LEFT JOIN locations l ON e.location_wikidata_qid = l.wikidata_qid
+        WHERE e.year_range && int4range(%(year_min)s, %(year_max)s, '[]')
+          AND e.year_start IS NOT NULL
+        ORDER BY e.year_start
+    """, {"year_min": year_min, "year_max": year_max})
+    rows = cur.fetchall()
+
+    if not rows:
+        return []
+
+    # Batch-resolve all part_of_qids in one query
+    all_qids: list[str] = []
+    for row in rows:
+        all_qids.extend(row["part_of_qids"] or [])
+
+    qid_map: dict = {}
+    if all_qids:
+        cur.execute(
+            "SELECT wikidata_qid, title, slug FROM events WHERE wikidata_qid = ANY(%s)",
+            (list(set(all_qids)),),
+        )
+        qid_map = {r["wikidata_qid"]: {"title": r["title"], "slug": r["slug"]} for r in cur.fetchall()}
+
+    features = []
+    for row in rows:
+        part_of_resolved = [
+            {"qid": qid, "title": qid_map[qid]["title"], "slug": qid_map[qid]["slug"]}
+            for qid in (row["part_of_qids"] or [])
+            if qid in qid_map
+        ]
+
+        lng, lat = row["lng"], row["lat"]
+        geometry = (
+            {"type": "Point", "coordinates": [float(lng), float(lat)]}
+            if lng is not None and lat is not None
+            else None
+        )
+
+        features.append({
+            "type": "Feature",
+            "geometry": geometry,
+            "properties": {
+                "featureType": "event",
+                "id": str(row["id"]),
+                "slug": row["slug"] or (row["wikipedia_title"] or "").replace(" ", "_"),
+                "title": row["title"],
+                "wikipediaTitle": row["wikipedia_title"],
+                "wikipediaSummary": row["wikipedia_summary"] or "",
+                "wikipediaUrl": row["wikipedia_url"],
+                "yearStart": row["year_start"],
+                "monthStart": row["month_start"],
+                "dayStart": row["day_start"],
+                "yearEnd": row["year_end"],
+                "monthEnd": row["month_end"],
+                "dayEnd": row["day_end"],
+                "dateIsFuzzy": row["date_is_fuzzy"],
+                "dateRangeMin": row["date_range_min"],
+                "dateRangeMax": row["date_range_max"],
+                "locationLevel": row["location_level"],
+                "locationName": row["location_name"] or "",
+                "locationSlug": row["location_slug"],
+                "categories": row["categories"] or [],
+                "primaryCategory": (row["categories"] or ["unknown"])[0],
+                "wikidataClasses": row["p31_qids"] or [],
+                "partOf": row["part_of_qids"] or [],
+                "partOfResolved": part_of_resolved,
+                "sitelinksCount": row["sitelinks_count"],
+                "yearDisplay": display_year(row["year_start"]) if row["year_start"] is not None else "Unknown",
+                "dataVersion": row["data_version"],
+                "pipelineRun": row["pipeline_run"],
+            },
+        })
+
+    return features
 
 
 # ── Routes ──────────────────────────────────────────────────────────────────────
@@ -296,5 +395,28 @@ def get_overrides():
         ids = [str(row["id"]) for row in cur.fetchall()]
         features = [f for event_id in ids if (f := build_event_feature(cur, event_id)) is not None]
         return {"type": "FeatureCollection", "features": features, "count": len(features)}
+    finally:
+        conn.close()
+
+
+@app.get("/api/events")
+def get_events(year_min: int, year_max: int):
+    """
+    Return all events overlapping [year_min, year_max] as a GeoJSON FeatureCollection.
+
+    Uses a GiST int4range index for O(log n + k) interval overlap queries.
+    2 DB queries total regardless of window size.
+    """
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        features = build_event_features_bulk(cur, year_min, year_max)
+        return {
+            "type": "FeatureCollection",
+            "features": features,
+            "count": len(features),
+            "yearMin": year_min,
+            "yearMax": year_max,
+        }
     finally:
         conn.close()

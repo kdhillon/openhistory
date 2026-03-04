@@ -1,5 +1,7 @@
 import type { Category } from '../types';
 import { EVENT_CATEGORIES, LOCATION_CATEGORIES, POLITY_CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS } from '../theme/categories';
+import { SettingsPanel } from './SettingsPanel';
+import type { SettingsPanelProps } from './SettingsPanel';
 
 interface Props {
   activeCategories: Set<Category>;
@@ -7,6 +9,51 @@ interface Props {
   activePolityCategories: Set<Category>;
   onTogglePolity: (cat: Category) => void;
   onOpenData: () => void;
+  settings: SettingsPanelProps; // windowInfo, isLoading, error
+}
+
+function GroupLabel({ label, cats, activeSet, onToggle }: {
+  label: string;
+  cats: Category[];
+  activeSet: Set<Category>;
+  onToggle: (cat: Category) => void;
+}) {
+  const allOn = cats.every((c) => activeSet.has(c));
+
+  const handleClick = () => {
+    if (allOn) {
+      // Deselect all in group
+      cats.forEach((c) => { if (activeSet.has(c)) onToggle(c); });
+    } else {
+      // Select all in group
+      cats.forEach((c) => { if (!activeSet.has(c)) onToggle(c); });
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      title={allOn ? `Hide all ${label}` : `Show all ${label}`}
+      style={{
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: '0.07em',
+        textTransform: 'uppercase',
+        color: allOn ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.25)',
+        background: allOn ? 'transparent' : 'rgba(0,0,0,0.04)',
+        border: '1px solid',
+        borderColor: allOn ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.1)',
+        borderRadius: 5,
+        padding: '2px 7px',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        flexShrink: 0,
+        transition: 'all 0.15s ease',
+      }}
+    >
+      {label}
+    </button>
+  );
 }
 
 function ChipGroup({ cats, activeCategories, onToggle }: {
@@ -40,27 +87,28 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
   );
 }
 
-export function CategoryFilter({ activeCategories, onToggle, activePolityCategories, onTogglePolity, onOpenData }: Props) {
+export function CategoryFilter({ activeCategories, onToggle, activePolityCategories, onTogglePolity, onOpenData, settings }: Props) {
   return (
     <div style={styles.bar}>
       {/* Row 1: wordmark + events */}
       <div style={styles.row}>
         <div style={styles.wordmark}>OpenHistory</div>
         <div style={styles.divider} />
-        <span style={styles.groupLabel}>Events</span>
+        <GroupLabel label="Events" cats={EVENT_CATEGORIES} activeSet={activeCategories} onToggle={onToggle} />
         <ChipGroup cats={EVENT_CATEGORIES} activeCategories={activeCategories} onToggle={onToggle} />
         <div style={{ flex: 1 }} />
         <button onClick={onOpenData} style={styles.dataBtn}>Data ↗</button>
+        <SettingsPanel {...settings} />
       </div>
 
       <div style={styles.rowDivider} />
 
       {/* Row 2: locations + polities */}
       <div style={styles.row}>
-        <span style={styles.groupLabel}>Locations</span>
+        <GroupLabel label="Locations" cats={LOCATION_CATEGORIES} activeSet={activeCategories} onToggle={onToggle} />
         <ChipGroup cats={LOCATION_CATEGORIES} activeCategories={activeCategories} onToggle={onToggle} />
         <div style={styles.groupDivider} />
-        <span style={styles.groupLabel}>Polities</span>
+        <GroupLabel label="Polities" cats={POLITY_CATEGORIES} activeSet={activePolityCategories} onToggle={onTogglePolity} />
         <ChipGroup cats={POLITY_CATEGORIES} activeCategories={activePolityCategories} onToggle={onTogglePolity} />
       </div>
     </div>
@@ -106,15 +154,6 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'rgba(0,0,0,0.15)',
     marginRight: 6,
     flexShrink: 0,
-  },
-  groupLabel: {
-    fontSize: 10,
-    fontWeight: 700,
-    letterSpacing: '0.07em',
-    textTransform: 'uppercase',
-    color: 'rgba(0,0,0,0.35)',
-    flexShrink: 0,
-    marginRight: 2,
   },
   groupDivider: {
     width: 1,
