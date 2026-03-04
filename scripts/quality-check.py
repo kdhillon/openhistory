@@ -24,7 +24,7 @@ Usage:
 
 Environment:
     ANTHROPIC_API_KEY  — required
-    DATABASE_URL       — defaults to postgresql://ourstory:ourstory@localhost:5432/ourstory
+    DATABASE_URL       — defaults to postgresql://ourstory:ourstory@localhost:5433/ourstory
 """
 
 import argparse
@@ -39,7 +39,7 @@ import psycopg2.extras
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
-    "postgresql://ourstory:ourstory@localhost:5432/ourstory",
+    "postgresql://ourstory:ourstory@localhost:5433/ourstory",
 )
 
 # Model to use — haiku is fast and cheap; swap for sonnet if accuracy matters more

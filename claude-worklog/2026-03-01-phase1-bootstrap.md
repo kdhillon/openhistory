@@ -10,40 +10,50 @@ Initialize the OurStory project, create a GitHub repo, set up DB infrastructure 
 ## Steps
 
 ### Step 1: Repo & Project Structure
-- [ ] Git init in `/Users/kdhillon/Documents/Claude/history`
-- [ ] Create GitHub repo `ourstory` (public)
-- [ ] Create `.gitignore`
-- [ ] Create `README.md`
+- [x] Git init in `/Users/kdhillon/Documents/Claude/history`
+- [x] Create GitHub repo `ourstory` (public) — https://github.com/kdhillon/ourstory
+- [x] Create `.gitignore`
+- [x] Create `README.md`
 
 ### Step 2: Docker Compose
-- [ ] `docker-compose.yml` — Postgres 16
-- [ ] `.env.example`
+- [x] `docker-compose.yml` — Postgres 16
+- [x] `.env.example`
 
 ### Step 3: Database Schema
-- [ ] `db/migrations/001_initial_schema.sql` — cities + events tables, constraints, indexes
+- [x] `db/migrations/001_initial_schema.sql` — cities + events tables, constraints, indexes
 
 ### Step 4: Seed Data — Classical Antiquity (500 BCE – 500 CE)
-- [ ] `db/seeds/001_classical_antiquity.sql` — 8 cities, 15 events
+- [x] `db/seeds/001_classical_antiquity.sql` — 8 cities, 15 events inserted
 
 ### Step 5: Export Script
-- [ ] `scripts/package.json`
-- [ ] `scripts/export-geojson.ts` — DB → `frontend/src/data/seed.geojson`
+- [x] `scripts/package.json`
+- [x] `scripts/export-geojson.ts` — wrote 23 features to `frontend/src/data/seed.geojson`
 
 ### Step 6: Frontend
-- [ ] Vite + React + TypeScript scaffold
-- [ ] `src/types/index.ts`
-- [ ] `src/theme/categories.ts`
-- [ ] `src/hooks/useTimeline.ts`
-- [ ] `src/components/MapView.tsx`
-- [ ] `src/components/TimelineBar.tsx`
-- [ ] `src/components/InfoPanel.tsx`
-- [ ] `src/components/CategoryFilter.tsx`
-- [ ] `src/App.tsx`
+- [x] Vite + React + TypeScript scaffold
+- [x] `src/types/index.ts`
+- [x] `src/types/geojson.d.ts` — module declaration for `.geojson` imports
+- [x] `src/theme/categories.ts`
+- [x] `src/hooks/useTimeline.ts`
+- [x] `src/components/MapView.tsx`
+- [x] `src/components/TimelineBar.tsx`
+- [x] `src/components/InfoPanel.tsx`
+- [x] `src/components/CategoryFilter.tsx`
+- [x] `src/App.tsx`
+- [x] `vite.config.ts` — inline `.geojson` plugin
+- [x] Build passes (`npm run build` ✓)
 
 ### Step 7: GitHub Push
-- [ ] Initial commit + push
+- [x] Initial commit + push (commit d46c2d9)
 
 ---
 
 ## Progress Log
+
+### 2026-03-01 — Phase 1 complete
+All steps done. Postgres running in Docker with 8 cities and 15 events seeded. Frontend builds clean. Run `cd frontend && npm run dev` to launch at localhost:5173.
+
+**Known issue**: `node_modules/` for `frontend/` and `scripts/` are not gitignored at the root level (each package has its own `.gitignore`). Fine for now.
+
+**Next up**: Run `npm run dev` and verify the map loads, pins appear, timeline works, info panel opens on click.
 

@@ -38,8 +38,15 @@ interface EventRow {
   location_slug: string | null;
   categories: string[];
   p31_qids: string[];
+  part_of_qids: string[];
   data_version: number;
   pipeline_run: string;
+}
+
+interface QidLookupRow {
+  wikidata_qid: string;
+  title: string;
+  slug: string | null;
 }
 
 interface LocationRow {
@@ -94,6 +101,7 @@ async function main() {
       l.slug AS location_slug,
       e.categories,
       e.p31_qids,
+      e.part_of_qids,
       e.data_version,
       e.pipeline_run
     FROM events e
@@ -102,6 +110,17 @@ async function main() {
        OR (e.location_wikidata_qid IS NOT NULL AND l.wikidata_qid IS NOT NULL)
     ORDER BY e.year_start
   `);
+
+  // -- QID lookup: resolve part_of_qids to titles/slugs at export time --
+  const qidLookupResult = await client.query<QidLookupRow>(`
+    SELECT wikidata_qid, title, slug
+    FROM events
+    WHERE wikidata_qid IS NOT NULL
+  `);
+  const qidMap = new Map<string, { title: string; slug: string | null }>();
+  for (const row of qidLookupResult.rows) {
+    qidMap.set(row.wikidata_qid, { title: row.title, slug: row.slug });
+  }
 
   // -- Locations (cities only for map pins) --
   const locationsResult = await client.query<LocationRow>(`
@@ -150,6 +169,13 @@ async function main() {
         categories: row.categories,
         primaryCategory: row.categories[0] ?? 'unknown',
         wikidataClasses: row.p31_qids ?? [],
+        partOf: row.part_of_qids ?? [],
+        partOfResolved: (row.part_of_qids ?? [])
+          .map((qid) => {
+            const lookup = qidMap.get(qid);
+            return lookup ? { qid, title: lookup.title, slug: lookup.slug } : null;
+          })
+          .filter((x): x is { qid: string; title: string; slug: string | null } => x !== null),
         yearDisplay: displayYear(row.year_start),
         dataVersion: row.data_version,
         pipelineRun: row.pipeline_run,

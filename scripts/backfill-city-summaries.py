@@ -22,7 +22,7 @@ import requests
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
-    "postgresql://ourstory:ourstory@localhost:5432/ourstory",
+    "postgresql://ourstory:ourstory@localhost:5433/ourstory",
 )
 
 WIKIPEDIA_API = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"

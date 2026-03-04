@@ -26,7 +26,7 @@ WIKIDATA_TO_CATEGORY: dict[str, Optional[str]] = {
     "Q348120":  "battle",        # amphibious warfare
     "Q3817498": "battle",        # last stand
     "Q1361229": "battle",        # conquest
-    "Q188686":  "battle",        # siege
+    "Q188055":  "battle",        # siege
 
     # War / Armed conflict (broader than a single battle)
     "Q198":     "war",           # war
@@ -37,11 +37,12 @@ WIKIDATA_TO_CATEGORY: dict[str, Optional[str]] = {
     "Q4688003": "war",           # aerial bombing of a city
     "Q135010":  "war",           # war crime
     "Q645883":  "war",           # military operation
-    "Q1261499": "war",           # naval warfare
+    "Q1261499": "battle",        # naval battle (specific battle type)
     "Q45382":   "politics",      # coup d'état (alt QID)
 
     # Politics
     "Q40231":   "politics",      # election
+    "Q131569":  "politics",      # international treaty
     "Q49773":   "politics",      # summit meeting
     "Q1781513": "politics",      # coup d'état
     "Q167466":  "politics",      # assassination
@@ -55,6 +56,7 @@ WIKIDATA_TO_CATEGORY: dict[str, Optional[str]] = {
     "Q2334719": "politics",      # political crisis
     "Q145694":  "politics",      # abdication
     "Q3839261": "politics",      # political trial
+    "Q208251":  "politics",      # declaration of independence
 
     # Disaster (natural or human-caused)
     "Q124490":  "disaster",      # natural disaster
@@ -64,7 +66,9 @@ WIKIDATA_TO_CATEGORY: dict[str, Optional[str]] = {
     "Q3839081": "disaster",      # wildfire
     "Q2635894": "disaster",      # epidemic
     "Q3241045": "disaster",      # disease outbreak
+    "Q44512":   "disaster",      # epidemic (alt SPARQL class)
     "Q12184":   "disaster",      # pandemic
+    "Q2723958": "disaster",      # influenza epidemic
     "Q838718":  "disaster",      # city fire
     "Q2656967": "disaster",      # nuclear explosion
     "Q1931234": "disaster",      # industrial disaster
@@ -90,6 +94,8 @@ WIKIDATA_TO_CATEGORY: dict[str, Optional[str]] = {
     "Q2685356": "exploration",   # exploration
     "Q43702":   "exploration",   # expedition
     "Q170584":  "exploration",   # expedition (alt)
+    "Q2401485": "exploration",   # expedition (SPARQL class)
+    "Q366301":  "exploration",   # scientific expedition
     "Q1198916": "exploration",   # voyage of discovery
 
     # Science & Technology
@@ -98,12 +104,184 @@ WIKIDATA_TO_CATEGORY: dict[str, Optional[str]] = {
     "Q4026292": "science",       # invention
     "Q2678658": "science",       # scientific discovery
 
+    # Science & Discovery (additional classes)
+    "Q1318295": "science",       # astronomical discovery (planet/comet/asteroid finds)
+    "Q42471":   "discovery",     # archaeological discovery (Rosetta Stone, Pompeii, etc.)
+
+    # Politics (additional classes)
+    "Q175482":  "politics",      # protest / demonstration
+    "Q133311":  "politics",      # strike action (labor strike)
+    "Q900792":  "politics",      # referendum / plebiscite
+    "Q625994":  "politics",      # international conference / congress
+    "Q1765828": "politics",      # inauguration
+    "Q5004978": "politics",      # annexation
+
+    # Religion (additional classes)
+    "Q45469":   "religion",      # canonization
+    "Q191760":  "religion",      # beatification
+    "Q30523":   "religion",      # schism
+    "Q625017":  "religion",      # religious persecution
+    "Q213363":  "religion",      # pilgrimage
+
     # Culture
     "Q959583":  "culture",       # cultural event
     "Q1784537": "culture",       # art movement
+    "Q464980":  "culture",       # art exhibition (Royal Academy, Paris Salon, etc.)
+    "Q188686":  "culture",       # world's fair / international exposition
+    "Q5389":    "culture",       # Olympic Games (ancient + modern)
 
     # Known false positives — override to None so LLM handles them properly
     "Q180548":   None,           # Neolithic Revolution — prehistoric process, not political
+
+    # Auto-learned from LLM (do not edit by hand — re-run fix-empty-categories.py)
+    "Q191503":  "battle",      # duel
+    "Q19841484":  "battle",      # sack
+    "Q2001676":  "battle",      # offensive
+    "Q646740":  "battle",      # landing operation
+    "Q678146":  "battle",      # bombardment
+    "Q876274":  "battle",      # naval warfare
+    "Q997267":  "battle",      # skirmish
+    "Q1006311":  "war",      # war of national liberation
+    "Q104212151":  "war",      # series of wars
+    "Q107706":  "war",      # armistice
+    "Q1155622":  "war",      # slave rebellion
+    "Q1323212":  "war",      # insurgency
+    "Q13427116":  "war",      # peasant revolt
+    "Q1371150":  "war",      # hostage taking
+    "Q1384277":  "war",      # military expedition
+    "Q16533779":  "war",      # asonada
+    "Q217901":  "war",      # capitulation
+    "Q21994376":  "war",      # war of independence
+    "Q350604":  "war",      # armed conflict
+    "Q41397":  "war",      # genocide
+    "Q511866":  "war",      # mutiny
+    "Q750215":  "war",      # mass murder
+    "Q766875":  "war",      # ethnic conflict
+    "Q1057954":  "politics",      # by-election
+    "Q1078001":  "politics",      # territorial dispute
+    "Q112727382":  "politics",      # United States Senate election in Delaware
+    "Q112727401":  "politics",      # United States Senate election in Massachusetts
+    "Q112727412":  "politics",      # United States Senate election in New York
+    "Q112727420":  "politics",      # United States Senate election in Pennsylvania
+    "Q124757":  "politics",      # riot
+    "Q1464916":  "politics",      # declaration of independence
+    "Q15261477":  "politics",      # gubernatorial election
+    "Q15283424":  "politics",      # United Kingdom general election
+    "Q1570656":  "politics",      # United States midterm election
+    "Q15974864":  "politics",      # Spanish general election
+    "Q192909":  "politics",      # scandal
+    "Q213541":  "politics",      # concordat
+    "Q2223653":  "politics",      # terrorist attack
+    "Q24333627":  "politics",      # United States Senate election
+    "Q24397514":  "politics",      # United States House of Representatives election
+    "Q25906438":  "politics",      # attempted coup d'état
+    "Q26252880":  "politics",      # United States general election
+    "Q26466721":  "politics",      # special election to the United States House of Representativ
+    "Q27962800":  "politics",      # United States presidential election in New York
+    "Q28206753":  "politics",      # United States presidential election in New Jersey
+    "Q28221942":  "politics",      # United States presidential election in Connecticut
+    "Q28221947":  "politics",      # United States presidential election in Delaware
+    "Q28222030":  "politics",      # United States presidential election in Massachusetts
+    "Q28222117":  "politics",      # United States presidential election in Pennsylvania
+    "Q28222130":  "politics",      # United States presidential election in South Carolina
+    "Q28222160":  "politics",      # United States presidential election in Vermont
+    "Q3587148":  "politics",      # French legislative election
+    "Q47566":  "politics",      # United States presidential election
+    "Q5465517":  "politics",      # food riot
+    "Q5791104":  "politics",      # international crisis
+    "Q625298":  "politics",      # peace treaty
+    "Q686984":  "politics",      # civil disorder
+    "Q832107":  "politics",      # Imperial election
+    "Q9557810":  "politics",      # bilateral treaty
+    "Q989265":  "politics",      # embargo
+    "Q114380":  "disaster",      # financial crisis
+    "Q168983":  "disaster",      # conflagration
+    "Q2165983":  "disaster",      # stampede
+    "Q2547976":  "disaster",      # North Atlantic tropical cyclone
+    "Q3510594":  "disaster",      # earthquake in Japan
+    "Q806729":  "disaster",      # banking crisis
+    "Q11514315":  None,          # historical period — generic/excluded
+    "Q125360958":  None,          # aspect of women's history — generic/excluded
+    "Q13226383":  None,          # facility — generic/excluded
+    "Q132821":  None,          # murder — generic/excluded
+    "Q17544377":  None,          # history of a country or state — generic/excluded
+    "Q180684":  None,          # conflict — generic/excluded
+    "Q189349":  None,          # urban legend — generic/excluded
+    "Q189819":  None,          # ritual — generic/excluded
+    "Q190084":  None,          # hoax — generic/excluded
+    "Q4671286":  None,          # academic major — generic/excluded
+    "Q52997136":  None,          # Slavic bypass rite — generic/excluded
+    "Q6428674":  None,          # era — generic/excluded
+    "Q806824":  None,          # bank robbery — generic/excluded
+    "Q81672":  None,          # attempted murder — generic/excluded
+    "Q816829":  None,          # periodization — generic/excluded
+    "Q931092":  None,          # practical joke — generic/excluded
+
+    # Auto-learned from LLM (do not edit by hand — re-run fix-empty-categories.py)
+    "Q554211":  "politics",      # State of the Union address
+    "Q262478":  "culture",      # Paris Salon
+    "Q667276":  "culture",      # art exhibition
+    "Q108691705":  None,          # century common year — generic/excluded
+    "Q11835767":  None,          # Sejm ekstraordynaryjny — generic/excluded
+    "Q15238777":  None,          # legislative term — generic/excluded
+    "Q17524420":  None,          # aspect of history — generic/excluded
+    "Q18340514":  None,          # events in a specific year or time period — generic/excluded
+    "Q186081":  None,          # time interval — generic/excluded
+    "Q186117":  None,          # timeline — generic/excluded
+    "Q186516":  None,          # national flag — generic/excluded
+    "Q19828":  None,          # leap year — generic/excluded
+    "Q21094819":  None,          # parliamentary term in the United Kingdom — generic/excluded
+    "Q217036":  None,          # leap year starting on Friday and ending on Saturday — generic/excluded
+    "Q217041":  None,          # leap year starting on Sunday and ending on Monday — generic/excluded
+    "Q235670":  None,          # common year starting and ending on Sunday — generic/excluded
+    "Q235673":  None,          # common year starting and ending on Saturday — generic/excluded
+    "Q235676":  None,          # common year starting and ending on Wednesday — generic/excluded
+    "Q235680":  None,          # common year starting and ending on Friday — generic/excluded
+    "Q235684":  None,          # common year starting and ending on Tuesday — generic/excluded
+    "Q235687":  None,          # common year starting and ending on Monday — generic/excluded
+    "Q235690":  None,          # common year starting and ending on Thursday — generic/excluded
+    "Q24706":  None,          # Japanese era name — generic/excluded
+    "Q26887310":  None,          # association football team season — generic/excluded
+    "Q27020041":  None,          # sports season — generic/excluded
+    "Q30715568":  None,          # political era of the United States — generic/excluded
+    "Q3186692":  None,          # calendar year — generic/excluded
+    "Q37002670":  None,          # unicameral legislature — generic/excluded
+    "Q39911":  None,          # decade — generic/excluded
+    "Q4948446":  None,          # golden jubilee — generic/excluded
+    "Q578":  None,          # century — generic/excluded
+    "Q7755":  None,          # constitution — generic/excluded
+    "Q9334976":  None,          #  — generic/excluded
+
+    # Auto-learned from LLM (do not edit by hand — re-run fix-empty-categories.py)
+    "Q27653727":  "battle",      # naval bombing of a city
+    "Q1168287":  "war",      # intervention
+    "Q1227249":  "politics",      # international incident
+    "Q177716":  "politics",      # pogrom
+    "Q1900755":  "politics",      # constituent assembly
+    "Q208383":  "politics",      # ceasefire
+    "Q22276038":  "politics",      # Norwegian parliamentary election
+    "Q2618461":  "politics",      # legislative election
+    "Q26878762":  "politics",      # United States presidential election in Indiana
+    "Q28221902":  "politics",      # United States presidential election in Alabama
+    "Q28222012":  "politics",      # United States presidential election in Louisiana
+    "Q28222073":  "politics",      # United States presidential election in New Hampshire
+    "Q28222099":  "politics",      # United States presidential election in Ohio
+    "Q7157512":  "politics",      # peace conference
+    "Q7893160":  "politics",      # United States presidential election in Missouri
+    "Q7897387":  "politics",      # unrest
+    "Q113549847":  "disaster",      # non-water flood
+    "Q327541":  "disaster",      # arson
+    "Q629257":  "disaster",      # work accident
+    "Q68800046":  "disaster",      # industrial disaster
+    "Q8065":  "disaster",      # natural disaster
+    "Q8068":  "disaster",      # flood
+    "Q389581":  "culture",      # triennale
+    "Q59861107":  "culture",      # temporary art exhibition
+    "Q1812889":  None,          # legislative session — generic/excluded
+    "Q1983893":  None,          # immigration to Canada — generic/excluded
+    "Q217015":  None,          # leap year starting on Wednesday and ending on Thursday — generic/excluded
+    "Q217024":  None,          # leap year starting on Monday and ending on Tuesday — generic/excluded
+    "Q217026":  None,          # leap year starting on Saturday and ending on Sunday — generic/excluded
 
     # Generic fallbacks — needs LLM category assignment
     "Q13418847": None,           # historical event (generic)
@@ -163,35 +341,51 @@ def get_time_value(claims: dict, prop: str) -> tuple[Optional[str], int]:
 # Date parsing
 # ---------------------------------------------------------------------------
 
-def parse_wikidata_time(time_str: str, precision: int) -> tuple[Optional[int], bool]:
+def parse_wikidata_time(
+    time_str: str, precision: int
+) -> tuple[Optional[int], Optional[int], Optional[int], bool]:
     """
-    Parses a Wikidata time string into (year, is_fuzzy).
+    Parses a Wikidata time string into (year, month, day, is_fuzzy).
 
     Wikidata format: +1066-10-14T00:00:00Z  (CE)
                      -0480-00-00T00:00:00Z  (BCE, astronomical year = -480)
     Precision codes: 11=day, 10=month, 9=year, 8=decade, 7=century, 6=millennium
     is_fuzzy = True when precision < 9 (i.e. we only know decade/century/etc.)
+    month/day are None when precision is too coarse or the value is 00 in the source.
 
     Uses astronomical year numbering:
       - year 1 BCE = -1, year 2 BCE = -2 (consistent with integer arithmetic)
       - year 0 does not exist historically but is used here for 1 BCE in some sources
     """
     if not time_str:
-        return None, True
+        return None, None, None, True
 
     is_negative = time_str.startswith("-")
     date_part = time_str.lstrip("+-").split("T")[0]
-    year_str = date_part.split("-")[0]
+    parts = date_part.split("-")
+    year_str = parts[0]
 
     try:
         year = int(year_str)
     except ValueError:
-        return None, True
+        return None, None, None, True
 
     if is_negative:
         year = -year
 
-    return year, (precision < 9)
+    month: Optional[int] = None
+    day: Optional[int] = None
+
+    if precision >= 10 and len(parts) > 1:
+        m = int(parts[1])
+        if m != 0:
+            month = m
+    if precision >= 11 and len(parts) > 2:
+        d = int(parts[2])
+        if d != 0:
+            day = d
+
+    return year, month, day, (precision < 9)
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +410,8 @@ def map_categories(p31_qids: list[str]) -> tuple[list[str], bool]:
                 categories.add(cat)
             else:
                 needs_llm = True
+        else:
+            needs_llm = True  # unknown P31 type — send to LLM
 
     return sorted(categories), needs_llm
 
@@ -682,10 +878,241 @@ _EXCLUDE_P31: set[str] = {
     "Q2583015",  # ghetto in Nazi-occupied Europe
     "Q124571059",# Palestinian refugee camp
     "Q146924",   # Roman limes (border fortification)
+    "Q731966",   # nymphaeum (ornamental fountain/building)
 }
 
 
-def classify_location(p31_qids: list[str]) -> Optional[str]:
+def is_known_p31(qid: str) -> bool:
+    """Returns True if qid is in any of the hardcoded classifier sets."""
+    return (
+        qid in _CITY_P31
+        or qid in _REGION_P31
+        or qid in _COUNTRY_P31
+        or qid in _EXCLUDE_P31
+    )
+
+
+# ---------------------------------------------------------------------------
+# Polity P31 classifier sets
+#
+# Used by run_polities.py to classify sovereign political entities.
+# Separate from the location classifier — polities are a distinct layer.
+# Tier 1: hardcoded canonical QIDs for each polity type (root classes only).
+# Tier 2: transitive BFS via classify_p31s_transitive() for unknown P31 QIDs.
+# ---------------------------------------------------------------------------
+
+_POLITY_EMPIRE: set[str] = {
+    "Q48349",     # empire
+    "Q1790360",   # colonial empire
+}
+
+_POLITY_KINGDOM: set[str] = {
+    "Q417175",    # historical kingdom
+    "Q1250464",   # realm
+    "Q128193315", # atabegate
+}
+
+_POLITY_PRINCIPALITY: set[str] = {
+    "Q208500",    # principality
+    "Q154547",    # duchy
+    "Q1336152",   # princely state (Indian states, etc.)
+    "Q26830017",  # state in the Holy Roman Empire
+    "Q26879769",  # state in the Confederation of the Rhine
+    "Q57318",     # free imperial city
+    "Q353344",    # countship
+    "Q196068",    # lordship
+    "Q1371288",   # vassal state
+    "Q463742",    # Hochstift (ecclesiastical principality in HRE)
+}
+
+_POLITY_REPUBLIC: set[str] = {
+    "Q7270",      # republic
+    "Q472538",    # sister republic (French Revolutionary client states)
+}
+
+_POLITY_CONFEDERATION: set[str] = {
+    "Q170156",    # confederation
+}
+
+_POLITY_SULTANATE: set[str] = {
+    "Q12759805",  # sultanate
+    "Q331644",    # khanate
+    "Q189898",    # emirate
+    "Q131401",    # caliphate
+}
+
+_POLITY_PAPACY: set[str] = {
+    "Q12799209",  # pontificate
+}
+
+# P31 values that unambiguously indicate a non-polity entity.
+# If ANY of these QIDs is present in p31_qids AND no legitimate polity P31 is
+# present, the entity should be excluded from the polities table.
+_POLITY_EXCLUDE_P31: set[str] = {
+    # Geographic / physical features
+    "Q82794",     # region (generic)
+    "Q1620908",   # historical region
+    "Q518261",    # cultural area
+    "Q41710",     # ethnic group
+    "Q57450823",  # ethnographic region
+    "Q1149061",   # language area
+    "Q33837",     # archipelago
+    "Q4421",      # forest
+    # Infrastructure / plans / documents
+    "Q34442",     # road
+    "Q1716124",   # national road
+    "Q13405588",  # long-distance trail
+    "Q16000417",  # National Trail
+    "Q118493267", # roundtrip hiking trail
+    "Q6672512",   # Great Trail
+    "Q663867",    # hiking trail
+    "Q69502391",  # bus rapid transit route
+    "Q89021600",  # B road
+    "Q19753333",  # nuclear weapons program
+    "Q855055",    # five-year plans of China
+    "Q1619846",   # plan (general plan document)
+    "Q2751586",   # resolution
+    "Q1363963",   # marketing strategy
+    "Q135903355", # takeover defense tactic
+    "Q329547",    # motion of no confidence
+    "Q182274",    # irredentism
+}
+
+_ALL_POLITY_P31: set[str] = (
+    _POLITY_EMPIRE | _POLITY_KINGDOM | _POLITY_PRINCIPALITY | _POLITY_REPUBLIC
+    | _POLITY_CONFEDERATION | _POLITY_SULTANATE | _POLITY_PAPACY
+)
+
+
+def is_known_polity_p31(qid: str) -> bool:
+    """Returns True if qid is in any hardcoded polity P31 classifier set."""
+    return qid in _ALL_POLITY_P31
+
+
+def is_known_polity_p31_any(p31_qids: list[str]) -> bool:
+    """Returns True if ANY qid in the list is a known polity P31."""
+    return any(q in _ALL_POLITY_P31 for q in p31_qids)
+
+
+def should_exclude_polity(p31_qids: list[str]) -> bool:
+    """
+    Returns True if the entity should be excluded from the polities table.
+
+    Excludes if ANY p31 is in _POLITY_EXCLUDE_P31 AND no p31 is in any
+    legitimate polity set (i.e. the entity is not also a real polity).
+    """
+    has_bad = any(q in _POLITY_EXCLUDE_P31 for q in p31_qids)
+    if not has_bad:
+        return False
+    has_good = any(q in _ALL_POLITY_P31 for q in p31_qids)
+    return not has_good
+
+
+def classify_polity_type(
+    p31_qids: list[str],
+    extra_map: Optional[dict[str, Optional[str]]] = None,
+    name: Optional[str] = None,
+) -> str:
+    """
+    Classifies a Wikidata polity entity by its P31 (instance-of) QIDs.
+
+    Returns one of: 'papacy' | 'sultanate' | 'confederation' | 'republic'
+                  | 'empire' | 'kingdom' | 'principality' | 'other'
+
+    Two-tier strategy (mirrors classify_location):
+      Tier 1 — hardcoded canonical QID sets checked in priority order.
+      Tier 2 — extra_map from transitive P279* BFS for unknown P31 QIDs.
+
+    extra_map values must be one of the polity type strings or None.
+    """
+    # Tier 1 — hardcoded sets, checked highest-priority first
+    for qid in p31_qids:
+        if qid in _POLITY_PAPACY:        return "papacy"
+    for qid in p31_qids:
+        if qid in _POLITY_SULTANATE:     return "sultanate"
+    for qid in p31_qids:
+        if qid in _POLITY_CONFEDERATION: return "confederation"
+    for qid in p31_qids:
+        if qid in _POLITY_REPUBLIC:      return "republic"
+    for qid in p31_qids:
+        if qid in _POLITY_EMPIRE:        return "empire"
+    for qid in p31_qids:
+        if qid in _POLITY_KINGDOM:       return "kingdom"
+    for qid in p31_qids:
+        if qid in _POLITY_PRINCIPALITY:  return "principality"
+
+    # Tier 2 — transitive BFS results
+    if extra_map:
+        _PRIORITY: dict[str, int] = {
+            "papacy": 7, "sultanate": 6, "confederation": 5,
+            "republic": 4, "empire": 3, "kingdom": 2, "principality": 1,
+        }
+        best: Optional[str] = None
+        for qid in p31_qids:
+            t = extra_map.get(qid)
+            if t and (best is None or _PRIORITY.get(t, 0) > _PRIORITY.get(best, 0)):
+                best = t
+        if best:
+            return best
+
+    # Tier 3 — name-based fallback for entities with only generic P31s like
+    # Q3024240 (historical country) or Q3624078 (sovereign state)
+    if name:
+        return classify_polity_type_from_name(name)
+    return "other"
+
+
+def classify_polity_type_from_name(name: str) -> str:
+    """
+    Tier-3 name-based polity type inference. Used when P31 classifier returns
+    'other' but the entity name clearly indicates the type.
+
+    Returns the inferred type, or 'other' if name doesn't match any pattern.
+    """
+    if not name:
+        return "other"
+    n = name.lower()
+
+    # Papacy first (most specific)
+    if any(w in n for w in ("papacy", "papal state", "pope")):
+        return "papacy"
+
+    # Sultanate / khanate / emirate
+    if any(w in n for w in ("sultanate", "khanate", "khaganate", "emirate", "caliphate", "imamate")):
+        return "sultanate"
+
+    # Confederation / league
+    if any(w in n for w in ("confederation", "confederacy", "confederate", "league", "union of")):
+        return "confederation"
+
+    # Republic / commonwealth
+    if any(w in n for w in ("republic", "commonwealth")):
+        return "republic"
+
+    # Empire (check before kingdom — "Holy Roman Empire" should be empire not kingdom)
+    if "empire" in n or "imperial" in n:
+        return "empire"
+
+    # Kingdom / monarchy (top-level sovereign)
+    if any(w in n for w in ("kingdom", "monarchy")):
+        return "kingdom"
+
+    # Principality / duchy / sub-state (subordinate to a larger polity)
+    if any(w in n for w in (
+        "principality", "grand duchy", "duchy", "dukedom",
+        "electorate", "margraviate", "landgraviate", "palatinate",
+        "archduchy", "marquisate", "countship", "lordship",
+        "princely state", "native state",
+    )):
+        return "principality"
+
+    return "other"
+
+
+def classify_location(
+    p31_qids: list[str],
+    extra_map: Optional[dict[str, Optional[str]]] = None,
+) -> Optional[str]:
     """
     Classifies a Wikidata location entity by its P31 (instance-of) QIDs.
 
@@ -700,7 +1127,12 @@ def classify_location(p31_qids: list[str]) -> Optional[str]:
         2. Any _CITY_P31 match → 'city'
         3. Any _REGION_P31 match → 'region'
         4. Any _EXCLUDE_P31 match → None (exclude)
-        5. Unknown P31 → 'city' (safe default, preserves existing behavior)
+        5. extra_map (transitive SPARQL results) — same priority order
+        6. Unknown P31 → 'city' (safe default, preserves existing behavior)
+
+    extra_map: optional {qid: 'city'|'region'|'country'|None} dict from a
+               transitive P279* SPARQL lookup, used as fallback when no
+               hardcoded set matches.  None value means 'exclude'.
     """
     if any(q in _COUNTRY_P31 for q in p31_qids):
         return "country"
@@ -710,6 +1142,25 @@ def classify_location(p31_qids: list[str]) -> Optional[str]:
         return "region"
     if any(q in _EXCLUDE_P31 for q in p31_qids):
         return None  # exclude
+
+    # Transitive fallback via dynamic SPARQL map (country > city > region)
+    if extra_map:
+        _PRIORITY: dict[str, int] = {"country": 3, "city": 2, "region": 1}
+        best_type: Optional[str] = None
+        has_exclude = False
+        for q in p31_qids:
+            if q not in extra_map:
+                continue
+            t = extra_map[q]
+            if t is None:
+                has_exclude = True
+            elif best_type is None or _PRIORITY.get(t, 0) > _PRIORITY.get(best_type, 0):
+                best_type = t
+        if best_type is not None:
+            return best_type
+        if has_exclude:
+            return None
+
     return "city"   # unknown P31 → default to city
 
 
@@ -767,14 +1218,17 @@ def extract_event(entity: dict) -> dict:
     end_time,   end_prec   = get_time_value(claims, "P582")
 
     if point_time:
-        year_start, date_is_fuzzy = parse_wikidata_time(point_time, point_prec)
-        year_end = None
+        year_start, month_start, day_start, date_is_fuzzy = parse_wikidata_time(point_time, point_prec)
+        year_end, month_end, day_end = None, None, None
     elif start_time:
-        year_start, date_is_fuzzy = parse_wikidata_time(start_time, start_prec)
-        year_end_val, _ = parse_wikidata_time(end_time, end_prec) if end_time else (None, False)
-        year_end = year_end_val
+        year_start, month_start, day_start, date_is_fuzzy = parse_wikidata_time(start_time, start_prec)
+        if end_time:
+            year_end, month_end, day_end, _ = parse_wikidata_time(end_time, end_prec)
+        else:
+            year_end, month_end, day_end = None, None, None
     else:
-        year_start, date_is_fuzzy, year_end = None, True, None
+        year_start, month_start, day_start, date_is_fuzzy = None, None, None, True
+        year_end, month_end, day_end = None, None, None
 
     # Spatial
     lat, lon = get_coord(claims)
@@ -792,6 +1246,10 @@ def extract_event(entity: dict) -> dict:
     p31_qids = [v["id"] for v in get_all_claim_values(claims, "P31") if isinstance(v, dict)]
     categories, needs_llm_category = map_categories(p31_qids)
 
+    # P361 "part of" — parent event/conflict this entity belongs to
+    # e.g. Battle of Cannae → [Q154430 (Second Punic War)]
+    part_of_qids = [v["id"] for v in get_all_claim_values(claims, "P361") if isinstance(v, dict)]
+
     return {
         # Identity
         "wikidata_qid":      qid,
@@ -803,7 +1261,11 @@ def extract_event(entity: dict) -> dict:
 
         # Temporal
         "year_start":        year_start,
+        "month_start":       month_start,
+        "day_start":         day_start,
         "year_end":          year_end,
+        "month_end":         month_end,
+        "day_end":           day_end,
         "date_is_fuzzy":     date_is_fuzzy,
         "date_range_min":    None,
         "date_range_max":    None,
@@ -819,6 +1281,7 @@ def extract_event(entity: dict) -> dict:
         # Classification
         "p31_qids":              p31_qids,
         "categories":            categories,
+        "part_of_qids":          part_of_qids,
 
         # Enrichment routing flags (not persisted to DB)
         "_needs_llm_category":            needs_llm_category and not categories,

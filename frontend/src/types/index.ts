@@ -1,23 +1,32 @@
 export type LocationLevel = 'point' | 'city' | 'country' | 'region';
 
+export type PolityType = 'empire' | 'kingdom' | 'principality' | 'republic' | 'confederation' | 'sultanate' | 'papacy' | 'other';
+
 export type Category =
   | 'battle'
   | 'war'
   | 'politics'
-  | 'founding'
   | 'religion'
   | 'disaster'
-  | 'discovery'
   | 'exploration'
   | 'science'
   | 'culture'
   | 'city'
   | 'region'
   | 'country'
+  // Polity subtypes
+  | 'empire'
+  | 'kingdom'
+  | 'principality'
+  | 'republic'
+  | 'confederation'
+  | 'sultanate'
+  | 'papacy'
+  | 'other'
   | 'unknown';
 
 export interface FeatureProperties {
-  featureType: 'event' | 'city' | 'region' | 'country';
+  featureType: 'event' | 'city' | 'region' | 'country' | 'polity';
   /** UUID primary key from the DB */
   id: string;
   /** Wikipedia article title slug, e.g. 'Battle_of_Thermopylae' — stable public identifier */
@@ -27,7 +36,11 @@ export interface FeatureProperties {
   wikipediaSummary: string;
   wikipediaUrl: string;
   yearStart: number | null;
+  monthStart: number | null;
+  dayStart: number | null;
   yearEnd: number | null;
+  monthEnd: number | null;
+  dayEnd: number | null;
   dateIsFuzzy: boolean;
   dateRangeMin: number | null;
   dateRangeMax: number | null;
@@ -41,6 +54,30 @@ export interface FeatureProperties {
   primaryCategory: Category;
   /** Wikidata P31 (instance-of) QIDs, e.g. ['Q178561', 'Q188686']. Events only. */
   wikidataClasses?: string[];
+  /** Polity subtype — only present on polity features. */
+  polityType?: PolityType;
+  /** True once polity_territories has polygon data for this polity. */
+  hasTerritory?: boolean;
+  /** Capital city name — polity features only. */
+  capitalName?: string | null;
+  /** Capital city Wikidata QID — polity features only. Used to cross-link to location. */
+  capitalWikidataQid?: string | null;
+  /** Sovereign/suzerain polity name — polity features only. e.g. "Holy Roman Empire" */
+  sovereignName?: string | null;
+  /** Sovereign polity slug — for navigation if the sovereign is in our dataset. */
+  sovereignSlug?: string | null;
+  /** Sovereign polity Wikidata QID. */
+  sovereignQid?: string | null;
+  /** Wikidata QID — location features only. Used for cross-linking from polity capitals. */
+  wikidataQid?: string | null;
+  /** Wikidata P361 (part-of) QIDs — parent events/conflicts this belongs to.
+   *  e.g. Battle of Cannae → ['Q154430'] (Second Punic War) */
+  partOf?: string[];
+  /** Resolved partOf entries for display (populated at export time). */
+  partOfResolved?: Array<{ qid: string; title: string; slug: string | null }>;
+  /** Number of Wikipedia language editions covering this event. Higher = more globally significant.
+   *  Null until backfill-sitelinks.py has been run. Events only. */
+  sitelinksCount?: number | null;
   yearDisplay: string;
   dataVersion?: number;
   pipelineRun?: string;

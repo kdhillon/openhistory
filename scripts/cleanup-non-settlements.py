@@ -32,7 +32,7 @@ from pipeline.extract import classify_location
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
-    "postgresql://ourstory:ourstory@localhost:5432/ourstory",
+    "postgresql://ourstory:ourstory@localhost:5433/ourstory",
 )
 
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
@@ -200,7 +200,7 @@ def main():
         print(f"  Event QID references nulled out: {nulled_event_refs}")
         print(f"  Excluded location records deleted: {deleted_locations}")
         print(f"\nNext step: re-export GeoJSON")
-        print("  cd scripts && npm run export")
+        print("  python3 scripts/export_geojson.py")
 
     except Exception as exc:
         conn.rollback()

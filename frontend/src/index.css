@@ -12,6 +12,10 @@ body {
   to   { transform: translateX(0);    opacity: 1; }
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .wiki-content {
   font-size: 13.5px;
   line-height: 1.65;
@@ -60,7 +64,19 @@ body {
 .wiki-content .noprint { display: none; }
 .wiki-content .sistersitebox { display: none; }
 .wiki-content .metadata { display: none; }
-.wiki-content .hatnote { font-style: italic; color: #54595d; margin-bottom: 10px; font-size: 12px; }
+.wiki-content .hatnote { display: none; }
+.wiki-content .reflist,
+.wiki-content .references,
+.wiki-content .mw-references-wrap { font-size: 10px; color: #9a9a9a; line-height: 1.5; margin-top: 8px; border-top: 1px solid rgba(0,0,0,0.06); padding-top: 6px; }
+.wiki-content .reflist a,
+.wiki-content .references a,
+.wiki-content .mw-references-wrap a { color: #9a9a9a; }
+.wiki-content .mw-message-box,
+.wiki-content .error,
+.wiki-content .scribunto-error { font-size: 10px; color: #9a9a9a; background: none; border: none; padding: 0; margin: 4px 0; }
+
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
 
 .resize-handle {
   position: absolute;

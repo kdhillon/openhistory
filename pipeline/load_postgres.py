@@ -25,7 +25,7 @@ from typing import Optional
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
-    "postgresql://ourstory:ourstory@localhost:5432/ourstory"
+    "postgresql://ourstory:ourstory@localhost:5433/ourstory"
 )
 
 # Bump this when pipeline logic changes significantly.
@@ -149,19 +149,25 @@ def upsert_events(
     sql = """
         INSERT INTO events (
             title, wikipedia_title, wikipedia_summary, wikipedia_url,
-            year_start, year_end, date_is_fuzzy, date_range_min, date_range_max,
+            year_start, month_start, day_start, year_end, month_end, day_end,
+            date_is_fuzzy, date_range_min, date_range_max,
             location_level, lng, lat, location_wikidata_qid, location_name,
-            categories, p31_qids, wikidata_qid, slug, data_version, pipeline_run
+            categories, p31_qids, part_of_qids, wikidata_qid, slug, data_version, pipeline_run
         ) VALUES (
             %(title)s, %(wikipedia_title)s, %(wikipedia_summary)s, %(wikipedia_url)s,
-            %(year_start)s, %(year_end)s, %(date_is_fuzzy)s, %(date_range_min)s, %(date_range_max)s,
+            %(year_start)s, %(month_start)s, %(day_start)s, %(year_end)s, %(month_end)s, %(day_end)s,
+            %(date_is_fuzzy)s, %(date_range_min)s, %(date_range_max)s,
             %(location_level)s, %(lon)s, %(lat)s, %(location_wikidata_qid)s, %(location_name)s,
-            %(categories)s, %(p31_qids)s, %(wikidata_qid)s, %(slug)s, %(data_version)s, %(pipeline_run)s
+            %(categories)s, %(p31_qids)s, %(part_of_qids)s, %(wikidata_qid)s, %(slug)s, %(data_version)s, %(pipeline_run)s
         )
         ON CONFLICT (slug) DO UPDATE SET
             wikidata_qid          = COALESCE(EXCLUDED.wikidata_qid, events.wikidata_qid),
             wikipedia_summary     = COALESCE(EXCLUDED.wikipedia_summary, events.wikipedia_summary),
+            month_start           = COALESCE(EXCLUDED.month_start, events.month_start),
+            day_start             = COALESCE(EXCLUDED.day_start, events.day_start),
             year_end              = COALESCE(EXCLUDED.year_end, events.year_end),
+            month_end             = COALESCE(EXCLUDED.month_end, events.month_end),
+            day_end               = COALESCE(EXCLUDED.day_end, events.day_end),
             date_is_fuzzy         = EXCLUDED.date_is_fuzzy,
             location_level        = EXCLUDED.location_level,
             lng                   = EXCLUDED.lng,
@@ -173,6 +179,10 @@ def upsert_events(
                 ELSE events.categories
             END,
             p31_qids              = EXCLUDED.p31_qids,
+            part_of_qids          = CASE
+                WHEN array_length(EXCLUDED.part_of_qids, 1) > 0 THEN EXCLUDED.part_of_qids
+                ELSE events.part_of_qids
+            END,
             data_version          = EXCLUDED.data_version,
             pipeline_run          = EXCLUDED.pipeline_run
     """
@@ -220,6 +230,7 @@ def upsert_events(
             location_name = ev.get("location_name") or "Unknown"
             categories = ev.get("categories") or []
             p31_qids = ev.get("p31_qids") or []
+            part_of_qids = ev.get("part_of_qids") or []
 
             row = {
                 "title":                ev["title"],
@@ -227,7 +238,11 @@ def upsert_events(
                 "wikipedia_summary":    ev.get("wikipedia_summary"),
                 "wikipedia_url":        ev.get("wikipedia_url"),
                 "year_start":           ev["year_start"],
+                "month_start":          ev.get("month_start"),
+                "day_start":            ev.get("day_start"),
                 "year_end":             ev.get("year_end"),
+                "month_end":            ev.get("month_end"),
+                "day_end":              ev.get("day_end"),
                 "date_is_fuzzy":        ev.get("date_is_fuzzy", False),
                 "date_range_min":       ev.get("date_range_min"),
                 "date_range_max":       ev.get("date_range_max"),
@@ -238,8 +253,111 @@ def upsert_events(
                 "location_name":        location_name,
                 "categories":           categories,
                 "p31_qids":             p31_qids,
+                "part_of_qids":         part_of_qids,
                 "wikidata_qid":         ev.get("wikidata_qid"),
                 "slug":                 ev.get("slug"),
+                "data_version":         CURRENT_DATA_VERSION,
+                "pipeline_run":         pipeline_run,
+            }
+            cur.execute(sql, row)
+            loaded += 1
+
+    conn.commit()
+    return loaded, skipped
+
+
+# ---------------------------------------------------------------------------
+# Polities
+# ---------------------------------------------------------------------------
+
+def upsert_polities(conn, polity_records: list[dict], pipeline_run: str = "") -> tuple[int, int]:
+    """
+    Upserts polity records into the polities table.
+
+    polity_records: list of dicts with keys:
+        wikidata_qid, slug, name, short_name (opt),
+        polity_type ('empire'|'kingdom'|'republic'|'confederation'|'sultanate'|'papacy'|'other'),
+        wikipedia_title, wikipedia_url, wikipedia_summary (opt),
+        year_start (opt), year_end (opt), date_is_fuzzy (bool),
+        capital_name (opt), capital_wikidata_qid (opt),
+        lng (opt), lat (opt),
+        preceded_by_qid (opt), succeeded_by_qid (opt),
+        location_wikidata_qid (opt), p31_qids (list)
+
+    Returns (loaded_count, skipped_count).
+    """
+    if not polity_records:
+        return 0, 0
+
+    sql = """
+        INSERT INTO polities (
+            id, wikidata_qid, slug, name, short_name, polity_type,
+            wikipedia_title, wikipedia_summary, wikipedia_url,
+            year_start, year_end, date_is_fuzzy,
+            capital_name, capital_wikidata_qid, lng, lat,
+            preceded_by_qid, succeeded_by_qid, location_wikidata_qid,
+            sovereign_qids, p31_qids, data_version, pipeline_run
+        ) VALUES (
+            %(id)s, %(wikidata_qid)s, %(slug)s, %(name)s, %(short_name)s, %(polity_type)s,
+            %(wikipedia_title)s, %(wikipedia_summary)s, %(wikipedia_url)s,
+            %(year_start)s, %(year_end)s, %(date_is_fuzzy)s,
+            %(capital_name)s, %(capital_wikidata_qid)s, %(lng)s, %(lat)s,
+            %(preceded_by_qid)s, %(succeeded_by_qid)s, %(location_wikidata_qid)s,
+            %(sovereign_qids)s, %(p31_qids)s, %(data_version)s, %(pipeline_run)s
+        )
+        ON CONFLICT (slug) DO UPDATE SET
+            wikidata_qid         = COALESCE(EXCLUDED.wikidata_qid, polities.wikidata_qid),
+            name                 = EXCLUDED.name,
+            short_name           = COALESCE(EXCLUDED.short_name, polities.short_name),
+            polity_type          = EXCLUDED.polity_type,
+            wikipedia_summary    = COALESCE(EXCLUDED.wikipedia_summary, polities.wikipedia_summary),
+            wikipedia_url        = COALESCE(EXCLUDED.wikipedia_url, polities.wikipedia_url),
+            year_start           = COALESCE(EXCLUDED.year_start, polities.year_start),
+            year_end             = COALESCE(EXCLUDED.year_end, polities.year_end),
+            date_is_fuzzy        = EXCLUDED.date_is_fuzzy,
+            capital_name         = COALESCE(EXCLUDED.capital_name, polities.capital_name),
+            capital_wikidata_qid = COALESCE(EXCLUDED.capital_wikidata_qid, polities.capital_wikidata_qid),
+            lng                  = COALESCE(EXCLUDED.lng, polities.lng),
+            lat                  = COALESCE(EXCLUDED.lat, polities.lat),
+            preceded_by_qid      = COALESCE(EXCLUDED.preceded_by_qid, polities.preceded_by_qid),
+            succeeded_by_qid     = COALESCE(EXCLUDED.succeeded_by_qid, polities.succeeded_by_qid),
+            sovereign_qids       = EXCLUDED.sovereign_qids,
+            p31_qids             = EXCLUDED.p31_qids,
+            data_version         = EXCLUDED.data_version,
+            pipeline_run         = EXCLUDED.pipeline_run
+    """
+
+    loaded = 0
+    skipped = 0
+
+    with conn.cursor() as cur:
+        for rec in polity_records:
+            if not rec.get("name") or not rec.get("slug"):
+                skipped += 1
+                continue
+
+            row = {
+                "id":                   str(uuid.uuid4()),
+                "wikidata_qid":         rec.get("wikidata_qid"),
+                "slug":                 rec["slug"],
+                "name":                 rec["name"],
+                "short_name":           rec.get("short_name"),
+                "polity_type":          rec.get("polity_type", "other"),
+                "wikipedia_title":      rec.get("wikipedia_title"),
+                "wikipedia_summary":    rec.get("wikipedia_summary"),
+                "wikipedia_url":        rec.get("wikipedia_url"),
+                "year_start":           rec.get("year_start"),
+                "year_end":             rec.get("year_end"),
+                "date_is_fuzzy":        rec.get("date_is_fuzzy", False),
+                "capital_name":         rec.get("capital_name"),
+                "capital_wikidata_qid": rec.get("capital_wikidata_qid"),
+                "lng":                  rec.get("lng"),
+                "lat":                  rec.get("lat"),
+                "preceded_by_qid":      rec.get("preceded_by_qid"),
+                "succeeded_by_qid":     rec.get("succeeded_by_qid"),
+                "location_wikidata_qid":rec.get("location_wikidata_qid"),
+                "sovereign_qids":       rec.get("sovereign_qids") or [],
+                "p31_qids":             rec.get("p31_qids") or [],
                 "data_version":         CURRENT_DATA_VERSION,
                 "pipeline_run":         pipeline_run,
             }

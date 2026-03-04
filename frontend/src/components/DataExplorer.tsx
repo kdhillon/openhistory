@@ -2,11 +2,23 @@ import { useState, useMemo } from 'react';
 import type { FeatureProperties, Category } from '../types';
 import { ALL_CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS, getCategoryColor } from '../theme/categories';
 import { WIKIDATA_LABELS } from '../data/wikidataLabels';
+import { WikiEditForm } from './WikiEditForm';
 
 interface Props {
   geojson: GeoJSON.FeatureCollection;
   onBackToMap: () => void;
   onNavigateToFeature?: (feature: FeatureProperties) => void;
+  wikiAuth: string | null;
+  onAuth: (username: string | null) => void;
+  onFeatureUpdated: (featureId: string, updates: Partial<FeatureProperties>) => void;
+}
+
+function PencilIcon() {
+  return (
+    <svg width="9" height="9" viewBox="0 0 12 12" fill="none" style={{ display: 'block' }}>
+      <path d="M8.5 1.5l2 2-7 7H1.5v-2l7-7z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
 }
 
 type SortKey = 'year' | 'title' | 'category' | 'type';
@@ -19,13 +31,15 @@ function displayYear(year: number | null): string {
   return `${year} CE`;
 }
 
-export function DataExplorer({ geojson, onBackToMap, onNavigateToFeature }: Props) {
+export function DataExplorer({ geojson, onBackToMap, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated }: Props) {
   const [search, setSearch] = useState('');
   const [activeFilters, setActiveFilters] = useState<Set<Category>>(new Set(ALL_CATEGORIES));
   const [yearFrom, setYearFrom] = useState('');
   const [yearTo, setYearTo] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('year');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [editState, setEditState] = useState<{ feature: FeatureProperties; field: 'date' | 'location' } | null>(null);
+  const [unlocatedOnly, setUnlocatedOnly] = useState(false);
 
   const allRows = useMemo(() => {
     return geojson.features
@@ -39,7 +53,13 @@ export function DataExplorer({ geojson, onBackToMap, onNavigateToFeature }: Prop
     const to = yearTo !== '' ? parseInt(yearTo, 10) : null;
 
     return allRows.filter((row) => {
-      if (q && !row.title.toLowerCase().includes(q) && !row.locationName.toLowerCase().includes(q)) return false;
+      if (unlocatedOnly) {
+        // Only events with no location data — skip location features entirely
+        if (row.featureType !== 'event') return false;
+        if (row.locationName && row.locationLevel) return false;
+      }
+
+      if (q && !row.title.toLowerCase().includes(q) && !(row.locationName ?? '').toLowerCase().includes(q)) return false;
       if (from !== null && row.yearStart !== null && row.yearStart < from) return false;
       if (to !== null && row.yearStart !== null && row.yearStart > to) return false;
 
@@ -51,7 +71,7 @@ export function DataExplorer({ geojson, onBackToMap, onNavigateToFeature }: Prop
 
       return true;
     });
-  }, [allRows, search, activeFilters, yearFrom, yearTo]);
+  }, [allRows, search, activeFilters, yearFrom, yearTo, unlocatedOnly]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -101,9 +121,34 @@ export function DataExplorer({ geojson, onBackToMap, onNavigateToFeature }: Prop
 
   return (
     <div style={s.page}>
+      {/* ── Wiki edit modal ── */}
+      {editState && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', padding: '0 20px 20px 0' }}
+          onClick={() => setEditState(null)}
+        >
+          <div
+            style={{ width: 380, background: '#ffffff', borderRadius: 12, border: '1px solid rgba(0,0,0,0.1)', boxShadow: '0 12px 40px rgba(0,0,0,0.3)', overflow: 'hidden' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <WikiEditForm
+              feature={editState.feature}
+              field={editState.field}
+              wikiAuth={wikiAuth}
+              onAuth={onAuth}
+              onSuccess={(updates) => {
+                onFeatureUpdated(editState.feature.id, updates);
+                setEditState(null);
+              }}
+              onClose={() => setEditState(null)}
+            />
+          </div>
+        </div>
+      )}
+
       {/* ── Nav bar ── */}
       <div style={s.navbar}>
-        <span style={s.wordmark}>OurStory</span>
+        <span style={s.wordmark}>OpenHistory</span>
         <div style={s.divider} />
         <span style={s.pageTitle}>Data Explorer</span>
         <div style={{ flex: 1 }} />
@@ -144,6 +189,21 @@ export function DataExplorer({ geojson, onBackToMap, onNavigateToFeature }: Prop
             );
           })}
         </div>
+
+        {/* Unlocated toggle */}
+        <button
+          onClick={() => setUnlocatedOnly((v) => !v)}
+          style={{
+            ...s.chip,
+            background: unlocatedOnly ? 'rgba(255,160,0,0.18)' : 'transparent',
+            borderColor: unlocatedOnly ? 'rgba(255,160,0,0.6)' : 'rgba(255,255,255,0.12)',
+            color: unlocatedOnly ? '#ffa000' : 'rgba(255,255,255,0.35)',
+          }}
+          title="Show only events with no location data"
+        >
+          <span style={{ fontSize: 12 }}>⚠</span>
+          Unlocated only
+        </button>
 
         {/* Year range */}
         <div style={s.yearRange}>
@@ -190,7 +250,7 @@ export function DataExplorer({ geojson, onBackToMap, onNavigateToFeature }: Prop
           </thead>
           <tbody>
             {sorted.map((row) => (
-              <TableRow key={row.id} row={row} onNavigate={onNavigateToFeature} />
+              <TableRow key={row.id} row={row} onNavigate={onNavigateToFeature} onEdit={setEditState} />
             ))}
             {sorted.length === 0 && (
               <tr>
@@ -204,15 +264,24 @@ export function DataExplorer({ geojson, onBackToMap, onNavigateToFeature }: Prop
   );
 }
 
-function TableRow({ row, onNavigate }: { row: FeatureProperties; onNavigate?: (f: FeatureProperties) => void }) {
+function TableRow({
+  row,
+  onNavigate,
+  onEdit,
+}: {
+  row: FeatureProperties;
+  onNavigate?: (f: FeatureProperties) => void;
+  onEdit?: (state: { feature: FeatureProperties; field: 'date' | 'location' }) => void;
+}) {
   const color = getCategoryColor(row.primaryCategory);
   const prefix = row.dateIsFuzzy ? '~' : '';
-  const isLocation = row.featureType === 'city';
+  const isLocationFeature = row.featureType === 'city' || row.featureType === 'region' || row.featureType === 'country';
+  const canEdit = row.featureType === 'event' && !!row.wikipediaTitle;
   const yearLabel = row.yearStart === null
     ? '—'
     : row.yearEnd !== null
       ? `${prefix}${displayYear(row.yearStart)} – ${prefix}${displayYear(row.yearEnd)}`
-      : isLocation
+      : isLocationFeature
         ? `${prefix}${displayYear(row.yearStart)} – present`
         : `${prefix}${displayYear(row.yearStart)}`;
   const estLabel = row.dateIsFuzzy && row.dateRangeMin != null && row.dateRangeMax != null
@@ -241,10 +310,34 @@ function TableRow({ row, onNavigate }: { row: FeatureProperties; onNavigate?: (f
         </a>
       </td>
       <td style={{ ...s.td, ...s.monoCell }}>
-        {yearLabel}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span>{yearLabel}</span>
+          {canEdit && row.yearStart !== null && (
+            <button
+              style={s.pencilBtn}
+              title="Edit date on Wikidata"
+              onClick={(e) => { e.stopPropagation(); onEdit?.({ feature: row, field: 'date' }); }}
+            >
+              <PencilIcon />
+            </button>
+          )}
+        </div>
         {estLabel && <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 1 }}>{estLabel}</div>}
       </td>
-      <td style={{ ...s.td, color: 'rgba(255,255,255,0.55)', fontSize: 12 }}>{row.locationName}</td>
+      <td style={{ ...s.td, color: 'rgba(255,255,255,0.55)', fontSize: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span>{row.locationName || <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>}</span>
+          {canEdit && (
+            <button
+              style={s.pencilBtn}
+              title="Edit location on Wikidata"
+              onClick={(e) => { e.stopPropagation(); onEdit?.({ feature: row, field: 'location' }); }}
+            >
+              <PencilIcon />
+            </button>
+          )}
+        </div>
+      </td>
       <td style={s.td}>
         <span style={{ ...s.catBadge, background: `${color}22`, color, borderColor: `${color}55` }}>
           {CATEGORY_LABELS[row.primaryCategory]}
@@ -252,7 +345,7 @@ function TableRow({ row, onNavigate }: { row: FeatureProperties; onNavigate?: (f
       </td>
       <td style={{ ...s.td, color: 'rgba(255,255,255,0.4)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         {row.featureType === 'event'
-          ? (row.locationLevel ?? 'event')
+          ? (row.locationLevel ?? 'unlocated')
           : row.featureType === 'city' && row.cityImportance
             ? `${row.cityImportance} city`
             : row.featureType}
@@ -489,5 +582,18 @@ const s: Record<string, React.CSSProperties> = {
     padding: '1px 5px',
     textDecoration: 'none',
     whiteSpace: 'nowrap',
+  },
+  pencilBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'rgba(255,255,255,0.2)',
+    padding: '2px 3px',
+    borderRadius: 3,
+    display: 'inline-flex',
+    alignItems: 'center',
+    flexShrink: 0,
+    lineHeight: 1,
+    transition: 'color 0.12s',
   },
 };

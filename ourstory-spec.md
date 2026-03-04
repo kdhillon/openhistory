@@ -1,11 +1,11 @@
 # OurStory — Project Specification
-*Last updated: 2026-03-01*
+*Last updated: 2026-03-03*
 
 ---
 
 ## Vision
 
-OurStory is an open-source, interactive historical atlas of human civilization. It overlays curated, Wikipedia-sourced data — events, cities, and eventually kingdoms, empires, and nations — onto a real-world map with a timeline slider that spans from the earliest human settlements to the present day. Users scroll through history and watch the world change.
+OurStory is an open-source, interactive historical atlas of human civilization. It overlays curated, Wikipedia-sourced data — events, cities, regions, and sovereign political entities — onto a real-world map with a timeline slider that spans from the earliest human settlements to the present day. Users scroll through history and watch the world change.
 
 Think Google My Maps UI aesthetics + Wikipedia's depth of coverage + the temporal interactivity of a video player.
 
@@ -13,454 +13,482 @@ Think Google My Maps UI aesthetics + Wikipedia's depth of coverage + the tempora
 
 ## Guiding Principles
 
-- **Wikipedia as source of truth.** All data traces back to Wikipedia/Wikidata. No invented data.
-- **Simplicity first.** Start with the simplest possible data type (point events + cities). Add complexity only after the core experience is solid.
-- **Open source, open data.** MIT license. All data pipelines should be reproducible.
+- **Wikipedia as primary source of truth.** All factual data (event dates, locations, summaries, entity names) traces back to Wikipedia/Wikidata. No invented data.
+- **OurStory database for original spatial data.** Some data has no Wikipedia equivalent and must live here: polity territory boundaries (polygons), manually-corrected capital coordinates, hand-curated classifications. These are clearly marked and version-controlled.
+- **Simplicity first.** Add complexity only after the core experience is solid.
+- **Open source, open data.** MIT license. All data pipelines must be reproducible from scratch.
 - **Real-world base map.** Overlay on an actual map (satellite, terrain, or road). Not a stylized historical art map.
-- **My Maps visual language.** Styled pins, polygons, paths on a real-world map — exactly the visual paradigm of Google My Maps.
 
 ---
 
-## Phase 1 Scope
+## Source of Truth — Where Does Data Live?
 
-Phase 1 delivers the minimal end-to-end experience:
+This is the most important architectural question. Different data types have different authoritative sources:
 
-- **Events**: Wikipedia-sourced historical events, each pinned to a location, displayed as styled markers on the map, filterable by category, visible at the correct year on the timeline.
-- **Cities**: Wikipedia-sourced cities with founding dates, displayed as styled markers.
-- **Timeline**: A bottom-anchored time slider spanning from earliest human civilization (~10,000 BCE) to present day. Year-granularity at minimum; scroll step adjustable up to 100-year increments. Playback mode (auto-advance at set speed).
-- **Info panel**: Clicking any marker opens a panel with the Wikipedia summary (first section) and a link out to the full Wikipedia article.
-- **Category filters**: Events filterable by category tag.
+| Data | Source of Truth | Notes |
+|---|---|---|
+| Event dates, titles, summaries | **Wikipedia / Wikidata** | Pulled at pipeline time, stored in Postgres |
+| Event location (city/region/country) | **Wikidata P276 / P17** | Resolved at pipeline time |
+| Location coordinates (cities, regions) | **Wikidata P625** | Pulled at pipeline time |
+| Polity names, dates, capital names | **Wikipedia / Wikidata** | Pulled by `run_polities.py` |
+| Polity capital coordinates | **Wikidata P36 → P625** | Pulled at pipeline time; manually overridable in DB |
+| Manual coordinate corrections | **OurStory DB** | Set via pencil UI; `manually_edited_at` flags these rows; survive pipeline re-runs via upsert |
+| Polity territory boundaries (polygons) | **OurStory DB** (future) | No Wikipedia equivalent; will live in `polity_territories` table |
+| Event categories | **Pipeline classifier + LLM fallback** | Derived, not directly from Wikipedia |
 
-Explicitly out of scope for Phase 1:
-- Historical borders / territory polygons
-- Kingdoms, empires, nations as entities
-- Historical figures / people
-- Trade routes, migration paths, religious spread
-- User accounts, user-contributed data
-- Shareable links, embeds
-- Search
+**The rule**: if Wikipedia/Wikidata has the data, we use it and don't maintain our own copy. If it doesn't exist there (e.g. hand-drawn territory polygons), we own it in the OurStory DB and treat it as original data.
+
+Manual edits made via the pencil UI are protected from pipeline re-runs — the upsert logic skips fields with `manually_edited_at` set, or the edit is stored as an override layer.
 
 ---
 
 ## Architecture
 
-### High-Level Stack
+### Stack
 
 ```
-Frontend (TypeScript)
-  ├── MapLibre GL JS          — map rendering engine
-  ├── Stadia Maps / Maptiler  — base tile provider (satellite + road + terrain)
-  └── Custom time-slider UI   — bottom bar, playback controls
+Frontend
+  ├── React + TypeScript (Vite)
+  ├── MapLibre GL JS          — map rendering (BSD-2, GPU-accelerated)
+  ├── Stadia Maps             — base tiles (road, satellite, terrain toggle)
+  └── Static GeoJSON          — frontend/src/data/seed.geojson
+                                Re-exported from Postgres after each pipeline run.
 
-Backend (optional in Phase 1, needed at scale)
-  └── PostgreSQL              — events, cities, metadata
-      (PostGIS research deferred to sub-project)
+Backend
+  ├── PostgreSQL 16 (Docker)  — events, locations, polities, pipeline metadata
+  └── FastAPI server          — PATCH endpoints for manual corrections
 
-Data Pipeline (GCP)
-  └── Wikipedia dump processing → structured event/city records
-      (separate sub-project)
+Data Pipeline (local Python)
+  ├── pipeline/run_local.py      — SPARQL → Wikidata API → Wikipedia API → Postgres (events + locations)
+  ├── pipeline/run_polities.py   — SPARQL → Wikidata API → Wikipedia API → Postgres (polities only)
+  ├── pipeline/extract.py        — entity parsing, P31 classifiers, slug generation
+  └── pipeline/load_postgres.py  — upsert logic for all three entity types
+
+Export
+  └── scripts/export_geojson.py  — Postgres → seed.geojson (all three entity types)
 ```
 
-### Why MapLibre GL JS
+### Data flow
 
-MapLibre GL JS is the open-source community fork of Mapbox GL JS, released under BSD-2-Clause. It is:
-- Written in TypeScript, ships full type declarations
-- GPU-accelerated (WebGL2/WebGPU) — handles thousands of animated overlay features
-- Vector-tile native — works with Stadia Maps, Maptiler, and self-hosted OpenMapTiles
-- Style-expression driven — data-driven styling per feature, analogous to KML StyleUrl patterns
-- The closest open-source equivalent to Google Maps JS API's overlay system
+```
+Wikidata SPARQL  →  QID list
+Wikidata API     →  entity JSON (dates, coords, P31, P361, P36, etc.)
+Wikipedia API    →  summaries (parallelized, 8 threads)
+pipeline/        →  classify, extract, upsert into Postgres
+export_geojson   →  Postgres → seed.geojson → frontend serves statically
+```
 
-Alternatives considered and rejected:
-- **Mapbox GL JS v2+**: Proprietary license, mandatory telemetry, incompatible with open source
-- **Leaflet**: DOM/SVG-based, performance degrades above ~1,000–2,000 features, no native TypeScript
-- **Google Maps JS API**: Proprietary SaaS, billing required, cannot be self-hosted by users
-- **OpenLayers**: Viable alternative, stronger OGC/GIS compliance, but more verbose API and less elegant style system for this use case
+Events + locations and polities are **separate pipelines** run independently:
+- `run_local.py` — events and their location entities together (location resolution requires both)
+- `run_polities.py` — polities independently (different SPARQL queries, different table)
 
-If performance becomes a bottleneck at very large feature counts, **deck.gl** can be layered on top of MapLibre as a WebGL2/WebGPU rendering overlay without replacing the base map setup.
+---
 
-### Base Tile Provider
+## Database Setup & Repopulation
 
-Use **Stadia Maps** (free tier: unlimited for open-source) or **Maptiler** (free tier: 100,000 tile requests/month).
+### Prerequisites
+- Docker Desktop running
+- Python 3.11+, `psycopg2-binary`, `requests` installed (`pip install -r pipeline/requirements.txt`)
 
-Styles needed:
-- **Road/political** (default): `Stadia Alidade Smooth` or `Maptiler Streets`
-- **Satellite**: `Stadia Alidade Satellite`
-- **Terrain**: `Stadia Stamen Terrain`
+### Starting the database
 
-User can toggle base map style. This mirrors the Google My Maps multi-view behavior.
+```bash
+docker compose up -d
+psql postgresql://ourstory:ourstory@localhost:5432/ourstory -c "\l"
+```
+
+Postgres runs at `localhost:5432`, credentials `ourstory/ourstory`, database `ourstory`.
+
+### Schema setup
+
+```bash
+psql postgresql://ourstory:ourstory@localhost:5432/ourstory -f db/schema.sql
+```
+
+`db/schema.sql` is the single authoritative schema file. All statements use `IF NOT EXISTS`.
+
+### Running the pipelines
+
+```bash
+# Events + locations (run multiple times — additive and idempotent)
+python3 -m pipeline.run_local --min-year 1750 --max-year 1830
+
+# Polities (run separately, same date window)
+python3 -m pipeline.run_polities --min-year 1750 --max-year 1830
+
+# Re-export GeoJSON after any pipeline run
+python3 scripts/export_geojson.py
+```
+
+Post-processing (run after events pipeline):
+```bash
+python3 scripts/cleanup-non-settlements.py
+python3 scripts/backfill-sitelinks.py
+ANTHROPIC_API_KEY=... python3 scripts/fix-empty-categories.py  # run twice
+```
 
 ---
 
 ## Data Models
 
-### Event
+### Concept Overview — Three Entity Types
+
+OurStory has three distinct entity types. Understanding the difference matters:
+
+| | Events | Locations | Polities |
+|---|---|---|---|
+| **What** | Things that happened | Places that exist | Sovereign political entities |
+| **Examples** | Battle of Waterloo, French Revolution | Paris, Normandy, France | French First Republic, Ottoman Empire |
+| **Temporal** | Point-in-time or date range | Founded → dissolved (or present) | Inception → dissolution |
+| **Spatial** | Pinned to a location | IS a location (has coords) | Pinned to capital (has coords) |
+| **On map** | Solid colored dot | Solid colored dot | Hollow colored ring |
+| **DB table** | `events` | `locations` | `polities` |
+| **Filter section** | Events | Locations | Polities |
+
+**Key distinction — polities vs locations:**
+- `locations` (type `country`) = geographic anchors used to resolve event locations. "France" is a location; it pins Battle of Waterloo to a map coordinate.
+- `polities` = time-bounded sovereign states. "French First Republic (1792–1804)" is a polity; it existed for 12 years and then was superseded.
+- A polity can reference a matching geographic location via `location_wikidata_qid`, but they are separate records with different purposes.
+
+---
+
+### `events` table
+
+```sql
+events (
+  id                    UUID         PRIMARY KEY,
+  wikidata_qid          TEXT         UNIQUE,
+  slug                  TEXT,
+  title                 TEXT         NOT NULL,
+  wikipedia_title       TEXT         NOT NULL,
+  wikipedia_summary     TEXT,
+  wikipedia_url         TEXT         NOT NULL,
+  year_start            INT,
+  month_start           INT,
+  day_start             INT,
+  year_end              INT,
+  month_end             INT,
+  day_end               INT,
+  date_is_fuzzy         BOOL         DEFAULT false,
+  date_range_min        INT,
+  date_range_max        INT,
+  location_level        TEXT,        -- 'point'|'city'|'region'|'country'|NULL
+  location_name         TEXT,
+  location_wikidata_qid TEXT,        -- soft ref to locations.wikidata_qid (no FK)
+  lng                   FLOAT,       -- only set when location_level='point'
+  lat                   FLOAT,
+  categories            TEXT[],
+  p31_qids              TEXT[],      -- Wikidata P31 (instance-of)
+  part_of_qids          TEXT[],      -- Wikidata P361 (part-of), GIN indexed
+  sitelinks_count       INT,         -- number of Wikipedia editions (importance signal)
+  manually_edited_at    TIMESTAMPTZ,
+  data_version          INT,
+  pipeline_run          TEXT
+)
+```
+
+**Location resolution order (pipeline):**
+```
+P625 on event       → location_level='point',   no QID     (exact coords on event itself)
+P276 → city P31     → location_level='city',    QID=P276
+P276 → region P31   → location_level='region',  QID=P276
+P276 → country P31  → location_level='country', QID=P276
+P17  → country      → location_level='country', QID=P17    (country fallback)
+nothing             → location_level=NULL                   (stored but not shown on map)
+```
+
+---
+
+### `locations` table
+
+```sql
+locations (
+  id                UUID         PRIMARY KEY,
+  wikidata_qid      TEXT         UNIQUE,
+  slug              TEXT,
+  name              TEXT         NOT NULL,
+  wikipedia_title   TEXT,
+  wikipedia_summary TEXT,
+  wikipedia_url     TEXT,
+  lng               FLOAT        NOT NULL,
+  lat               FLOAT        NOT NULL,
+  founded_year      INT,
+  founded_is_fuzzy  BOOL         DEFAULT false,
+  founded_range_min INT,
+  founded_range_max INT,
+  dissolved_year    INT,
+  location_type     TEXT         NOT NULL DEFAULT 'city',  -- 'city'|'region'|'country'
+  p31_qids          TEXT[],
+  data_version      INT,
+  pipeline_run      TEXT
+)
+```
+
+Locations are populated automatically as a side-effect of event resolution. When an event's P276/P17 QID is not yet in the DB, the pipeline fetches and inserts it.
+
+---
+
+### `polities` table
+
+```sql
+polities (
+  id                    UUID         PRIMARY KEY,
+  wikidata_qid          TEXT         UNIQUE,
+  slug                  TEXT         UNIQUE NOT NULL,
+  name                  TEXT         NOT NULL,
+  short_name            TEXT,
+  polity_type           TEXT         NOT NULL,  -- see types below
+  wikipedia_title       TEXT,
+  wikipedia_summary     TEXT,
+  wikipedia_url         TEXT,
+  year_start            INT,
+  year_end              INT,
+  date_is_fuzzy         BOOL         DEFAULT false,
+  capital_name          TEXT,
+  capital_wikidata_qid  TEXT,
+  lng                   DOUBLE PRECISION,  -- capital coordinates (always preferred over entity P625)
+  lat                   DOUBLE PRECISION,
+  preceded_by_qid       TEXT,        -- Wikidata P1365
+  succeeded_by_qid      TEXT,        -- Wikidata P1366
+  location_wikidata_qid TEXT,        -- soft ref to matching geographic entity in locations
+  p31_qids              TEXT[],
+  manually_edited_at    TIMESTAMPTZ,
+  data_version          INT,
+  pipeline_run          TEXT
+)
+```
+
+**`polity_type` values** (in priority order for classification):
+| Type | Description | Color |
+|---|---|---|
+| `papacy` | Pontificate / papal state | Gold |
+| `sultanate` | Sultanate, khanate, emirate, caliphate | Burnt sienna |
+| `confederation` | Confederation, league | Deep purple |
+| `republic` | Republic, commonwealth | Dark green |
+| `empire` | Empire, colonial empire | Deep crimson |
+| `kingdom` | Kingdom, realm, monarchy | Midnight blue |
+| `principality` | Principality, duchy, vassal state, Indian princely state, HRE state | Dark brown |
+| `other` | Real polity but type unresolvable from Wikidata | Blue-grey |
+
+**Coordinate rule**: polities always use capital (P36) coordinates, not the entity's own P625. This ensures e.g. "French colonial empire" shows at Paris rather than a geographic centroid in Africa.
+
+**Capital coordinates are manually overridable** via the pencil UI in the info panel. Corrections are stored directly on the polity record and survive pipeline re-runs (pipeline upserts won't overwrite `manually_edited_at` rows).
+
+---
+
+### `polity_territories` table (empty — future)
+
+```sql
+polity_territories (
+  id           UUID    PRIMARY KEY,
+  polity_id    UUID    NOT NULL REFERENCES polities(id) ON DELETE CASCADE,
+  year_start   INT,
+  year_end     INT,
+  boundary     JSONB,  -- GeoJSON Polygon or MultiPolygon
+  source       TEXT    -- 'manual' | 'imported' | 'generated'
+)
+```
+
+This table is the **first place where OurStory owns original spatial data** with no Wikipedia equivalent. Territory boundaries will be hand-drawn or imported from historical GIS sources and are not derivable from Wikidata. Once populated, polities will switch from hollow ring rendering to filled polygon overlays on the map.
+
+---
+
+### GeoJSON Feature Schema
+
+All three entity types are exported to `seed.geojson` as GeoJSON Features. Common fields:
 
 ```typescript
-interface HistoricalEvent {
-  id: string;                    // UUID
-  title: string;                 // e.g. "Battle of Thermopylae"
-  wikipedia_title: string;       // Wikipedia article title (for link + summary fetch)
-  wikipedia_summary: string;     // First section of Wikipedia article, cached
-  wikipedia_url: string;         // Full URL
-
-  // Temporal
-  year_start: number;            // Start year (negative = BCE). Required.
-  year_end: number | null;       // End year, null if instantaneous
-  date_is_fuzzy: boolean;        // True if dates are estimated/approximate
-  date_range_min: number | null; // Estimated earliest possible year (fuzzy events)
-  date_range_max: number | null; // Estimated latest possible year (fuzzy events)
-
-  // Spatial
-  // Exactly one of coordinates or location_id will be set, depending on location_level.
-  location_level: 'point' | 'city' | 'country' | 'region';
-  coordinates: [number, number] | null; // Set only when location_level = 'point'
-  location_id: string | null;           // FK to City (or future Country/Region entity) when location_level != 'point'
-  location_name: string;                // Human-readable location name (denormalized for display)
-
-  // Classification
-  categories: string[];          // e.g. ["battle", "politics", "religion"]
-
+interface FeatureProperties {
+  featureType:      'event' | 'city' | 'region' | 'country' | 'polity';
+  id:               string;
+  slug:             string;
+  title:            string;
+  wikipediaTitle:   string;
+  wikipediaSummary: string;
+  wikipediaUrl:     string;
+  yearStart:        number | null;
+  yearEnd:          number | null;
+  dateIsFuzzy:      boolean;
+  locationName:     string;
+  categories:       Category[];
+  primaryCategory:  Category;
+  wikidataClasses?: string[];
+  yearDisplay:      string;
 }
 ```
 
-**Note on location assignment**: Events sourced from Wikipedia rarely have structured location data. An LLM pipeline will assign `location_level` and either `coordinates` (for point events) or `location_id` (for city/country/region events) from the event description and Wikipedia metadata. This is a dedicated sub-project (see SP-2).
+**Event-only fields**: `monthStart/End`, `dayStart/End`, `dateRangeMin/Max`, `locationLevel`, `locationSlug`, `partOf`, `partOfResolved`, `sitelinksCount`
 
-### City
+**Location-only fields**: `wikidataQid` (used for capital cross-linking from polities), `cityImportance` ('major'|'minor')
 
-```typescript
-interface City {
-  id: string;
-  name: string;
-  wikipedia_title: string;
-  wikipedia_summary: string;
-  wikipedia_url: string;
+**Polity-only fields**: `polityType`, `capitalName`, `capitalWikidataQid`, `precededByQid`, `succeededByQid`, `hasTerritory`
 
-  coordinates: [number, number];  // [longitude, latitude]
-
-  founded_year: number | null;    // Year city was founded (negative = BCE)
-  founded_is_fuzzy: boolean;
-  founded_range_min: number | null;
-  founded_range_max: number | null;
-
-  dissolved_year: number | null;  // Year city ceased to exist (if applicable)
-}
-```
-
-### Timeline State
-
-```typescript
-interface TimelineState {
-  current_year: number;      // Active year shown on map
-  step_size: number;         // Years per slider tick (1–100)
-  is_playing: boolean;       // Playback mode active
-  playback_speed: number;    // Years per second during playback
-}
-```
+**Implementation note**: MapLibre stores all GeoJSON properties as flat strings. Nested objects like `partOfResolved` arrive as JSON strings at runtime and are parsed defensively in InfoPanel.tsx.
 
 ---
 
-## Map Overlay Data Model (My Maps Style)
+## Polity Classification Pipeline
 
-The visual overlay system mirrors Google My Maps' KML/GeoJSON data model.
+Polities go through a three-tier classification to assign `polity_type`:
 
-**Key insight from My Maps research**: My Maps stores overlays as KML `<Folder>` → `<Placemark>` structures with shared `<Style>` definitions. All styling is data-driven per feature. This maps cleanly onto MapLibre GL JS's GeoJSON source + layer expression system.
+**Tier 1 — Direct P31 match**: hardcoded sets of canonical QIDs per type (e.g. Q417175 = historical kingdom → `kingdom`). Fast O(1) lookup.
 
-### Internal Data Format: GeoJSON
+**Tier 2 — Transitive BFS**: for P31 QIDs not in Tier 1, walks the P279 (subclass-of) hierarchy upward up to 4 levels via the Wikidata API. Resolves things like "constitutional monarchy" → "monarchy" → "kingdom".
 
-All overlay data is stored and transmitted as **GeoJSON FeatureCollections**. KML is used as an import/export format only (relevant for Phase N: allowing users to import My Maps exports).
+**Tier 3 — Name-based fallback**: if Tiers 1+2 yield nothing, scans the entity name for keywords ("Republic of X" → `republic`, "Empire of X" → `empire`, "Duchy of X" → `principality`, etc.).
 
-Each GeoJSON feature carries styling properties that MapLibre expressions consume:
-
-```typescript
-// Point feature (Event or City marker)
-{
-  type: "Feature",
-  geometry: { type: "Point", coordinates: [lon, lat] },
-  properties: {
-    id: "uuid",
-    featureType: "event" | "city",
-    name: "Battle of Thermopylae",
-    markerScale: 1.0,
-    year: -480,
-    // ... other event fields
-  }
-}
-```
-
-### KML Color Format (for future import/export)
-
-KML uses **AABBGGRR** hex (reversed from CSS). Critical conversion:
-
-```typescript
-// CSS #FF0000 (red), opacity 0.35 → KML "590000ff"
-function hexToKml(hex: string, opacity: number): string {
-  const a = Math.round(opacity * 255).toString(16).padStart(2, '0');
-  const r = hex.substring(1, 3);
-  const g = hex.substring(3, 5);
-  const b = hex.substring(5, 7);
-  return `${a}${b}${g}${r}`.toLowerCase();
-}
-```
-
-### MapLibre Layer Definitions
-
-```typescript
-// Event/City markers
-map.addLayer({
-  id: 'markers',
-  type: 'circle',
-  source: 'overlay',
-  filter: ['==', ['geometry-type'], 'Point'],
-  paint: {
-    'circle-color': ['match', ['get', 'primaryCategory'], /* category → color map defined in theme config */
-      'battle', '#DB4436',
-      'politics', '#4285F4',
-      'discovery', '#0F9D58',
-      /* ... */
-      '#9E9E9E' /* default */
-    ],
-    'circle-radius': ['*', ['get', 'markerScale'], 8],
-    'circle-stroke-color': '#ffffff',
-    'circle-stroke-width': 1.5,
-  }
-});
-
-// Future: Polygon territories
-map.addLayer({
-  id: 'polygons-fill',
-  type: 'fill',
-  source: 'overlay',
-  filter: ['==', ['geometry-type'], 'Polygon'],
-  paint: {
-    'fill-color': ['get', 'fillColor'],
-    'fill-opacity': ['get', 'fillOpacity'],
-  }
-});
-
-map.addLayer({
-  id: 'polygons-stroke',
-  type: 'line',
-  source: 'overlay',
-  filter: ['==', ['geometry-type'], 'Polygon'],
-  paint: {
-    'line-color': ['get', 'strokeColor'],
-    'line-width': ['get', 'strokeWeight'],
-    'line-opacity': ['get', 'strokeOpacity'],
-  }
-});
-```
+**Remaining `other`**: entities where all three tiers fail. These are real polities (they passed the sovereign-state gate) but have only generic Wikidata tags like `dynasty` or `historical country` with no keyword in the name. Examples: Qajar Iran, Zand dynasty.
 
 ---
 
-## UI / UX Design
+## Data Pipeline — Event SPARQL Categories
 
-### Layout
+Each category queries Wikidata for instances/subclasses of a root QID, filtered to the requested date window.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  [OurStory]          [Map Style ▼]  [Filters ▼]         │  ← top nav bar
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│                                                         │
-│              MapLibre GL Map                            │
-│         (full viewport, real-world)                     │
-│                                                         │
-│   ● Event/City markers overlaid on map                  │
-│                                                         │
-│                                                         │
-│                                                         │
-├─────────────────────────────────────────────────────────┤
-│  ◀◀  ▶  [━━━━━━━━●━━━━━━━━━━━━━━━━━━━]  10,000 BCE  ▶▶ │  ← timeline bar
-│  Step: [1yr ▼]                                          │
-└─────────────────────────────────────────────────────────┘
-```
-
-When a marker is clicked, an info panel slides up from the right (or bottom on mobile):
-
-```
-┌──────────────────────────────────┐
-│  Battle of Thermopylae      [✕]  │
-│  480 BCE · Battle · Greece       │
-│                                  │
-│  [Wikipedia summary text, first  │
-│   section, 2–4 sentences]        │
-│                                  │
-│  [→ View on Wikipedia]           │
-└──────────────────────────────────┘
-```
-
-### Timeline Bar
-
-- **Scrubbing**: Drag the thumb to any year
-- **Year display**: Always visible, formatted as "480 BCE" or "1453 CE"
-- **Step size selector**: Dropdown — 1yr, 5yr, 10yr, 25yr, 50yr, 100yr. Controls how far one tick-step moves the slider.
-- **Playback**: Play/pause button. When playing, the year advances at `playback_speed` years/second. Default: 10 years/second. Speed can be adjusted.
-- **Keyboard**: Arrow keys step by current step size
-
-### Map Interaction
-
-- **Click marker**: Open info panel
-- **Hover marker**: Tooltip with event/city name + year
-- **Map base style toggle**: Road / Satellite / Terrain (top-right)
-- **Zoom/pan**: Standard MapLibre behavior
-
-### Category Filters
-
-A filter dropdown shows all event categories. Each category has a color dot. Users can show/hide categories. Active filters persist across timeline scrubbing.
-
----
-
-## Date Handling
-
-The timeline spans approximately **-10000 to 2025** (year 0 exists — we use astronomical year numbering where year 0 = 1 BCE for simplicity in arithmetic, with display converting to BCE/CE).
-
-```typescript
-function displayYear(year: number): string {
-  if (year < 0) return `${Math.abs(year)} BCE`;
-  if (year === 0) return '1 BCE';  // or display as year 0 — TBD
-  return `${year} CE`;
-}
-```
-
-Fuzzy dates are stored as `year_start` (best estimate), `date_range_min`, `date_range_max`. The UI shows the best-estimate year; a tooltip or detail panel shows the range.
-
-Events with `date_is_fuzzy = true` appear on the timeline at `year_start` and are shown with a visual indicator (e.g. slightly different pin style or a "~" prefix on the year display).
-
----
-
-## Sub-Projects
-
-These are identified work streams that are separate design and implementation projects, organized by type and the order in which they should be tackled.
-
----
-
-### Frontend / UX (Phase 1 — Build This First)
-
-#### SP-0: UX — Interactive Historical Map Viewer
-**Goal**: Build the full Phase 1 frontend experience — a real-world map with a time-slider and styled event/city markers.
-
-**Deliverables**:
-- MapLibre GL JS map (full viewport) with Stadia Maps base tiles (road, satellite, terrain toggle)
-- Event and city markers rendered as styled circle pins, color-driven by category via MapLibre `match` expression
-- Time slider (bottom bar): scrubbing, year display (BCE/CE + Year 0), step size selector (1/5/10/25/50/100 yr), playback mode with adjustable speed, keyboard arrow key support
-- Click-to-open info panel: Wikipedia summary + link, event title, year, location name, category tags
-- Category filter controls (show/hide by category)
-- Fuzzy date visual indicator on markers and in the info panel
-
-**Stack**:
-- TypeScript
-- MapLibre GL JS
-- Stadia Maps (maintainer API key, no user account required)
-- Framework TBD (React recommended for component model; to be confirmed before build starts)
-- No backend required for Phase 1 if seeded with a static dataset (e.g. Histography); swap to Postgres API when pipeline data is ready
-
-**Data contract**: Consumes a GeoJSON FeatureCollection of events and cities. Fields per feature defined in the data models section. Can be seeded from a static JSON file initially.
-
-**Key design constraints**:
-- Overlapping pins are acceptable for Phase 1 — no clustering required
-- Snap (not animate) between time steps
-- Info panel content is Wikipedia summary cached at pipeline time — no live API calls
-- All styling derived from category; no per-feature color stored in data
-
-**Open questions for this sub-project**:
-- React vs another framework?
-- Where does the category→color theme config live (constants file, CSS variables, MapLibre style JSON)?
-- Mobile layout — is it in scope for Phase 1?
-
----
-
-### Data & Research (Do First)
-
-#### SP-1: Histography Dataset Research
-**Goal**: Determine if Histography's event dataset is publicly available and usable as a bootstrap.
-- Histography (histography.io) has a curated set of Wikipedia-sourced historical events with years, already categorized
-- **Questions**: Is the dataset downloadable? What license? What's the coverage (years, event types)?
-- **Opportunity**: Could seed the database and inform the event taxonomy before the full Wikipedia pipeline is built — do this first
-
-#### SP-2: Wikipedia Data Pipeline (GCP)
-**Goal**: Parse a Wikipedia dump and extract structured event and city records at scale.
-- **Input**: Wikipedia XML dump (~22GB compressed) or Wikidata JSON dump
-- **Output**: Postgres tables for events and cities
-- **Technology**: GCP (Dataflow / Dataproc / BigQuery public Wikipedia dataset)
-- **Open questions**:
-  - BigQuery public Wikipedia dataset vs raw dump processing
-  - Wikidata for structured facts (coordinates, dates) + Wikipedia for summaries
-  - How to identify "event" articles vs other article types
-- **Note**: This is the largest sub-project. Probably a Spark or Beam pipeline on GCP Dataproc.
-- **Dependency**: SP-1 informs scope and may reduce the work needed here
-
----
-
-### AI / ML Pipelines (After Data Is Available)
-
-#### SP-3: Event Categorization
-**Goal**: Define a taxonomy of event categories and classify all events.
-- **Input**: Large sample of Wikipedia historical events (from SP-1 or SP-2)
-- **Output**: Category taxonomy (10–30 top-level categories) + per-event category tags
-- **Approach**: Exploratory analysis of real event distribution → LLM classification at scale
-- **Examples**: Battle, Treaty, Discovery, Natural Disaster, Political Change, Cultural Event, Exploration, Scientific Achievement
-- **Dependency**: Needs SP-1 or SP-2 output to explore real event distribution
-
-#### SP-4: LLM Location Assignment Pipeline
-**Goal**: Assign `location_level` and either `coordinates` (point events) or `location_id` (city/country/region events) to every extracted event.
-- **Input**: Event title, Wikipedia summary text, Wikipedia categories
-- **Output**: Location level + coordinates or location FK + location name
-- **Approach**: LLM (Claude API) with geocoding fallback (Nominatim / Google Geocoding)
-- **Open questions**:
-  - Confidence scoring — when to flag for human review
-  - Batch processing cost at scale (millions of events)
-  - Handling events with genuinely no single location (e.g. "Age of Enlightenment")
-- **Dependency**: Needs SP-2 output; SP-3 category tags may improve location inference
-
----
-
-### Infrastructure (As Needed)
-
-#### SP-5: PostGIS Evaluation
-**Goal**: Determine whether PostGIS spatial extensions are needed vs plain Postgres.
-- **Questions**:
-  - Can viewport queries be handled with simple lat/lng range queries on a plain Postgres index?
-  - When does PostGIS become necessary (territory polygons, spatial overlap queries)?
-- **Likely answer**: Plain Postgres is sufficient for Phase 1 point features. PostGIS becomes necessary when territory polygons are added in Phase 2.
-- **Timing**: Evaluate before Phase 2 begins
-
----
-
-### Phase 2+ Features (Deferred)
-
-#### SP-6: Historical Borders & Territory Polygons
-**Goal**: Add kingdom/empire/nation territory polygons to the map, changing over time.
-- **Data sources to evaluate**:
-  - GeaCron (existing historical border dataset — slow/outdated UI but may have usable data)
-  - QGIS historical shapefiles
-  - Wikipedia-derived descriptions + LLM polygon generation (last resort)
-- **Vector data format**: GeoJSON polygons with `year_start`/`year_end` properties
-- **MapLibre rendering**: `fill` + `line` layers with data-driven style expressions (see KML polygon style model)
-- **Note**: Hardest technical and data problem in the project. Do not start until Phase 1 is stable.
-
-#### SP-7: Kingdoms / Empires / Nations as Entities
-**Goal**: Model political entities as first-class objects with lifespans, not just events pinned to locations.
-- **Data model**: Entity with `name`, `year_start`, `year_end`, `type` (kingdom/empire/nation/city-state), Wikipedia link, territory polygon FK
-- **UX**: Clicking a territory polygon shows the entity info panel
-- **Dependency**: Requires SP-6
-
-#### SP-8: Historical Figures / People
-**Goal**: Add notable historical people as entities — birthplace pin, lifespan on the timeline.
-- **Deferred**: People introduce significant complexity (multiple locations over a lifetime, relevance filtering at scale)
-- **Future design questions**: Do people move on the map during their lifetime? What notability threshold determines inclusion?
-
----
-
-## Future Phases (High Level)
-
-| Phase | Key Addition |
+| Label | Root QID |
 |---|---|
-| Phase 1 | Events + Cities + Timeline slider |
-| Phase 2 | Territory polygons for major empires (SP-4 + SP-6) |
-| Phase 3 | Historical figures / people (SP-7) |
-| Phase 4 | Trade routes, migration paths, religious spread as path overlays |
-| Phase 5 | Shareable links, embeds, user annotations |
-| Phase N | Full self-serve "My Maps"-style editing layer |
+| conflicts | Q180684 |
+| coups | Q45382 |
+| elections | Q40231 |
+| revolutions | Q10931 |
+| treaties | Q131569 |
+| assassinations | Q1139665 |
+| coronations | Q175331 |
+| disasters | Q8065 |
+| epidemics | Q3241045 |
+| famines | Q168247 |
+| massacres | Q3199915 |
+| expeditions | Q170584 |
+| spaceflights | Q752783 |
+| ecclesiastical councils | Q82821 |
+| conclaves | Q29102902 |
+| founding events | Q17633526 |
+
+**WDQS timeout patterns**: Q1656682 (political event) and Q2085381 (religious event) are too broad for the 60s timeout. Always use narrower subclasses.
+
+---
+
+## Current Data State (as of 2026-03-03, window 1750–1830)
+
+| Entity | Count |
+|---|---|
+| Events (total) | ~2,125 |
+| Events with location | ~1,722 (81%) |
+| Events without location | ~403 (stored, not shown on map) |
+| Locations | ~742 (578 cities · 60 regions · 104 countries) |
+| Polities | 1,275 total · 983 with coordinates |
+| GeoJSON features | ~5,363 |
+
+**Polity type breakdown**: principality 525 · kingdom 243 · other 196 · sultanate 145 · republic 76 · confederation 46 · empire 43 · papacy 1
+
+*DB currently contains only 1750–1830 data. Broader date ranges require additional pipeline runs.*
+
+---
+
+## UI / UX
+
+### Map rendering by entity type
+
+| Type | Visual | Visibility rule |
+|---|---|---|
+| Event | Solid dot, category color | Visible at `yearStart` ± fade window |
+| City | Solid blue dot | Visible at `foundedYear`; major cities always shown |
+| Region / Country | Solid dot, muted color | Visible at `foundedYear` |
+| Polity | **Hollow ring**, type color | Requires both `yearStart` AND `yearEnd`; appears at inception, disappears at dissolution |
+
+### Filter sections
+
+Three independent filter sections in the top nav: **Events** | **Locations** | **Polities**. Each has its own active-category state. Principalities are **off by default** (too numerous and visually noisy).
+
+### Info panel
+
+- **Collapsed**: category tags, title, date range, location/capital, summary snippet, Wikipedia link
+- **Expanded**: image carousel, full Wikipedia article (section accordion, History auto-opened), cross-entity navigation links
+- **Editable fields**: date (pencil → Wikipedia edit), location (pencil → Wikipedia edit), capital coordinates/name for polities (pencil → direct DB edit via `PATCH /api/polities/{id}`)
+
+---
+
+## Phase Roadmap
+
+| Phase | Key Addition | Status |
+|---|---|---|
+| 1 | Events + Locations + Timeline + Info panel + Part-of hierarchy | ✅ Complete |
+| 1.5 | Polities (sovereign states as first-class entities) | ✅ Complete |
+| 2 | Search, pin clustering, territory polygons | 🔄 Next |
+| 3 | Historical figures / people | Deferred |
+| 4 | Stories (guided narrative tours) | Deferred |
+| 5 | Shareable links, embeds, user annotations | Deferred |
+
+### Phase 2 priorities
+
+**Search**: client-side Fuse.js fuzzy search over the loaded GeoJSON. Sufficient for current scale (~5,000–50,000 features). Postgres full-text only needed above ~50,000.
+
+**Territory polygons (SP-8)**: first major OurStory-original dataset. Polities already exist in the DB with the `polity_territories` table schema ready. Needs a polygon editing UI or import from historical GIS sources (GeaCron, Natural Earth historical shapefiles). Rendering switches from hollow ring → filled polygon once `hasTerritory = true`.
+
+**Pin clustering**: MapLibre built-in `cluster` property. Design question: per-featureType clusters vs unified?
+
+### Phase 4 — Stories
+
+A **Story** is a curated, narrated tour through a set of historical events. Think of it as a guided documentary layer over the map — the user presses Play and watches history unfold, event by event, with context provided at each step.
+
+**Core concept**: a Story is an ordered list of *steps*. Each step references one or more features (events, polities, locations) and carries a short annotation written by the story's author. On playback:
+1. The timeline seeks to the step's date
+2. The map flies to center the relevant feature(s)
+3. The annotation text appears in a narration panel (distinct from the info panel)
+4. After a dwell time (or on user advance), moves to the next step
+
+**Example — "The French Revolution":**
+> *Step 1 (1789): The Estates-General convenes at Versailles* — "For the first time in 175 years, Louis XVI calls together France's three estates to address a fiscal crisis. What begins as a budget meeting will end the monarchy…"
+> *Step 2 (1789): Storming of the Bastille* — "On July 14th, Parisian crowds storm the royal fortress. The governor is killed; the Revolution has its first symbolic victory…"
+> … 40 more steps through to Napoleon's coronation
+
+**Playback modes to consider:**
+- **Auto-play**: steps advance automatically at a configurable pace (1 step / 5 seconds)
+- **Manual**: user taps → next step, ← previous step, or clicks directly on map events
+- **Timeline-driven**: story plays in sync with the normal timeline slider; annotations surface when the slider crosses each step's date
+
+**Narration panel**: a distinct UI element from the info panel — probably a bottom or left overlay with the step number, annotation text, and prev/next controls. The info panel can still open for a selected feature alongside it.
+
+**Story filtering**: during playback, optionally dim all map features not in the story so the relevant events stand out. Toggle to show full map context.
+
+**Data model (sketch):**
+```sql
+stories (
+  id          UUID PRIMARY KEY,
+  slug        TEXT UNIQUE,
+  title       TEXT,
+  description TEXT,
+  author      TEXT,
+  created_at  TIMESTAMPTZ
+)
+
+story_steps (
+  id           UUID PRIMARY KEY,
+  story_id     UUID REFERENCES stories(id),
+  position     INT,         -- ordering within the story
+  feature_id   UUID,        -- nullable; links to an event/polity
+  feature_type TEXT,        -- 'event' | 'polity' | 'location'
+  annotation   TEXT,        -- the narration text for this step
+  year         INT,         -- explicit year override if no feature linked
+  lng          FLOAT,       -- map center override (optional)
+  lat          FLOAT
+)
+```
+
+**Open design questions:**
+- Who can author stories initially? Probably just the OurStory team for quality control, then opened to users with accounts.
+- Does a story need to be exhaustive (every event in the French Revolution) or curated (just the 10 most important)? Probably both modes — exhaustive auto-generated stories from `part_of_qids` groupings, hand-curated stories for narrative quality.
+- Can a story be auto-generated? A story for any war could be bootstrapped from all events where `part_of_qids` contains the war's QID, ordered by `year_start`. Author then edits the annotation text.
+- Mobile: story playback is especially well-suited to phone UX (swipe to advance).
+
+---
+
+## Open Questions
+
+- **Territory polygon source**: GeaCron vs QGIS shapefiles vs hand-drawn — needs a research spike
+- **LLM location enrichment**: ~400 events have no Wikidata location. LLM geocoding from title + summary would close this gap.
+- **Location dates**: `founded_year` / `dissolved_year` mostly NULL for pipeline-created locations. Mechanical Wikidata P571/P576 backfill not yet done.
+- **Broad date range coverage**: current DB only covers 1750–1830. Expanding to full history requires multiple pipeline passes.
 
 ---
 
@@ -468,27 +496,17 @@ These are identified work streams that are separate design and implementation pr
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Mapping library | MapLibre GL JS | BSD-2, TypeScript-native, GPU-accelerated, closest open-source analog to Google Maps |
-| Base tile provider | Stadia Maps (primary) | Free for open-source, satellite + terrain + road styles |
-| Overlay data format | GeoJSON | Universal, MapLibre-native, extensible |
-| KML | Import/export only | My Maps compatibility for Phase N |
-| KML color format | AABBGGRR | OGC standard, not CSS RGBA — document carefully to avoid bugs |
-| Timeline granularity | Year (Phase 1) | Sufficient for most historical data; sub-year deferred |
-| Year 0 display | "Year 0" | Astronomcial year 0 displayed as "Year 0", not "1 BCE" |
-| Date arithmetic | Astronomical year (0-indexed) | Simplifies math; display layer converts to BCE/CE |
-| Wikipedia summary caching | Pipeline-time (Postgres) | Faster UX, no live API dependency; acceptable staleness for historical data |
-| Tile provider API key | Maintainer-held Stadia account | Users need no account; maintainer holds API key. No self-hosted fallback needed. |
-| Repo structure | Monorepo | Single repo for frontend, backend, and pipeline |
-| Backend | PostgreSQL | Reliable, well-known, extensible to PostGIS |
-| Cloud provider (pipeline) | GCP | Public Wikipedia BigQuery dataset available; natural fit |
-| Language | TypeScript (full stack) | Single language, strong typing |
+| Mapping library | MapLibre GL JS | BSD-2, TypeScript-native, GPU-accelerated |
+| Frontend framework | React + Vite | Component model, fast HMR |
+| Base tile provider | Stadia Maps | Free for open-source; satellite + terrain + road |
+| Overlay data format | Static GeoJSON | Universal, MapLibre-native; no backend needed at current scale |
+| Backend | PostgreSQL 16 (Docker) | Reliable; extensible to PostGIS; reproducible locally |
+| Polities vs extending locations | Separate `polities` table | Different schema, different pipeline, different rendering — cleaner separation |
+| Polity coordinate rule | Always use capital P36 → P625 | Entity's own P625 often points to wrong geographic centroid |
+| Manual edit protection | `manually_edited_at` timestamp | Pipeline upserts can skip manually-edited rows |
+| Cloud pipeline | None — local Python | Wikidata API sufficient at current scale; GCP deferred |
+| Location FK | Soft `location_wikidata_qid TEXT` | Allows events with unresolved locations to be stored |
 
 ---
 
-## Open Questions (Unresolved)
-
-- **Event density UX**: At high zoom-out with many events in one region, overlapping pins may become hard to read. Address if it becomes a real problem post-launch.
-
----
-
-*This document is the living spec for OurStory. Update it as decisions are made and sub-projects are clarified.*
+*This document is the living spec for OurStory. Update it whenever significant architecture decisions are made or the data model changes.*

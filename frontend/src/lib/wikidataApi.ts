@@ -1,0 +1,189 @@
+// Proxied through Vite dev server (/wikidata-api → https://www.wikidata.org/w/api.php)
+// so the browser never makes a direct cross-origin request (avoids Wikimedia CORS allowlist).
+const WD_API = '/wikidata-api';
+
+function wd(p: Record<string, string>) {
+  return new URLSearchParams({ format: 'json', ...p }).toString();
+}
+
+// ── Auth ────────────────────────────────────────────────────────────────────
+
+export async function checkLogin(): Promise<string | null> {
+  try {
+    const res = await fetch(`${WD_API}?${wd({ action: 'query', meta: 'userinfo' })}`, { credentials: 'include' });
+    const data = await res.json();
+    const u = data.query?.userinfo;
+    return (u && !('anon' in u)) ? u.name as string : null;
+  } catch { return null; }
+}
+
+export async function login(username: string, password: string): Promise<{ ok: boolean; error?: string }> {
+  // Step 1: login token
+  const tokenRes = await fetch(
+    `${WD_API}?${wd({ action: 'query', meta: 'tokens', type: 'login' })}`,
+    { credentials: 'include' },
+  );
+  const tokenData = await tokenRes.json();
+  const logintoken = tokenData.query?.tokens?.logintoken as string;
+  console.log('[WikiAuth] token response:', tokenData);
+  console.log('[WikiAuth] logintoken:', logintoken);
+
+  // Step 2: authenticate
+  const body = new URLSearchParams({
+    action: 'clientlogin', format: 'json',
+    logintoken, username, password,
+    loginreturnurl: window.location.href,
+  });
+  const res = await fetch(WD_API, { method: 'POST', body, credentials: 'include' });
+  const data = await res.json();
+  console.log('[WikiAuth] login response:', data);
+  if (data.clientlogin?.status === 'PASS') return { ok: true };
+  return { ok: false, error: data.clientlogin?.message ?? 'Login failed' };
+}
+
+export async function logout(): Promise<void> {
+  const tokenRes = await fetch(`${WD_API}?${wd({ action: 'query', meta: 'tokens' })}`, { credentials: 'include' });
+  const tokenData = await tokenRes.json();
+  const token = tokenData.query?.tokens?.csrftoken as string;
+  const body = new URLSearchParams({ action: 'logout', format: 'json', token });
+  await fetch(WD_API, { method: 'POST', body, credentials: 'include' });
+}
+
+// ── Entity lookup ────────────────────────────────────────────────────────────
+
+export async function getQid(wikipediaTitle: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${WD_API}?${wd({ action: 'wbgetentities', sites: 'enwiki', titles: wikipediaTitle, props: 'info' })}`);
+    const data = await res.json();
+    const entries = Object.values(data.entities ?? {}) as Array<{ id?: string }>;
+    const hit = entries.find(e => e.id && !e.id.startsWith('-'));
+    return hit?.id ?? null;
+  } catch { return null; }
+}
+
+// ── CSRF ─────────────────────────────────────────────────────────────────────
+
+export async function getCsrf(): Promise<string> {
+  const res = await fetch(`${WD_API}?${wd({ action: 'query', meta: 'tokens' })}`, { credentials: 'include' });
+  const data = await res.json();
+  return data.query.tokens.csrftoken as string;
+}
+
+// ── Claims ───────────────────────────────────────────────────────────────────
+
+export interface Claim {
+  id?: string;
+  type: 'statement';
+  rank: 'normal' | 'preferred' | 'deprecated';
+  mainsnak: { snaktype: string; property: string; datavalue: unknown };
+}
+
+export async function getExistingClaims(entityId: string, property: string): Promise<Claim[]> {
+  const res = await fetch(`${WD_API}?${wd({ action: 'wbgetclaims', entity: entityId, property })}`);
+  const data = await res.json();
+  return (data.claims?.[property] ?? []) as Claim[];
+}
+
+function buildTimeClaim(property: string, year: number, month: number | null, day: number | null, existingId?: string): Claim {
+  const precision = day != null ? 11 : month != null ? 10 : 9;
+  const abs = Math.abs(year);
+  const sign = year < 0 ? '-' : '+';
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+  const time = `${sign}${pad(abs, 4)}-${pad(month ?? 1)}-${pad(day ?? 1)}T00:00:00Z`;
+  const claim: Claim = {
+    type: 'statement', rank: 'normal',
+    mainsnak: {
+      snaktype: 'value', property,
+      datavalue: {
+        value: { time, timezone: 0, before: 0, after: 0, precision, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
+        type: 'time',
+      },
+    },
+  };
+  if (existingId) claim.id = existingId;
+  return claim;
+}
+
+async function submitClaim(entityId: string, claim: Claim, csrf: string, summary: string): Promise<void> {
+  let body: URLSearchParams;
+
+  if (claim.id) {
+    // Updating an existing claim — wbsetclaim requires the GUID
+    body = new URLSearchParams({
+      action: 'wbsetclaim', format: 'json',
+      claim: JSON.stringify(claim),
+      token: csrf, summary,
+    });
+  } else {
+    // Creating a new claim — wbcreateclaim takes the entity + property separately
+    const snak = claim.mainsnak;
+    body = new URLSearchParams({
+      action: 'wbcreateclaim', format: 'json',
+      entity: entityId,
+      property: snak.property,
+      snaktype: snak.snaktype,
+      value: JSON.stringify((snak.datavalue as { value: unknown }).value),
+      token: csrf, summary,
+    });
+  }
+
+  const res = await fetch(WD_API, { method: 'POST', body, credentials: 'include' });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.info ?? JSON.stringify(data.error));
+}
+
+export async function submitDateEdit(
+  entityId: string,
+  startYear: number, startMonth: number | null, startDay: number | null,
+  endYear: number | null, endMonth: number | null, endDay: number | null,
+  csrf: string,
+): Promise<void> {
+  const summary = 'Correcting date via OpenHistory historical atlas';
+
+  // Resolve which property to use for start (prefer what already exists)
+  const [p585, p580, p582] = await Promise.all([
+    getExistingClaims(entityId, 'P585'),
+    getExistingClaims(entityId, 'P580'),
+    getExistingClaims(entityId, 'P582'),
+  ]);
+
+  if (endYear == null) {
+    // Single-point event
+    const prop = p580.length > 0 ? 'P580' : 'P585';
+    const existing = prop === 'P580' ? p580 : p585;
+    await submitClaim(entityId, buildTimeClaim(prop, startYear, startMonth, startDay, existing[0]?.id), csrf, summary);
+  } else {
+    // Range
+    await submitClaim(entityId, buildTimeClaim('P580', startYear, startMonth, startDay, p580[0]?.id), csrf, summary);
+    await submitClaim(entityId, buildTimeClaim('P582', endYear, endMonth, endDay, p582[0]?.id), csrf, summary);
+  }
+}
+
+// ── Location search ───────────────────────────────────────────────────────────
+
+export interface EntityResult { id: string; label: string; description: string }
+
+export async function searchEntities(query: string): Promise<EntityResult[]> {
+  if (!query.trim()) return [];
+  const res = await fetch(`${WD_API}?${wd({ action: 'wbsearchentities', search: query, language: 'en', limit: '8', type: 'item' })}`);
+  const data = await res.json();
+  return (data.search ?? []).map((r: { id: string; label?: string; description?: string }) => ({
+    id: r.id, label: r.label ?? r.id, description: r.description ?? '',
+  }));
+}
+
+export async function submitLocationEdit(
+  entityId: string, locationQid: string, csrf: string,
+): Promise<void> {
+  const summary = 'Correcting location via OpenHistory historical atlas';
+  const existing = await getExistingClaims(entityId, 'P276');
+  const claim: Claim = {
+    type: 'statement', rank: 'normal',
+    mainsnak: {
+      snaktype: 'value', property: 'P276',
+      datavalue: { value: { 'entity-type': 'item', id: locationQid }, type: 'wikibase-entityid' },
+    },
+  };
+  if (existing[0]?.id) claim.id = existing[0].id;
+  await submitClaim(entityId, claim, csrf, summary);
+}

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import maplibregl, { Map, GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { FeatureProperties, Category } from '../types';
-import { CATEGORY_COLORS } from '../theme/categories';
+import { CATEGORY_COLORS, CATEGORY_ICON_NAMES } from '../theme/categories';
+import { encodeDate, eventDateRange, STEP_YEAR } from '../hooks/useTimeline';
 
-const FADE_WINDOW = 10;
+const FADE_INT = 3 * STEP_YEAR; // 30000 — 3 years of fade in dateInt space
 
 export interface StackInfo {
   index: number;
@@ -18,16 +19,34 @@ export interface ZoomRequest {
 
 interface Props {
   geojson: GeoJSON.FeatureCollection;
-  currentYear: number;
+  currentDateInt: number;
+  stepSize: number;
   activeCategories: Set<Category>;
+  activePolityCategories: Set<Category>;
   onSelectFeature: (props: FeatureProperties, stack: StackInfo) => void;
   zoomRequest?: ZoomRequest | null;
 }
 
 
-// Major = all events + regions + countries + explicitly major cities — always visible
-const MAJOR_FILTER = ['any',
+// Circles: regions, countries, and explicitly major cities (no events)
+const LOCATION_MAJOR_FILTER = ['any',
+  ['==', ['get', 'featureType'], 'region'],
+  ['==', ['get', 'featureType'], 'country'],
+  ['==', ['get', 'cityImportance'], 'major'],
+] as maplibregl.FilterSpecification;
+
+// Symbol icons: events only, zoom-gated by _minZoom
+const EVENT_FILTER = ['all',
   ['==', ['get', 'featureType'], 'event'],
+  ['<=', ['coalesce', ['get', '_minZoom'], 4], ['zoom']],
+] as maplibregl.FilterSpecification;
+
+// Labels: events + major location markers (combined filter for the text layer)
+const MAJOR_FILTER = ['any',
+  ['all',
+    ['==', ['get', 'featureType'], 'event'],
+    ['<=', ['coalesce', ['get', '_minZoom'], 4], ['zoom']],
+  ],
   ['==', ['get', 'featureType'], 'region'],
   ['==', ['get', 'featureType'], 'country'],
   ['==', ['get', 'cityImportance'], 'major'],
@@ -39,10 +58,26 @@ const MINOR_FILTER = ['all',
   ['!=', ['get', 'cityImportance'], 'major'],
 ] as maplibregl.FilterSpecification;
 
-export function MapView({ geojson, currentYear, activeCategories, onSelectFeature, zoomRequest }: Props) {
+// Polities — hollow rings, rendered on their own layers
+const POLITY_FILTER = ['==', ['get', 'featureType'], 'polity'] as maplibregl.FilterSpecification;
+
+function applyBorderVisibility(map: Map, visible: boolean) {
+  const visibility = visible ? 'visible' : 'none';
+  map.getStyle().layers.forEach((layer) => {
+    const sourceLayer = (layer as { 'source-layer'?: string })['source-layer'];
+    if (sourceLayer === 'boundary') {
+      map.setLayoutProperty(layer.id, 'visibility', visibility);
+    }
+  });
+}
+
+export function MapView({ geojson, currentDateInt, stepSize, activeCategories, activePolityCategories, onSelectFeature, zoomRequest }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
   const updateFilterRef = useRef<() => void>(() => {});
+  const [showBorders, setShowBorders] = useState(false);
+  const showBordersRef = useRef(showBorders);
+  showBordersRef.current = showBorders;
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -65,23 +100,25 @@ export function MapView({ geojson, currentYear, activeCategories, onSelectFeatur
       const circlePaint: maplibregl.CirclePaintSpecification = {
         'circle-color': ['coalesce', ['get', '_color'], '#9E9E9E'],
         'circle-radius': ['case',
-          ['==', ['get', 'featureType'], 'country'], 12,
-          ['==', ['get', 'featureType'], 'region'],  9,
-          ['==', ['get', 'featureType'], 'city'],    7,
-          5,
+          ['has', '_radius'],                                 ['get', '_radius'],
+          ['==', ['get', 'featureType'], 'country'],          15,
+          ['==', ['get', 'featureType'], 'region'],           11,
+          ['==', ['get', 'cityImportance'], 'major'],         9,
+          ['==', ['get', 'featureType'], 'city'],             6,
+          6,
         ],
         'circle-stroke-color': '#ffffff',
         'circle-stroke-width': ['case',
-          ['==', ['get', 'featureType'], 'country'], 3,
-          ['==', ['get', 'featureType'], 'region'],  2.5,
-          1.5,
+          ['==', ['get', 'featureType'], 'country'], 4,
+          ['==', ['get', 'featureType'], 'region'],  3,
+          2,
         ],
         'circle-opacity': ['number', ['get', '_opacity'], 1.0],
       };
 
       const labelLayout: maplibregl.SymbolLayoutSpecification = {
         'text-field': ['get', 'title'],
-        'text-size': 11,
+        'text-size': ['case', ['==', ['get', 'primaryCategory'], 'war'], 22, 14],
         'text-offset': [0, 1.2],
         'text-anchor': 'top',
         'text-max-width': 12,
@@ -92,11 +129,91 @@ export function MapView({ geojson, currentYear, activeCategories, onSelectFeatur
         'text-color': '#ffffff',
         'text-halo-color': 'rgba(0,0,0,0.75)',
         'text-halo-width': 1.5,
-        'text-opacity': ['number', ['get', '_opacity'], 1.0],
+        'text-opacity': ['number', ['get', '_labelOpacity'], 1.0],
       };
 
-      // Events + major cities: always visible
-      map.addLayer({ id: 'circles-major', type: 'circle', source: 'features', filter: MAJOR_FILTER, paint: circlePaint });
+      // Polities — hollow rings, rendered first so events always appear on top
+      map.addLayer({
+        id: 'circles-polity',
+        type: 'circle',
+        source: 'features',
+        filter: POLITY_FILTER,
+        paint: {
+          'circle-radius': 18,
+          'circle-color': 'rgba(0,0,0,0)',
+          'circle-stroke-width': 5,
+          'circle-stroke-color': ['coalesce', ['get', '_color'], '#9E9E9E'],
+          'circle-opacity': ['number', ['get', '_opacity'], 1.0],
+          'circle-stroke-opacity': ['number', ['get', '_opacity'], 1.0],
+        } as maplibregl.CirclePaintSpecification,
+      });
+      map.addLayer({
+        id: 'labels-polity',
+        type: 'symbol',
+        source: 'features',
+        filter: POLITY_FILTER,
+        layout: { ...labelLayout, 'text-offset': [0, 1.6], 'text-size': 13 },
+        paint: labelPaint,
+      });
+
+      // Capital star: shown at the centre of every polity except principalities
+      map.addLayer({
+        id: 'stars-polity',
+        type: 'symbol',
+        source: 'features',
+        filter: ['all',
+          ['==', ['get', 'featureType'], 'polity'],
+          ['!=', ['get', 'polityType'], 'principality'],
+        ] as maplibregl.FilterSpecification,
+        layout: {
+          'icon-image': 'star',
+          'icon-size': 0.9,
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        } as maplibregl.SymbolLayoutSpecification,
+        paint: {
+          'icon-color': ['coalesce', ['get', '_color'], '#9E9E9E'],
+          'icon-opacity': ['number', ['get', '_opacity'], 1.0],
+        } as maplibregl.SymbolPaintSpecification,
+      });
+
+      // Location circles: regions, countries, major cities
+      map.addLayer({ id: 'circles-major', type: 'circle', source: 'features', filter: LOCATION_MAJOR_FILTER, paint: circlePaint });
+
+      // Colored background circles for event icons
+      map.addLayer({
+        id: 'circles-events-bg',
+        type: 'circle',
+        source: 'features',
+        filter: EVENT_FILTER,
+        paint: {
+          'circle-color': ['coalesce', ['get', '_color'], '#9E9E9E'],
+          'circle-radius': ['interpolate', ['linear'], ['coalesce', ['get', '_radius'], 7], 5, 9, 7, 11, 9, 13, 12, 16],
+          'circle-stroke-color': 'rgba(255,255,255,0.6)',
+          'circle-stroke-width': 1,
+          'circle-opacity': ['number', ['get', '_opacity'], 1.0],
+        } as maplibregl.CirclePaintSpecification,
+      });
+
+      // Event icons: white Maki sprite icons over the colored background
+      map.addLayer({
+        id: 'events-major',
+        type: 'symbol',
+        source: 'features',
+        filter: EVENT_FILTER,
+        layout: {
+          'icon-image': ['coalesce', ['get', '_icon'], 'marker'],
+          'icon-size': ['interpolate', ['linear'], ['coalesce', ['get', '_radius'], 7], 5, 0.8, 7, 1.0, 9, 1.2, 12, 1.5],
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        } as maplibregl.SymbolLayoutSpecification,
+        paint: {
+          'icon-color': '#ffffff',
+          'icon-opacity': ['number', ['get', '_opacity'], 1.0],
+        } as maplibregl.SymbolPaintSpecification,
+      });
+
+      // Labels for events + major locations
       map.addLayer({ id: 'labels-major', type: 'symbol', source: 'features', filter: MAJOR_FILTER, layout: labelLayout, paint: labelPaint });
 
       // Minor cities: MapLibre natively hides this layer below zoom 7
@@ -110,18 +227,27 @@ export function MapView({ geojson, currentYear, activeCategories, onSelectFeatur
         }
       });
 
-      map.on('mouseenter', 'circles-major', () => { map.getCanvas().style.cursor = 'pointer'; });
-      map.on('mouseleave', 'circles-major', () => { map.getCanvas().style.cursor = ''; });
-      map.on('mouseenter', 'circles-minor', () => { map.getCanvas().style.cursor = 'pointer'; });
-      map.on('mouseleave', 'circles-minor', () => { map.getCanvas().style.cursor = ''; });
+      // Apply initial border visibility from ref (in case toggle was hit before load)
+      if (!showBordersRef.current) applyBorderVisibility(map, false);
 
-      // Populate features immediately on load using the latest filter state
+      for (const layer of ['circles-major', 'circles-minor', 'circles-events-bg', 'events-major', 'circles-polity', 'stars-polity']) {
+        map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
+      }
+
       updateFilterRef.current();
     });
 
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
   }, []);
+
+  // Toggle political boundary layers without reloading the style
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    applyBorderVisibility(map, showBorders);
+  }, [showBorders]);
 
   const onSelectRef = useRef(onSelectFeature);
   onSelectRef.current = onSelectFeature;
@@ -131,30 +257,43 @@ export function MapView({ geojson, currentYear, activeCategories, onSelectFeatur
     const map = mapRef.current;
     if (!map) return;
 
-    const onClick = (e: maplibregl.MapLayerMouseEvent) => {
-      const features = e.features;
+    // Single map-level handler queries all clickable layers at once.
+    // Layer-specific handlers would fire multiple times per click for stacked
+    // war events (circles-major + icons-war both hit), corrupting the stack index.
+    const CLICK_LAYERS = ['events-major', 'circles-events-bg', 'circles-major', 'circles-minor', 'stars-polity', 'circles-polity'];
+
+    const onClick = (e: maplibregl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: CLICK_LAYERS });
       if (!features || features.length === 0) return;
 
-      const ids = features.map((f) => String(f.properties?.id ?? ''));
+      // Deduplicate by id — queryRenderedFeatures can return the same feature
+      // from multiple layers (e.g. a war event appears in both circles-major and icons-war)
+      const seen = new Set<string>();
+      const unique = features.filter((f) => {
+        const id = String(f.properties?.id ?? '');
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+
+      const ids = unique.map((f) => String(f.properties?.id ?? ''));
       let index = 0;
       if (stackRef.current?.ids.length === ids.length && stackRef.current.ids.every((id, i) => id === ids[i])) {
         index = (stackRef.current.index + 1) % ids.length;
       }
       stackRef.current = { ids, index };
 
-      const raw = { ...features[index].properties } as Record<string, unknown>;
-      if (typeof raw.categories === 'string') {
-        try { raw.categories = JSON.parse(raw.categories as string); } catch { /* leave as-is */ }
+      const raw = { ...unique[index].properties } as Record<string, unknown>;
+      for (const key of ['categories', 'partOfResolved', 'wikidataClasses'] as const) {
+        if (typeof raw[key] === 'string') {
+          try { raw[key] = JSON.parse(raw[key] as string); } catch { /* leave as-is */ }
+        }
       }
       onSelectRef.current(raw as unknown as FeatureProperties, { index, total: ids.length });
     };
 
-    map.on('click', 'circles-major', onClick);
-    map.on('click', 'circles-minor', onClick);
-    return () => {
-      map.off('click', 'circles-major', onClick);
-      map.off('click', 'circles-minor', onClick);
-    };
+    map.on('click', onClick);
+    return () => { map.off('click', onClick); };
   }, []);
 
   const updateFilter = useCallback(() => {
@@ -164,13 +303,43 @@ export function MapView({ geojson, currentYear, activeCategories, onSelectFeatur
     const source = map.getSource('features') as GeoJSONSource | undefined;
     if (!source) return;
 
+    // End of the current time "bucket": events starting anywhere within the current
+    // year/month/day are all visible. e.g. in year mode (stepSize=10000), effectiveNow
+    // covers the whole year so a Jul 14 event is visible when we're at "Jan 1789".
+    const effectiveNow = currentDateInt + stepSize - 1;
+
     const visible = geojson.features.flatMap((f) => {
+      // Null-geometry features (unlocated events) are Data Explorer-only — skip map rendering
+      if (!f.geometry) return [];
+
       const p = f.properties as FeatureProperties;
+      const isPolity   = p.featureType === 'polity';
+      const isLocation = p.featureType === 'city' || p.featureType === 'region' || p.featureType === 'country';
+
+      // Polities use their own independent filter set
+      if (isPolity) {
+        // Only show polities with both start and end dates — avoids showing
+        // polities that linger indefinitely due to missing Wikidata dissolution dates
+        if (p.yearStart == null || p.yearEnd == null) return [];
+
+        const catOk = p.categories.some((c) => activePolityCategories.has(c));
+        if (!catOk) return [];
+
+        const _color = CATEGORY_COLORS[p.primaryCategory] ?? '#9E9E9E';
+
+        // Snap in/out at year_start / year_end — no fade (same as locations)
+        if (p.yearStart != null) {
+          const locStart = encodeDate(p.yearStart, 1, 1);
+          const locEnd   = p.yearEnd != null ? encodeDate(p.yearEnd, 12, 31) : null;
+          const yearOk   = locStart <= effectiveNow && (locEnd == null || currentDateInt <= locEnd);
+          if (!yearOk) return [];
+        }
+
+        return [{ ...f, properties: { ...f.properties, _opacity: 1.0, _labelOpacity: 1.0, _color } }];
+      }
 
       const catOk = p.categories.some((c) => activeCategories.has(c));
       if (!catOk) return [];
-
-      const isLocation = p.featureType === 'city' || p.featureType === 'region' || p.featureType === 'country';
 
       // Locations with no founding date: always visible
       if (p.yearStart == null) {
@@ -181,27 +350,52 @@ export function MapView({ geojson, currentYear, activeCategories, onSelectFeatur
 
       let yearOk: boolean;
       if (isLocation) {
-        yearOk = p.yearStart <= currentYear && (p.yearEnd == null || currentYear <= p.yearEnd);
-      } else if (p.yearEnd != null) {
-        yearOk = p.yearStart <= currentYear && currentYear <= p.yearEnd;
+        const locStart = encodeDate(p.yearStart, 1, 1);
+        const locEnd   = p.yearEnd != null ? encodeDate(p.yearEnd, 12, 31) : null;
+        yearOk = locStart <= effectiveNow && (locEnd == null || currentDateInt <= locEnd);
       } else {
-        yearOk = p.yearStart <= currentYear && currentYear <= p.yearStart + FADE_WINDOW;
+        const [startInt, endInt] = eventDateRange(
+          p.yearStart, p.monthStart, p.dayStart,
+          p.yearEnd,   p.monthEnd,   p.dayEnd,
+        );
+        yearOk = startInt <= effectiveNow && currentDateInt <= endInt + FADE_INT;
       }
 
       if (!yearOk) return [];
 
       const baseOpacity = (isLocation || !p.dateIsFuzzy) ? 1.0 : 0.6;
       let fadeOpacity = 1.0;
-      if (!isLocation && p.yearEnd == null && currentYear > p.yearStart) {
-        fadeOpacity = 1.0 - (currentYear - p.yearStart) / FADE_WINDOW;
+      if (!isLocation) {
+        const [, endInt] = eventDateRange(
+          p.yearStart, p.monthStart, p.dayStart,
+          p.yearEnd,   p.monthEnd,   p.dayEnd,
+        );
+        if (currentDateInt > endInt) {
+          fadeOpacity = 0.5;
+        }
       }
 
       const _color = CATEGORY_COLORS[p.primaryCategory] ?? '#9E9E9E';
-      return [{ ...f, properties: { ...f.properties, _opacity: baseOpacity * fadeOpacity, _color } }];
+      const extraProps: Record<string, unknown> = {
+        _opacity: baseOpacity * fadeOpacity,
+        _labelOpacity: baseOpacity,
+        _color,
+      };
+
+      if (!isLocation) {
+        // Sitelinks count drives both zoom threshold and pin size.
+        // Higher sitelinks = more globally significant = visible earlier + bigger pin.
+        const sl = p.sitelinksCount ?? null;
+        extraProps._minZoom = sl === null ? 2 : sl >= 25 ? 1 : sl >= 10 ? 2 : sl >= 3 ? 4 : 6;
+        extraProps._radius  = sl === null ? 7 : sl >= 25 ? 12 : sl >= 10 ? 9 : sl >= 3 ? 7 : 5;
+        extraProps._icon    = CATEGORY_ICON_NAMES[p.primaryCategory as Category] ?? 'marker';
+      }
+
+      return [{ ...f, properties: { ...f.properties, ...extraProps } }];
     });
 
     source.setData({ type: 'FeatureCollection', features: visible });
-  }, [geojson, currentYear, activeCategories]);
+  }, [geojson, currentDateInt, stepSize, activeCategories, activePolityCategories]);
 
   // Keep the ref current so the map.on('load') callback always invokes the latest version
   updateFilterRef.current = updateFilter;
@@ -220,7 +414,7 @@ export function MapView({ geojson, currentYear, activeCategories, onSelectFeatur
     );
 
     const doFly = () => {
-      if (target?.geometry.type === 'Point') {
+      if (target?.geometry?.type === 'Point') {
         const [lon, lat] = (target.geometry as GeoJSON.Point).coordinates;
         map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 6), duration: 800 });
       }
@@ -231,5 +425,44 @@ export function MapView({ geojson, currentYear, activeCategories, onSelectFeatur
     else map.once('load', doFly);
   }, [zoomRequest, geojson]);
 
-  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
+  return (
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+      {/* Border layer toggle */}
+      <div style={{
+        position: 'absolute',
+        bottom: 24,
+        left: 10,
+        display: 'flex',
+        background: '#ffffff',
+        borderRadius: 6,
+        border: '1px solid rgba(0,0,0,0.15)',
+        boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+        overflow: 'hidden',
+        zIndex: 10,
+      }}>
+        {([true, false] as const).map((val, i) => (
+          <button
+            key={String(val)}
+            onClick={() => setShowBorders(val)}
+            style={{
+              padding: '5px 11px',
+              fontSize: 11,
+              fontWeight: 600,
+              fontFamily: 'inherit',
+              border: 'none',
+              borderLeft: i > 0 ? '1px solid rgba(0,0,0,0.1)' : 'none',
+              cursor: 'pointer',
+              background: showBorders === val ? '#3366cc' : 'transparent',
+              color: showBorders === val ? '#ffffff' : '#54595d',
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            {val ? 'Modern Borders' : 'No Borders'}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }

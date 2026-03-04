@@ -29,52 +29,31 @@ import json
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
 import requests
 
-from pipeline.extract import classify_location, extract_event, make_slug, parse_wikidata_time
+from pipeline.extract import classify_location, extract_event, is_known_p31, make_slug, parse_wikidata_time
 from pipeline.load_postgres import load_all
 
 # ---------------------------------------------------------------------------
-# SPARQL category queries
-# Each entry: (category_label, root_class_QID, per-query_limit)
-# Five categories × (limit // 5) events each = `limit` total QIDs.
+# SPARQL category list — loaded from pipeline/categories.json
+# Edit that file to add/remove categories. Run scripts/discover-categories.py
+# to validate QIDs and discover new ones from Wikipedia's category taxonomy.
 # ---------------------------------------------------------------------------
 
-SPARQL_CATEGORIES = [
-    # Military
-    ("battles",        "Q178561"),   # battle
-    ("wars",           "Q198"),      # war
-    ("sieges",         "Q188686"),   # siege
-    ("naval battles",  "Q831663"),   # naval battle
-    # Politics
-    ("revolutions",    "Q10931"),    # revolution
-    ("elections",      "Q40231"),    # election
-    ("coups",          "Q45382"),    # coup d'état (Q45382 is more widely used than Q1781513)
-    ("treaties",       "Q131569"),   # treaty
-    ("political murder","Q1139665"), # political murder / assassination
-    # Disasters
-    ("disasters",      "Q124490"),   # natural disaster
-    ("epidemics",      "Q3241045"),  # epidemic / pandemic
-    ("earthquakes",    "Q7944"),     # earthquake
-    ("famines",        "Q168247"),   # famine
-    ("volcanic eruptions","Q7692360"),  # volcanic eruption (Q8928 is 'constellation')
-    ("floods",         "Q8092"),     # flood
-    ("wildfires",      "Q3839081"),  # wildfire
-    ("city fires",     "Q838718"),   # city fire (Great Fire of London etc.)
-    ("massacres",      "Q3199915"),  # massacre
-    # Exploration & Science
-    ("expeditions",    "Q170584"),   # expedition (more items than Q2685356)
-    ("conquests",      "Q1361229"),  # conquest
-    ("inventions",     "Q4026292"),  # invention
-    ("spaceflights",   "Q752783"),   # human spaceflight
-    ("sci experiments","Q11862829"), # scientific experiment
-    # Religion
-    ("councils",       "Q82821"),    # ecclesiastical council
-    ("papal elections","Q29102902"), # papal election
-]
+def _load_categories() -> list[tuple[str, str]]:
+    cats_file = Path(__file__).parent / "categories.json"
+    data = json.loads(cats_file.read_text())
+    return [
+        (c["label"], c["class_qid"])
+        for c in data["categories"]
+        if c.get("active") and c.get("class_qid")
+    ]
+
+SPARQL_CATEGORIES = _load_categories()
 
 WDQS_ENDPOINT = "https://query.wikidata.org/sparql"
 WIKIDATA_API  = "https://www.wikidata.org/w/api.php"
@@ -254,7 +233,7 @@ def resolve_qid_labels_and_coords(qids: list[str]) -> dict[str, dict]:
                 if snak.get("snaktype") == "value":
                     val = snak["datavalue"]["value"]
                     if isinstance(val, dict) and "time" in val:
-                        founded_year, founded_is_fuzzy = parse_wikidata_time(
+                        founded_year, _, _, founded_is_fuzzy = parse_wikidata_time(
                             val["time"], val.get("precision", 9)
                         )
                         break
@@ -266,7 +245,7 @@ def resolve_qid_labels_and_coords(qids: list[str]) -> dict[str, dict]:
                 if snak.get("snaktype") == "value":
                     val = snak["datavalue"]["value"]
                     if isinstance(val, dict) and "time" in val:
-                        dissolved_year, _ = parse_wikidata_time(
+                        dissolved_year, _, _, _ = parse_wikidata_time(
                             val["time"], val.get("precision", 9)
                         )
                         break
@@ -344,10 +323,157 @@ def fetch_summaries_parallel(events: list[dict], max_workers: int = 8) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Transitive P31 classification via SPARQL (for novel location types)
+# ---------------------------------------------------------------------------
+
+def classify_p31s_transitive(p31_qids: list[str], max_depth: int = 4) -> dict[str, Optional[str]]:
+    """
+    Classifies P31 QIDs not in extract.py's hardcoded sets by walking the
+    P279 (subclass-of) hierarchy via the Wikidata API (not WDQS), up to
+    max_depth levels.  Much cheaper than a VALUES+P279* SPARQL query.
+
+    Returns {qid: 'city' | 'region' | 'country' | None (exclude)}.
+    Priority at each level: country > city > region > exclude.
+    """
+    if not p31_qids:
+        return {}
+
+    from pipeline.extract import (
+        _CITY_P31, _REGION_P31, _COUNTRY_P31, _EXCLUDE_P31,
+    )
+
+    def _classify_direct(qid: str) -> Optional[str]:
+        """Check a single QID against all hardcoded sets."""
+        if qid in _COUNTRY_P31:
+            return "country"
+        if qid in _CITY_P31:
+            return "city"
+        if qid in _REGION_P31:
+            return "region"
+        if qid in _EXCLUDE_P31:
+            return None  # sentinel: use "EXCLUDE" string internally
+        return "UNKNOWN"
+
+    def _fetch_p279_batch(qids: list[str]) -> dict[str, list[str]]:
+        """Fetch P279 (subclass-of) parent QIDs for a batch via Wikidata API."""
+        params = {
+            "action": "wbgetentities",
+            "ids": "|".join(qids),
+            "props": "claims",
+            "format": "json",
+        }
+        try:
+            resp = SESSION.get(WIKIDATA_API, params=params, timeout=20)
+            resp.raise_for_status()
+            entities = resp.json().get("entities", {})
+            result: dict[str, list[str]] = {}
+            for qid, entity in entities.items():
+                if entity.get("missing"):
+                    result[qid] = []
+                    continue
+                parents = []
+                for stmt in entity.get("claims", {}).get("P279", []):
+                    snak = stmt.get("mainsnak", {})
+                    if snak.get("snaktype") == "value":
+                        val = snak["datavalue"]["value"]
+                        if isinstance(val, dict) and val.get("id"):
+                            parents.append(val["id"])
+                result[qid] = parents
+            return result
+        except Exception:
+            return {q: [] for q in qids}
+
+    # BFS: resolve unknown QIDs by walking P279 up to max_depth levels
+    # frontier maps {p31_qid: resolved_type_or_UNKNOWN}
+    PRIORITY = {"country": 3, "city": 2, "region": 1, None: -1}
+    results: dict[str, Optional[str]] = {}
+    p279_cache: dict[str, list[str]] = {}  # qid → parent QIDs
+
+    # Seed: classify inputs directly first
+    still_unknown = []
+    for q in p31_qids:
+        t = _classify_direct(q)
+        if t == "UNKNOWN":
+            still_unknown.append(q)
+        elif t is None:
+            results[q] = None   # exclude
+        else:
+            results[q] = t
+
+    for depth in range(max_depth):
+        if not still_unknown:
+            break
+
+        # Fetch P279 for all QIDs currently unresolved
+        need_fetch = [q for q in still_unknown if q not in p279_cache]
+        if need_fetch:
+            batch_size = 50
+            for i in range(0, len(need_fetch), batch_size):
+                p279_cache.update(_fetch_p279_batch(need_fetch[i : i + batch_size]))
+                if i + batch_size < len(need_fetch):
+                    time.sleep(0.5)
+
+        next_unknown = []
+        for q in still_unknown:
+            parents = p279_cache.get(q, [])
+            best: Optional[str] = "UNKNOWN"
+            for p in parents:
+                t = _classify_direct(p)
+                if t == "UNKNOWN":
+                    continue
+                if best == "UNKNOWN" or (t is not None and PRIORITY.get(t, -1) > PRIORITY.get(best, -1)):
+                    best = t
+            if best != "UNKNOWN":
+                results[q] = None if best is None else best
+            else:
+                # Promote parents to next frontier
+                for p in parents:
+                    if p not in p279_cache and p not in results:
+                        next_unknown.append(p)
+                        p279_cache.setdefault(p, [])  # mark as queued
+                # Map the original q → resolved once its parents resolve
+                next_unknown.append(q)
+
+        still_unknown = list(dict.fromkeys(next_unknown))  # deduplicate preserving order
+
+    return results
+
+
+def build_p31_dynamic_map(qid_data: dict[str, dict]) -> dict[str, Optional[str]]:
+    """
+    Collects all unique P31 QIDs across all resolved location QID data,
+    identifies those NOT covered by extract.py's hardcoded sets, and
+    classifies them via transitive SPARQL P279* lookup.
+
+    Returns {p31_qid: 'city'|'region'|'country'|None} for unknown types only.
+    Pass the result as extra_map= to classify_location().
+    """
+    all_p31: set[str] = set()
+    for qdata in qid_data.values():
+        all_p31.update(qdata.get("p31_qids", []))
+
+    unknown_p31 = [q for q in all_p31 if not is_known_p31(q)]
+    if not unknown_p31:
+        return {}
+
+    print(f"  Resolving {len(unknown_p31)} novel P31 type(s) via transitive SPARQL...")
+    result = classify_p31s_transitive(unknown_p31)
+    classified = sum(1 for v in result.values() if v is not None)
+    excluded = sum(1 for v in result.values() if v is None)
+    print(f"  Transitive result: {classified} classified, {excluded} excluded, "
+          f"{len(unknown_p31) - len(result)} unresolved (will default to city).")
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Location name resolution + location_level refinement
 # ---------------------------------------------------------------------------
 
-def resolve_location_names(events: list[dict], qid_data: dict[str, dict]) -> None:
+def resolve_location_names(
+    events: list[dict],
+    qid_data: dict[str, dict],
+    p31_dynamic_map: Optional[dict[str, Optional[str]]] = None,
+) -> None:
     """
     Fills in location_name and refines location_level for each event (in-place)
     using resolved QID data.
@@ -359,6 +485,9 @@ def resolve_location_names(events: list[dict], qid_data: dict[str, dict]) -> Non
 
     Also updates location_level from 'city' (the extract.py placeholder) to the
     actual type returned by classify_location() for P276 entities.
+
+    p31_dynamic_map: optional {qid: type} from transitive SPARQL lookup for
+                     novel P31 types not in extract.py's hardcoded sets.
     """
     for ev in events:
         loc_qid     = ev.get("location_qid")
@@ -367,7 +496,7 @@ def resolve_location_names(events: list[dict], qid_data: dict[str, dict]) -> Non
         # Refine location_level for P276-linked events
         if ev.get("location_level") == "city" and loc_qid and loc_qid in qid_data:
             p31_qids = qid_data[loc_qid].get("p31_qids", [])
-            loc_type = classify_location(p31_qids)
+            loc_type = classify_location(p31_qids, extra_map=p31_dynamic_map)
             if loc_type is None:
                 # Excluded geographic feature — clear the location QID
                 ev["location_qid"] = None
@@ -398,7 +527,11 @@ def resolve_location_names(events: list[dict], qid_data: dict[str, dict]) -> Non
 # Build location records (cities, regions, countries) from resolved QIDs
 # ---------------------------------------------------------------------------
 
-def build_location_records(events: list[dict], qid_data: dict[str, dict]) -> list[dict]:
+def build_location_records(
+    events: list[dict],
+    qid_data: dict[str, dict],
+    p31_dynamic_map: Optional[dict[str, Optional[str]]] = None,
+) -> list[dict]:
     """
     Builds location records from unique P276 and P17 QIDs that have coordinates.
 
@@ -409,6 +542,9 @@ def build_location_records(events: list[dict], qid_data: dict[str, dict]) -> lis
 
     Excluded types (rivers, mountains, etc.) are not added to the locations table.
     QIDs without coordinates are skipped (can't be displayed on map).
+
+    p31_dynamic_map: optional {qid: type} from transitive SPARQL lookup for
+                     novel P31 types not in extract.py's hardcoded sets.
     """
     seen_qids: set[str] = set()
     location_records: list[dict] = []
@@ -427,7 +563,7 @@ def build_location_records(events: list[dict], qid_data: dict[str, dict]) -> lis
             continue
 
         p31_qids = qdata.get("p31_qids", [])
-        loc_type = classify_location(p31_qids)
+        loc_type = classify_location(p31_qids, extra_map=p31_dynamic_map)
         if loc_type is None:
             continue  # excluded geographic feature
 
@@ -521,8 +657,8 @@ def print_coverage(events: list[dict], loaded: int, skipped: int) -> None:
 def main():
     parser = argparse.ArgumentParser(description="OurStory local pipeline (Run 1 / Run 2)")
     parser.add_argument(
-        "--limit", type=int, default=500,
-        help="Total events to fetch (default 500 for Run 1, use 5000 for Run 2)"
+        "--limit", type=int, default=2000,
+        help="Max events to fetch per SPARQL category (default 2000). Small categories return fewer naturally."
     )
     parser.add_argument(
         "--skip-load", action="store_true",
@@ -544,21 +680,23 @@ def main():
         "--min-year", type=int, default=None,
         help="Exclude events dated before this year (default: no lower bound)"
     )
+    parser.add_argument(
+        "--post-process", action="store_true",
+        help="After loading, run cleanup + backfills + GeoJSON export automatically"
+    )
     args = parser.parse_args()
-
-    per_category = max(1, args.limit // len(SPARQL_CATEGORIES))
 
     # ------------------------------------------------------------------
     # Step 1: SPARQL → QIDs
     # ------------------------------------------------------------------
-    print(f"\n[Step 1] Fetching QIDs via SPARQL ({len(SPARQL_CATEGORIES)} categories × {per_category})...")
+    print(f"\n[Step 1] Fetching QIDs via SPARQL ({len(SPARQL_CATEGORIES)} categories, up to {args.limit} each)...")
     all_qids: list[str] = []
     seen: set[str] = set()
 
     for label, class_qid in SPARQL_CATEGORIES:
         print(f"  Querying {label} (wd:{class_qid})... ", end="", flush=True)
         try:
-            qids = fetch_sparql_qids(class_qid, per_category, max_year=args.max_year, min_year=args.min_year)
+            qids = fetch_sparql_qids(class_qid, args.limit, max_year=args.max_year, min_year=args.min_year)
             # Deduplicate across categories
             new_qids = [q for q in qids if q not in seen]
             seen.update(new_qids)
@@ -604,9 +742,17 @@ def main():
     print(f"  Resolved {len(qid_data)} QIDs.")
 
     # ------------------------------------------------------------------
+    # Step 4b: Build dynamic P31 map for novel location types
+    # Any P31 QID not in extract.py's hardcoded sets gets classified via
+    # transitive SPARQL P279* lookup against root classes (city/region/country).
+    # ------------------------------------------------------------------
+    print("\n[Step 4b] Building transitive P31 classification map...")
+    p31_dynamic_map = build_p31_dynamic_map(qid_data)
+
+    # ------------------------------------------------------------------
     # Step 5: Fill location_name from resolved QIDs
     # ------------------------------------------------------------------
-    resolve_location_names(events, qid_data)
+    resolve_location_names(events, qid_data, p31_dynamic_map=p31_dynamic_map)
 
     # ------------------------------------------------------------------
     # Step 6: Wikipedia summaries (parallel)
@@ -617,7 +763,7 @@ def main():
     # ------------------------------------------------------------------
     # Step 7: Build location records from resolved P276 + P17 QIDs
     # ------------------------------------------------------------------
-    city_records = build_location_records(events, qid_data)
+    city_records = build_location_records(events, qid_data, p31_dynamic_map=p31_dynamic_map)
     cities_count   = sum(1 for r in city_records if r.get("location_type") == "city")
     regions_count  = sum(1 for r in city_records if r.get("location_type") == "region")
     countries_count= sum(1 for r in city_records if r.get("location_type") == "country")
@@ -645,9 +791,16 @@ def main():
     print_coverage(events, loaded, skipped_count)
 
     if not args.skip_load and loaded > 0:
-        print("\nNext step: export updated GeoJSON")
-        print("  cd scripts && npm run export")
-        print("  (then reload the frontend to see new events on the map)")
+        if args.post_process:
+            import subprocess
+            print("\n[Post-process] Running cleanup, backfills, and GeoJSON export...")
+            result = subprocess.run([sys.executable, "-m", "pipeline.post_process"])
+            if result.returncode != 0:
+                print("\nPost-processing failed. Check errors above.", file=sys.stderr)
+        else:
+            print("\nNext step: run post-processing and export")
+            print("  python3 -m pipeline.post_process")
+            print("  (or re-run with --post-process to do this automatically)")
 
     # ------------------------------------------------------------------
     # Optional: LLM quality check on newly loaded records

@@ -1,0 +1,380 @@
+{
+  "description": "Wikidata P31 class QIDs to pull from SPARQL. Each active entry fetches up to --limit events per pipeline run. Wikipedia category links show the editorial taxonomy that maps to each class. QIDs are validated via scripts/discover-categories.py — run it to check counts and find new candidates.",
+  "last_updated": "2026-03-04",
+  "categories": [
+    {
+      "label": "conflicts",
+      "class_qid": "Q180684",
+      "wiki_category": "Category:Military conflicts",
+      "wikidata_label": "conflict",
+      "notes": "Covers battles, wars, sieges, naval battles, civil wars, invasions, rebellions, conquests, military operations",
+      "last_count": 21867,
+      "active": true
+    },
+    {
+      "label": "coups",
+      "class_qid": "Q45382",
+      "wiki_category": "Category:Coups d'état",
+      "wikidata_label": "coup d'état",
+      "notes": "Not always a P279* subclass of Q180684 in Wikidata, so needs its own entry",
+      "last_count": 617,
+      "active": true
+    },
+    {
+      "label": "elections",
+      "class_qid": "Q40231",
+      "wiki_category": "Category:Elections",
+      "wikidata_label": "public election",
+      "notes": null,
+      "last_count": 33274,
+      "active": true
+    },
+    {
+      "label": "revolutions",
+      "class_qid": "Q10931",
+      "wiki_category": "Category:Revolutions",
+      "wikidata_label": "revolution",
+      "notes": null,
+      "last_count": 128,
+      "active": true
+    },
+    {
+      "label": "treaties",
+      "class_qid": "Q131569",
+      "wiki_category": "Category:Treaties",
+      "wikidata_label": "international treaty",
+      "notes": null,
+      "last_count": 1775,
+      "active": true
+    },
+    {
+      "label": "assassinations",
+      "class_qid": "Q3882219",
+      "wiki_category": "Category:Assassinations",
+      "wikidata_label": "assassination",
+      "notes": "P301 from Category:Assassinations. Broader than Q1139665 (political murder).",
+      "last_count": 682,
+      "active": true
+    },
+    {
+      "label": "coronations",
+      "class_qid": "Q175331",
+      "wiki_category": "Category:Coronations",
+      "wikidata_label": "coronation",
+      "notes": null,
+      "last_count": 192,
+      "active": true
+    },
+    {
+      "label": "social movements",
+      "class_qid": "Q49775",
+      "wiki_category": "Category:Social movements",
+      "wikidata_label": "social movement",
+      "notes": "Covers civil rights, suffrage, labor movements, protest campaigns",
+      "last_count": 74,
+      "active": true
+    },
+    {
+      "label": "disasters",
+      "class_qid": "Q3839081",
+      "wiki_category": "Category:Disasters",
+      "wikidata_label": "disaster",
+      "notes": "P301 from Category:Disasters. Broader than Q8065 (natural disaster) — covers industrial, man-made, and natural events.",
+      "last_count": 7255,
+      "active": true
+    },
+    {
+      "label": "epidemics",
+      "class_qid": "Q44512",
+      "wiki_category": "Category:Epidemics",
+      "wikidata_label": "epidemic",
+      "notes": "P301 from Category:Epidemics. Not always under Q3839081 (disaster) so needs its own entry.",
+      "last_count": 117,
+      "active": true
+    },
+    {
+      "label": "famines",
+      "class_qid": "Q168247",
+      "wiki_category": "Category:Famines",
+      "wikidata_label": "famine",
+      "notes": "P301 from Category:Famines.",
+      "last_count": 57,
+      "active": true
+    },
+    {
+      "label": "massacres",
+      "class_qid": "Q3199915",
+      "wiki_category": "Category:Massacres",
+      "wikidata_label": "massacre",
+      "notes": null,
+      "last_count": 1068,
+      "active": true
+    },
+    {
+      "label": "economic crises",
+      "class_qid": "Q290178",
+      "wiki_category": "Category:Economic crises",
+      "wikidata_label": "economic crisis",
+      "notes": "P301 from Category:Economic crises. Covers financial crises, bank panics, recessions, depressions.",
+      "last_count": 76,
+      "active": true
+    },
+    {
+      "label": "expeditions",
+      "class_qid": "Q2401485",
+      "wiki_category": "Category:Expeditions",
+      "wikidata_label": "expedition",
+      "notes": "P301 from Category:Expeditions.",
+      "last_count": 566,
+      "active": true
+    },
+    {
+      "label": "scientific experiments",
+      "class_qid": "Q11862829",
+      "wiki_category": "Category:Scientific experiments",
+      "wikidata_label": "scientific experiment",
+      "notes": null,
+      "last_count": 575,
+      "active": true
+    },
+    {
+      "label": "spaceflights",
+      "class_qid": "Q752783",
+      "wiki_category": "Category:Spaceflights",
+      "wikidata_label": "spaceflight",
+      "notes": null,
+      "last_count": 49,
+      "active": true
+    },
+    {
+      "label": "ecclesiastical councils",
+      "class_qid": "Q82821",
+      "wiki_category": "Category:Christian councils and synods",
+      "wikidata_label": "Christian council",
+      "notes": "Covers councils, synods, church assemblies",
+      "last_count": 182,
+      "active": true
+    },
+    {
+      "label": "conclaves",
+      "class_qid": "Q29102902",
+      "wiki_category": "Category:Papal conclaves",
+      "wikidata_label": "papal conclave",
+      "notes": null,
+      "last_count": 111,
+      "active": true
+    },
+    {
+      "label": "declarations of independence",
+      "class_qid": "Q208251",
+      "wiki_category": "Category:Declarations of independence",
+      "wikidata_label": "declaration of independence",
+      "notes": "Captures national independence declarations — Haiti (1804), USA (1776), etc. Not reliably captured under revolutions or conflicts.",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "founding events",
+      "class_qid": "Q17633526",
+      "wiki_category": "Category:Foundational events",
+      "wikidata_label": "Wikimedia disambiguation page",
+      "notes": "Founding of states, cities, institutions",
+      "last_count": 20,
+      "active": true
+    },
+
+    {
+      "label": "scientific discoveries",
+      "class_qid": "Q2678658",
+      "wiki_category": "Category:Scientific discoveries",
+      "wikidata_label": "scientific discovery",
+      "notes": "Individual discovery events: chemical elements (oxygen, hydrogen, sodium), medical breakthroughs (Jenner's vaccine), physical laws. Many important pre-1850 science events use this P31 type.",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "astronomical discoveries",
+      "class_qid": "Q1318295",
+      "wiki_category": "Category:Astronomical discoveries",
+      "wikidata_label": "astronomical discovery",
+      "notes": "Discovery events for comets, asteroids, planets, moons. Wikidata items often use this specific class without the broader Q2678658 parent, so listed separately for full coverage.",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "archaeological discoveries",
+      "class_qid": "Q42471",
+      "wiki_category": "Category:Archaeological discoveries",
+      "wikidata_label": "archaeological discovery",
+      "notes": "Excavations and artifact finds: Rosetta Stone (1799), Pompeii excavations (ongoing 18th c.), Herculaneum. Distinct from scientific experiments.",
+      "last_count": null,
+      "active": true
+    },
+
+    {
+      "label": "protests",
+      "class_qid": "Q175482",
+      "wiki_category": "Category:Protests",
+      "wikidata_label": "protest",
+      "notes": "Demonstrations, marches, rallies. Women's March on Versailles (1789), Boston Tea Party, etc. Not always tagged under Q180684 (conflict) in Wikidata.",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "strikes",
+      "class_qid": "Q133311",
+      "wiki_category": "Category:Strikes",
+      "wikidata_label": "strike action",
+      "notes": "Labor strikes, general strikes. Key for labor history from the Industrial Revolution onward.",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "referendums",
+      "class_qid": "Q900792",
+      "wiki_category": "Category:Referendums",
+      "wikidata_label": "referendum",
+      "notes": "Independence referendums, constitutional referendums, plebiscites. French Revolutionary-era plebiscites, 19th-century independence votes.",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "international conferences",
+      "class_qid": "Q625994",
+      "wiki_category": "Category:International conferences",
+      "wikidata_label": "international conference",
+      "notes": "Diplomatic congresses and summits: Congress of Vienna (1814–15), Peace of Westphalia (1648), Congress of Rastatt (1798), Berlin Conference (1884).",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "inaugurations",
+      "class_qid": "Q1765828",
+      "wiki_category": "Category:Inaugurations",
+      "wikidata_label": "inauguration",
+      "notes": "Presidential inaugurations, opening ceremonies for major institutions. US presidential inaugurations (Washington 1789, Adams, Jefferson, etc.) are well-tagged.",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "annexations",
+      "class_qid": "Q5004978",
+      "wiki_category": "Category:Annexations",
+      "wikidata_label": "annexation",
+      "notes": "Territorial annexations: Louisiana Purchase-era acquisitions, Napoleonic annexations of Italian states, etc.",
+      "last_count": null,
+      "active": true
+    },
+
+    {
+      "label": "canonizations",
+      "class_qid": "Q45469",
+      "wiki_category": "Category:Canonizations",
+      "wikidata_label": "canonization",
+      "notes": "Catholic Church canonizations. Well-catalogued in Wikidata with dates and locations.",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "beatifications",
+      "class_qid": "Q191760",
+      "wiki_category": "Category:Beatifications",
+      "wikidata_label": "beatification",
+      "notes": "Catholic Church beatifications (penultimate step before canonization). Distinct class from canonization in Wikidata.",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "schisms",
+      "class_qid": "Q30523",
+      "wiki_category": "Category:Schisms",
+      "wikidata_label": "schism",
+      "notes": "Religious splits: Great Schism (1054), Protestant Reformation schisms, Old Catholic splits, Eastern Orthodox schisms.",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "religious persecutions",
+      "class_qid": "Q625017",
+      "wiki_category": "Category:Religious persecution",
+      "wikidata_label": "religious persecution",
+      "notes": "Inquisitions, pogroms, mass expulsions based on religion. Already partially covered by Q3464753 in extract.py but this fetches from SPARQL.",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "pilgrimages",
+      "class_qid": "Q213363",
+      "wiki_category": "Category:Pilgrimages",
+      "wikidata_label": "pilgrimage",
+      "notes": "Major historical pilgrimages: Hajj milestones, Canterbury, Santiago de Compostela routes. Bridges religion and culture.",
+      "last_count": null,
+      "active": true
+    },
+
+    {
+      "label": "art exhibitions",
+      "class_qid": "Q464980",
+      "wiki_category": "Category:Art exhibitions",
+      "wikidata_label": "art exhibition",
+      "notes": "Gallery and museum exhibitions: Royal Academy of Arts annual shows, Paris Salon, Impressionist exhibitions. Well-tagged in Wikidata.",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "world's fairs",
+      "class_qid": "Q188686",
+      "wiki_category": "Category:World's fairs",
+      "wikidata_label": "world's fair",
+      "notes": "International expositions: Crystal Palace (1851), Paris Exposition Universelle, Chicago World's Fair. First major fair is 1851 so no results before that.",
+      "last_count": null,
+      "active": true
+    },
+    {
+      "label": "olympic games",
+      "class_qid": "Q5389",
+      "wiki_category": "Category:Olympic Games",
+      "wikidata_label": "Olympic Games",
+      "notes": "Ancient Olympics (776 BCE–393 CE) and modern Olympics (1896+). Each edition is a separate Wikidata item with P31=Q5389.",
+      "last_count": null,
+      "active": true
+    },
+
+    {
+      "label": "discoveries",
+      "class_qid": "Q12772819",
+      "wiki_category": "Category:Discoveries",
+      "wikidata_label": "discovery",
+      "notes": "SKIP: Only 12 dated Wikipedia results via P31/P279*. Wikipedia's 'Category:Discoveries' contains meta-articles (lists, timelines), not individual discovery events. Geographic discoveries come through via expeditions (Q2401485); scientific ones via scientific experiments (Q11862829). Run --discover on subcategories like Category:Archaeological discoveries to find better QIDs.",
+      "last_count": 12,
+      "active": false
+    },
+    {
+      "label": "inventions",
+      "class_qid": "Q4026292",
+      "wiki_category": "Category:Inventions",
+      "wikidata_label": "invention",
+      "notes": "SKIP: Q4026292 causes SPARQL timeout (class hierarchy too deep). Individual inventions in Wikidata use highly varied P31 types. Run --discover on Category:Inventions subcategories to find tractable sub-classes.",
+      "last_count": null,
+      "active": false
+    },
+    {
+      "label": "trials",
+      "class_qid": null,
+      "wiki_category": "Category:Trials",
+      "wikidata_label": null,
+      "notes": "SKIP: Wikidata P31 data for historical trials is inconsistent — Nuremberg has no P31, Galileo='dyad', Socrates='commune of France'. No reliable class QID. Famous trials come through via Q180684 (conflicts) or manual entry.",
+      "last_count": 0,
+      "active": false
+    },
+    {
+      "label": "crusades",
+      "class_qid": null,
+      "wiki_category": "Category:Crusades",
+      "wikidata_label": null,
+      "notes": "SKIP: Q8441 (former QID for 'crusade') was reassigned to 'man' in Wikidata. Q12546 (Crusades series) returns only 1 Wikipedia result. Individual crusades are captured via Q180684 (conflicts).",
+      "last_count": 1,
+      "active": false
+    }
+  ]
+}
