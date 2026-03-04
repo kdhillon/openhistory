@@ -5,7 +5,9 @@
  * In production, /api should point to the same origin or a configured backend.
  */
 
-const API_BASE = '/api';
+// In dev, Vite proxies /api → localhost:8000.
+// In production, set VITE_API_URL to the Railway backend URL (no trailing slash).
+const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
 export interface FeaturePatch {
   // Date fields — send null to clear
