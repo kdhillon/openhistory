@@ -4,7 +4,6 @@ node_modules/
 dist/
 .DS_Store
 
-# Generated data file — produced by export script
-frontend/src/data/seed.geojson
+# seed.geojson is committed so Railway can build without a pipeline run
 __pycache__/
 db/snapshots/
