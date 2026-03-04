@@ -2,7 +2,8 @@ import { useMemo, useCallback } from 'react';
 import type { FeatureProperties } from '../types';
 import { eventDateRange, STEP_YEAR } from '../hooks/useTimeline';
 
-const FADE_INT = 3 * STEP_YEAR;
+const LINGER_STEPS = 5;
+const LINGER_MAX = 3 * STEP_YEAR;
 
 interface MajorEvent {
   qid: string;
@@ -16,9 +17,11 @@ interface Props {
   currentDateInt: number;
   stepSize: number;
   onNavigateToFeature: (feature: FeatureProperties) => void;
+  selectedQid: string | null;
+  onSelectQid: (qid: string | null) => void;
 }
 
-export function MajorEventsPanel({ geojson, currentDateInt, stepSize, onNavigateToFeature }: Props) {
+export function MajorEventsPanel({ geojson, currentDateInt, stepSize, onNavigateToFeature, selectedQid, onSelectQid }: Props) {
   const majorEvents = useMemo<MajorEvent[]>(() => {
     const counts = new Map<string, MajorEvent>();
     const effectiveNow = currentDateInt + stepSize - 1;
@@ -31,7 +34,7 @@ export function MajorEventsPanel({ geojson, currentDateInt, stepSize, onNavigate
         p.yearStart, p.monthStart, p.dayStart,
         p.yearEnd,   p.monthEnd,   p.dayEnd,
       );
-      if (!(startInt <= effectiveNow && currentDateInt <= endInt + FADE_INT)) continue;
+      if (!(startInt <= effectiveNow && currentDateInt <= endInt + Math.min(LINGER_STEPS * stepSize, LINGER_MAX))) continue;
 
       for (const parent of (p.partOfResolved ?? [])) {
         if (!parent.qid || !parent.title) continue;
@@ -53,12 +56,13 @@ export function MajorEventsPanel({ geojson, currentDateInt, stepSize, onNavigate
   }, [geojson, currentDateInt, stepSize]);
 
   const handleClick = useCallback((ev: MajorEvent) => {
-    if (!ev.slug) return;
-    const match = geojson.features.find(
-      (f) => f.properties?.slug === ev.slug && f.properties?.featureType === 'event',
-    );
-    if (match) onNavigateToFeature(match.properties as FeatureProperties);
-  }, [geojson, onNavigateToFeature]);
+    // Toggle: clicking the active filter deselects it
+    if (ev.qid === selectedQid) {
+      onSelectQid(null);
+      return;
+    }
+    onSelectQid(ev.qid);
+  }, [selectedQid, onSelectQid]);
 
   if (majorEvents.length === 0) return null;
 
@@ -107,50 +111,54 @@ export function MajorEventsPanel({ geojson, currentDateInt, stepSize, onNavigate
         }}
       >
         {majorEvents.map((ev) => (
-          <Chip key={ev.qid} ev={ev} onClick={handleClick} />
+          <Chip key={ev.qid} ev={ev} selected={ev.qid === selectedQid} onClick={handleClick} />
         ))}
       </div>
     </div>
   );
 }
 
-function Chip({ ev, onClick }: { ev: MajorEvent; onClick: (ev: MajorEvent) => void }) {
-  const clickable = !!ev.slug;
+function Chip({ ev, selected, onClick }: { ev: MajorEvent; selected: boolean; onClick: (ev: MajorEvent) => void }) {
+  const bg       = selected ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.06)';
+  const border   = selected ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.11)';
+  const color    = selected ? '#0c1117'                : 'rgba(255,255,255,0.85)';
+  const cntColor = selected ? 'rgba(0,0,0,0.4)'       : 'rgba(255,255,255,0.38)';
   return (
     <button
       onClick={() => onClick(ev)}
-      disabled={!clickable}
       style={{
         flexShrink: 0,
         display: 'inline-flex',
         alignItems: 'center',
         gap: 7,
-        background: 'rgba(255,255,255,0.06)',
-        border: '1px solid rgba(255,255,255,0.11)',
+        background: bg,
+        border: `1px solid ${border}`,
         borderRadius: 999,
-        color: 'rgba(255,255,255,0.85)',
+        color,
         fontSize: 12.5,
         lineHeight: 1,
         padding: '4px 11px 4px 11px',
-        cursor: clickable ? 'pointer' : 'default',
+        cursor: 'pointer',
         whiteSpace: 'nowrap',
-        transition: 'background 0.12s, border-color 0.12s',
+        fontWeight: selected ? 600 : 400,
+        transition: 'background 0.12s, border-color 0.12s, color 0.12s',
       }}
       onMouseEnter={(e) => {
-        if (!clickable) return;
+        if (selected) return;
         e.currentTarget.style.background = 'rgba(255,255,255,0.13)';
         e.currentTarget.style.borderColor = 'rgba(255,255,255,0.22)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.11)';
+        if (selected) return;
+        e.currentTarget.style.background = bg;
+        e.currentTarget.style.borderColor = border;
       }}
     >
       {ev.title}
       <span style={{
         fontSize: 11,
         fontWeight: 600,
-        color: 'rgba(255,255,255,0.38)',
+        color: cntColor,
         minWidth: 14,
         textAlign: 'right',
       }}>

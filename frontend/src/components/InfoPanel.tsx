@@ -28,6 +28,8 @@ interface Props {
   wikiAuth: string | null;
   onAuth: (username: string | null) => void;
   onFeatureUpdated: (updates: Partial<FeatureProperties>) => void;
+  hiddenNations?: Map<string, number>;
+  onToggleHiddenNation?: (polityId: string) => void;
 }
 
 const WIKI_API = 'https://en.wikipedia.org/w/api.php';
@@ -58,7 +60,7 @@ function PencilIcon() {
   );
 }
 
-export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated }: Props) {
+export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated, hiddenNations, onToggleHiddenNation }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [expandedWidth, setExpandedWidth] = useState(468);
   const [editField, setEditField] = useState<'date' | 'location' | 'capital' | 'sovereign' | null>(null);
@@ -293,7 +295,7 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
-          {feature.categories.map((cat) => {
+          {(feature.categories ?? []).map((cat) => {
             const color   = CATEGORY_COLORS[cat as Category] ?? '#9E9E9E';
             const rawSvg  = CATEGORY_SVGS[cat as Category];
             const iconSrc = rawSvg ? svgDataUri(colorSvg(rawSvg, color)) : null;
@@ -362,7 +364,33 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
 
       {/* Title + date on same row */}
       <div style={styles.titleRow}>
-        <h2 style={styles.title}>{feature.title}</h2>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          <h2 style={styles.title}>{feature.title}</h2>
+          {isPolity && onToggleHiddenNation && (
+            <button
+              onClick={() => onToggleHiddenNation(feature.id)}
+              title={hiddenNations?.has(feature.id)
+                ? 'Show territory in all periods'
+                : 'Hide territory until the modern era (prevents overlap with historical polities)'}
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                fontFamily: 'inherit',
+                padding: '3px 8px',
+                border: '1px solid',
+                borderRadius: 5,
+                cursor: 'pointer',
+                flexShrink: 0,
+                background: hiddenNations?.has(feature.id) ? '#fff3cd' : 'transparent',
+                borderColor: hiddenNations?.has(feature.id) ? '#ffc107' : 'rgba(0,0,0,0.2)',
+                color: hiddenNations?.has(feature.id) ? '#856404' : 'rgba(0,0,0,0.5)',
+                transition: 'all 0.15s',
+              }}
+            >
+              {hiddenNations?.has(feature.id) ? '⚠ Modern Nation (hidden pre-1900)' : 'Hide Modern Nation'}
+            </button>
+          )}
+        </div>
         {dateStr && (
           <div style={styles.dateBlock}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

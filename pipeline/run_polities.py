@@ -68,6 +68,9 @@ POLITY_SPARQL_CATEGORIES: list[tuple[str, str]] = [
     ("caliphate",           "Q131401"),    # caliphate
     ("pontificate",         "Q12799209"),  # pontificate / papacy
     ("country",             "Q6256"),      # country (catches remaining sovereign states)
+    # Sub-state entities treated as principalities
+    ("vilayet",             "Q1462047"),   # Ottoman vilayet
+    ("eyalet",              "Q44565"),     # Ottoman eyalet (earlier provincial type)
 ]
 
 # Reasonable limit per category — polities are far fewer than events
@@ -386,6 +389,11 @@ def build_polity_p31_dynamic_map(
         "Q196068":    "principality",  # lordship
         "Q1371288":   "principality",  # vassal state
         "Q463742":    "principality",  # Hochstift
+        "Q1462047":   "principality",  # vilayet
+        "Q44565":     "principality",  # eyalet
+        "Q330425":    "principality",  # sanjak
+        "Q1993723":   "principality",  # administrative territorial entity of Ottoman Empire
+        "Q113388921": "principality",  # privileged Ottoman province
         # Republic
         "Q7270":      "republic",
         "Q472538":    "republic",      # sister republic

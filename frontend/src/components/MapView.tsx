@@ -4,9 +4,11 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import type { FeatureProperties, Category } from '../types';
 import { CATEGORY_COLORS } from '../theme/categories';
 import { CATEGORY_SVGS } from '../theme/icons';
-import { encodeDate, eventDateRange, STEP_YEAR } from '../hooks/useTimeline';
+import { encodeDate, eventDateRange, STEP_YEAR, decodeDate } from '../hooks/useTimeline';
 
-const FADE_INT = 3 * STEP_YEAR; // 30000 — 3 years of fade in dateInt space
+// Linger window: 5 steps in the current unit, capped at 3 years.
+const LINGER_STEPS = 5;
+const LINGER_MAX = 3 * STEP_YEAR;
 
 // ─── Canvas icons ────────────────────────────────────────────────────────────
 //
@@ -79,12 +81,25 @@ export interface ZoomRequest {
 
 interface Props {
   geojson: GeoJSON.FeatureCollection;
+  territoriesGeojson?: GeoJSON.FeatureCollection;
   currentDateInt: number;
   stepSize: number;
   activeCategories: Set<Category>;
   activePolityCategories: Set<Category>;
   onSelectFeature: (props: FeatureProperties, stack: StackInfo) => void;
   zoomRequest?: ZoomRequest | null;
+  /** polityId → hideUntilYear: territories for these polities are hidden before that year */
+  hiddenNations?: Map<string, number>;
+  /** Polity IDs suppressed because a more-specific co-capital polity is active at this year */
+  suppressedPolityIds?: Set<string>;
+  /** Polity IDs whose territory polygon is visible — hides the capital dot only (not the territory) */
+  polityIdsWithTerritory?: Set<string>;
+  /** Called when user clicks an unmatched territory (no polity linked) */
+  onUnmatchedTerritoryClick?: (hbName: string, snapshotYear: number) => void;
+  /** Called when user clicks × to unlink a matched territory from its polity */
+  onUnlinkTerritory?: (hbName: string, snapshotYear: number) => void;
+  /** When set, only events whose partOf[] includes this QID are shown */
+  majorEventFilter?: string | null;
 }
 
 
@@ -131,19 +146,42 @@ function applyBorderVisibility(map: Map, visible: boolean) {
   });
 }
 
-export function MapView({ geojson, currentDateInt, stepSize, activeCategories, activePolityCategories, onSelectFeature, zoomRequest }: Props) {
+interface HoveredLabel {
+  hbName: string;
+  snapshotYear: number;
+  x: number;
+  y: number;
+}
+
+export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize, activeCategories, activePolityCategories, onSelectFeature, zoomRequest, hiddenNations, suppressedPolityIds, polityIdsWithTerritory, onUnmatchedTerritoryClick, onUnlinkTerritory, majorEventFilter }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
   const updateFilterRef = useRef<() => void>(() => {});
+  const territoriesGeojsonRef = useRef(territoriesGeojson);
+  territoriesGeojsonRef.current = territoriesGeojson;
+  const geojsonRef = useRef(geojson);
+  geojsonRef.current = geojson;
+  const suppressedPolityIdsRef = useRef(suppressedPolityIds ?? new Set<string>());
+  suppressedPolityIdsRef.current = suppressedPolityIds ?? new Set<string>();
+  const polityIdsWithTerritoryRef = useRef(polityIdsWithTerritory ?? new Set<string>());
+  polityIdsWithTerritoryRef.current = polityIdsWithTerritory ?? new Set<string>();
   const [showBorders, setShowBorders] = useState(false);
   const showBordersRef = useRef(showBorders);
   showBordersRef.current = showBorders;
+  const [hoveredLabel, setHoveredLabel] = useState<HoveredLabel | null>(null);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onUnlinkTerritoryRef = useRef(onUnlinkTerritory);
+  onUnlinkTerritoryRef.current = onUnlinkTerritory;
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    const container = containerRef.current;
+    // Guard 1: skip if no container, already initialized, or container detached from DOM
+    // (React 18 Strict Mode runs effects twice; the second run must not re-create the map
+    //  on a container that MapLibre already removed its canvas from)
+    if (!container || mapRef.current || !container.isConnected) return;
 
     const map = new maplibregl.Map({
-      container: containerRef.current,
+      container,
       style: 'https://tiles.openfreemap.org/styles/liberty',
       center: [20, 35],
       zoom: 3,
@@ -152,8 +190,13 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
     map.on('load', async () => {
+      // Guard 2: bail out if this map instance was removed before load fired
+      // (happens in Strict Mode when cleanup runs before the async load event)
+      if (mapRef.current !== map) return;
       // Icons must be registered before layers render, so load them first.
       await loadCategoryIcons(map);
+      // Guard 3: re-check after the async gap — cleanup may have run during the await
+      if (mapRef.current !== map) return;
 
       map.addSource('features', {
         type: 'geojson',
@@ -195,26 +238,64 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
         'text-opacity': ['number', ['get', '_labelOpacity'], 1.0],
       };
 
-      // Polities — hollow rings, rendered first so events always appear on top
+      // Territory polygons — rendered first (bottommost layer)
+      map.addSource('territories', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
       map.addLayer({
-        id: 'circles-polity',
-        type: 'circle',
-        source: 'features',
-        filter: POLITY_FILTER,
+        id: 'fills-territory',
+        type: 'fill',
+        source: 'territories',
         paint: {
-          'circle-radius': 18,
-          'circle-color': 'rgba(0,0,0,0)',
-          'circle-stroke-width': 5,
-          'circle-stroke-color': ['coalesce', ['get', '_color'], '#9E9E9E'],
-          'circle-opacity': ['number', ['get', '_opacity'], 1.0],
-          'circle-stroke-opacity': ['number', ['get', '_opacity'], 1.0],
+          'fill-color': ['coalesce', ['get', '_color'], '#607D8B'],
+          'fill-opacity': 0.22,
         },
       });
+      map.addLayer({
+        id: 'borders-territory',
+        type: 'line',
+        source: 'territories',
+        paint: {
+          'line-color': ['coalesce', ['get', '_color'], '#607D8B'],
+          'line-width': 1.2,
+          'line-opacity': 0.6,
+        },
+      });
+      // Territory name at the visual centroid of each polygon
+      map.addLayer({
+        id: 'labels-territory',
+        type: 'symbol',
+        source: 'territories',
+        layout: {
+          'text-field': ['coalesce', ['get', 'polityName'], ['get', 'hbName']],
+          'text-size': 12,
+          'text-max-width': 10,
+          'text-optional': true,
+          'text-font': ['Open Sans Italic', 'Arial Unicode MS Regular'],
+        },
+        paint: {
+          'text-color': [
+            'case',
+            ['!=', ['get', 'polityId'], null], '#f5c842',  // matched → yellow
+            '#9e9e9e',                                       // unmatched → gray
+          ],
+          'text-halo-color': 'rgba(0,0,0,0.6)',
+          'text-halo-width': 1.5,
+        },
+      });
+
+      // Polity zoom filter: same _minZoom convention as events
+      const POLITY_ZOOM_FILTER = ['all',
+        ['==', ['get', 'featureType'], 'polity'],
+        ['<=', ['coalesce', ['get', '_minZoom'], 2], ['zoom']],
+      ] as maplibregl.FilterSpecification;
+
       map.addLayer({
         id: 'labels-polity',
         type: 'symbol',
         source: 'features',
-        filter: POLITY_FILTER,
+        filter: POLITY_ZOOM_FILTER,
         layout: { ...labelLayout, 'text-offset': [0, 1.6], 'text-size': 13 },
         paint: labelPaint,
       });
@@ -227,6 +308,7 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
         filter: ['all',
           ['==', ['get', 'featureType'], 'polity'],
           ['!=', ['get', 'polityType'], 'principality'],
+          ['<=', ['coalesce', ['get', '_minZoom'], 2], ['zoom']],
         ] as maplibregl.FilterSpecification,
         layout: {
           'icon-image': 'star',
@@ -279,10 +361,28 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
       // Apply initial border visibility from ref (in case toggle was hit before load)
       if (!showBordersRef.current) applyBorderVisibility(map, false);
 
-      for (const layer of ['circles-major', 'circles-minor', 'events-major', 'circles-polity', 'stars-polity']) {
+      for (const layer of ['circles-major', 'circles-minor', 'events-major', 'stars-polity', 'fills-territory', 'labels-territory']) {
         map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
       }
+
+      // Hover state for territory labels: show × unlink button on matched (yellow) labels
+      map.on('mouseenter', 'labels-territory', (e) => {
+        if (!e.features?.length) return;
+        const feat = e.features[0];
+        const polityId = feat.properties?.polityId as string | null;
+        if (!polityId) return; // only matched territories show the unlink button
+        if (hideTimerRef.current) { clearTimeout(hideTimerRef.current); hideTimerRef.current = null; }
+        setHoveredLabel({
+          hbName: feat.properties?.hbName as string,
+          snapshotYear: feat.properties?.snapshotYear as number,
+          x: e.point.x,
+          y: e.point.y,
+        });
+      });
+      map.on('mouseleave', 'labels-territory', () => {
+        hideTimerRef.current = setTimeout(() => setHoveredLabel(null), 150);
+      });
 
       updateFilterRef.current();
     });
@@ -300,6 +400,8 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
 
   const onSelectRef = useRef(onSelectFeature);
   onSelectRef.current = onSelectFeature;
+  const onUnmatchedTerritoryRef = useRef(onUnmatchedTerritoryClick);
+  onUnmatchedTerritoryRef.current = onUnmatchedTerritoryClick;
   const stackRef = useRef<{ ids: string[]; index: number } | null>(null);
 
   useEffect(() => {
@@ -309,16 +411,47 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
     // Single map-level handler queries all clickable layers at once.
     // Layer-specific handlers would fire multiple times per click for stacked
     // war events (circles-major + icons-war both hit), corrupting the stack index.
-    const CLICK_LAYERS = ['events-major', 'circles-major', 'circles-minor', 'stars-polity', 'circles-polity'];
+    const CLICK_LAYERS = ['events-major', 'circles-major', 'circles-minor', 'stars-polity', 'fills-territory', 'labels-territory'];
 
     const onClick = (e: maplibregl.MapMouseEvent) => {
       const features = map.queryRenderedFeatures(e.point, { layers: CLICK_LAYERS });
       if (!features || features.length === 0) return;
 
+      // If the top hit is a territory, resolve to the linked polity feature instead
+      const top = features[0];
+      if (top.properties?.featureType === 'territory') {
+        const polityId = top.properties?.polityId as string | null;
+        if (!polityId) {
+          // Unmatched territory — open the mapping assignment UI
+          const hbName = top.properties?.hbName as string | undefined;
+          const snapshotYear = top.properties?.snapshotYear as number | undefined;
+          if (hbName && snapshotYear != null) {
+            onUnmatchedTerritoryRef.current?.(hbName, snapshotYear);
+          }
+          return;
+        }
+        const polityFeature = geojsonRef.current.features.find(
+          (f) => (f.properties as FeatureProperties).id === polityId,
+        );
+        if (!polityFeature) return;
+        const raw = { ...polityFeature.properties } as Record<string, unknown>;
+        for (const key of ['categories', 'partOfResolved', 'wikidataClasses'] as const) {
+          if (typeof raw[key] === 'string') {
+            try { raw[key] = JSON.parse(raw[key] as string); } catch { /* leave as-is */ }
+          }
+        }
+        onSelectRef.current(raw as unknown as FeatureProperties, { index: 0, total: 1 });
+        return;
+      }
+
       // Deduplicate by id — queryRenderedFeatures can return the same feature
-      // from multiple layers (e.g. a war event appears in both circles-major and icons-war)
+      // from multiple layers (e.g. a war event appears in both circles-major and icons-war).
+      // Also exclude territory features here — they are only handled via the early-return
+      // branch above (when they're the top hit). Letting them into the stack cycling causes
+      // handleSelectFeature to receive a territory with no yearStart → encodeDate(undefined) → NaN.
       const seen = new Set<string>();
       const unique = features.filter((f) => {
+        if (f.properties?.featureType === 'territory') return false;
         const id = String(f.properties?.id ?? '');
         if (seen.has(id)) return false;
         seen.add(id);
@@ -352,6 +485,10 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
     const source = map.getSource('features') as GeoJSONSource | undefined;
     if (!source) return;
 
+    const suppressed = suppressedPolityIdsRef.current;
+    const hasTerritory = polityIdsWithTerritoryRef.current;
+    const currentYear = decodeDate(currentDateInt).year;
+
     // End of the current time "bucket": events starting anywhere within the current
     // year/month/day are all visible. e.g. in year mode (stepSize=10000), effectiveNow
     // covers the whole year so a Jul 14 event is visible when we're at "Jan 1789".
@@ -383,7 +520,22 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
           if (!yearOk) return [];
         }
 
-        return [{ ...f, properties: { ...f.properties, _opacity: 1.0, _labelOpacity: 1.0, _color } }];
+        // Hide if a more-specific (shorter-lived) co-capital polity is active now
+        if (suppressed.has(p.id)) return [];
+        // Hide capital dot if this polity's territory polygon is already labelled on the map
+        if (hasTerritory.has(p.id)) return [];
+
+        // Hide modern nations before their hide_until_year threshold
+        if (hiddenNations) {
+          const threshold = hiddenNations.get(p.id);
+          if (threshold !== undefined && currentYear < threshold) return [];
+        }
+
+        // Zoom-gate by sitelinks importance (same thresholds as events)
+        const sl = p.sitelinksCount ?? null;
+        const _minZoom = sl === null ? 2 : sl >= 25 ? 1 : sl >= 10 ? 2 : sl >= 3 ? 4 : 6;
+
+        return [{ ...f, properties: { ...f.properties, _opacity: 1.0, _labelOpacity: 1.0, _color, _minZoom } }];
       }
 
       const catOk = p.categories.some((c) => activeCategories.has(c));
@@ -406,10 +558,15 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
           p.yearStart, p.monthStart, p.dayStart,
           p.yearEnd,   p.monthEnd,   p.dayEnd,
         );
-        yearOk = startInt <= effectiveNow && currentDateInt <= endInt + FADE_INT;
+        yearOk = startInt <= effectiveNow && currentDateInt <= endInt + Math.min(LINGER_STEPS * stepSize, LINGER_MAX);
       }
 
       if (!yearOk) return [];
+
+      // Major event filter: hide events that aren't part of the selected parent event
+      if (majorEventFilter && !isLocation && p.featureType === 'event') {
+        if (!(p.partOf ?? []).includes(majorEventFilter)) return [];
+      }
 
       const baseOpacity = (isLocation || !p.dateIsFuzzy) ? 1.0 : 0.6;
       let fadeOpacity = 1.0;
@@ -443,7 +600,33 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
     });
 
     source.setData({ type: 'FeatureCollection', features: visible });
-  }, [geojson, currentDateInt, stepSize, activeCategories, activePolityCategories]);
+
+    // Territory fill layer — time-filter by intervalStart/intervalEnd
+    const terrSource = map.getSource('territories') as GeoJSONSource | undefined;
+    if (terrSource) {
+      const allTerritories = territoriesGeojsonRef.current?.features ?? [];
+      const visibleTerritories = allTerritories.flatMap((f) => {
+        const p = f.properties as {
+          intervalStart: number;
+          intervalEnd: number | null;
+          polityType: string | null;
+          polityId: string | null;
+        };
+        if (p.intervalStart > currentYear) return [];
+        if (p.intervalEnd !== null && currentYear > p.intervalEnd) return [];
+        // Apply polity category filter for linked territories; unlinked always show
+        if (p.polityType && !activePolityCategories.has(p.polityType as Category)) return [];
+        // If polity is a hidden modern nation, render territory as unlinked (gray, no name)
+        if (p.polityId && hiddenNations?.has(p.polityId)) {
+          return [{ ...f, properties: { ...f.properties, polityId: null, polityName: null, politySlug: null, polityType: null } }];
+        }
+        // Hide territory if a more-specific co-capital polity is active now
+        if (p.polityId && suppressed.has(p.polityId)) return [];
+        return [f];
+      });
+      terrSource.setData({ type: 'FeatureCollection', features: visibleTerritories });
+    }
+  }, [geojson, territoriesGeojson, currentDateInt, stepSize, activeCategories, activePolityCategories, hiddenNations, majorEventFilter]);
 
   // Keep the ref current so the map.on('load') callback always invokes the latest version
   updateFilterRef.current = updateFilter;
@@ -476,6 +659,44 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, a
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+      {/* × unlink button — appears next to a hovered matched territory label */}
+      {hoveredLabel && (
+        <button
+          onMouseEnter={() => {
+            if (hideTimerRef.current) { clearTimeout(hideTimerRef.current); hideTimerRef.current = null; }
+          }}
+          onMouseLeave={() => setHoveredLabel(null)}
+          onClick={() => {
+            onUnlinkTerritoryRef.current?.(hoveredLabel.hbName, hoveredLabel.snapshotYear);
+            setHoveredLabel(null);
+          }}
+          title="Unlink territory from polity"
+          style={{
+            position: 'absolute',
+            left: hoveredLabel.x + 6,
+            top: hoveredLabel.y - 10,
+            zIndex: 20,
+            background: 'rgba(30,30,30,0.82)',
+            color: '#f5c842',
+            border: '1px solid rgba(245,200,66,0.5)',
+            borderRadius: '50%',
+            width: 18,
+            height: 18,
+            cursor: 'pointer',
+            fontSize: 13,
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            lineHeight: 1,
+            padding: 0,
+            fontFamily: 'inherit',
+          }}
+        >
+          ×
+        </button>
+      )}
 
       {/* Border layer toggle */}
       <div style={{

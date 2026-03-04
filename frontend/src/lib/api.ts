@@ -49,3 +49,57 @@ export async function fetchOverrides(): Promise<GeoJSON.FeatureCollection> {
   if (!res.ok) throw new Error(`API GET overrides failed (${res.status})`);
   return res.json();
 }
+
+export interface HiddenNation {
+  polityId: string;
+  hideUntilYear: number;
+  notes: string | null;
+}
+
+export async function fetchHiddenNations(): Promise<HiddenNation[]> {
+  const res = await fetch(`${API_BASE}/hidden-modern-nations`);
+  if (!res.ok) throw new Error(`API GET hidden-modern-nations failed (${res.status})`);
+  return res.json();
+}
+
+export async function addHiddenNation(polityId: string, hideUntilYear = 1900): Promise<void> {
+  const res = await fetch(`${API_BASE}/hidden-modern-nations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ polityId, hideUntilYear }),
+  });
+  if (!res.ok) throw new Error(`API POST hidden-modern-nations failed (${res.status})`);
+}
+
+export async function removeHiddenNation(polityId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/hidden-modern-nations/${polityId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`API DELETE hidden-modern-nations failed (${res.status})`);
+}
+
+export async function removeTerritoryMappingsByPolity(polityId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/territory-mappings/by-polity/${polityId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`API DELETE territory-mappings/by-polity failed (${res.status})`);
+}
+
+export async function deleteTerritoryMapping(hbName: string, snapshotYear: number): Promise<void> {
+  const params = new URLSearchParams({ hb_name: hbName, snapshot_year: String(snapshotYear) });
+  const res = await fetch(`${API_BASE}/territory-mappings?${params}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`API DELETE territory-mappings failed (${res.status})`);
+}
+
+export async function saveTerritoryMapping(
+  hbName: string,
+  snapshotYear: number,
+  polityId: string,
+  wikidataQid: string | null,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/territory-mappings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hbName, snapshotYear, polityId, wikidataQid }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`API POST territory-mappings failed (${res.status}): ${text}`);
+  }
+}

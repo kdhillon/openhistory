@@ -24,7 +24,20 @@ DATABASE_URL = os.environ.get(
     "postgresql://ourstory:ourstory@localhost:5433/ourstory",
 )
 
-OUT_PATH = Path(__file__).parent.parent / "frontend" / "src" / "data" / "seed.geojson"
+OUT_PATH       = Path(__file__).parent.parent / "frontend" / "public" / "data" / "seed.geojson"
+TERR_OUT_PATH  = Path(__file__).parent.parent / "frontend" / "public" / "data" / "territories.geojson"
+
+# Polity type → fill color (must match frontend theme/categories.ts CATEGORY_COLORS)
+_POLITY_COLORS = {
+    "empire":        "#8B0000",
+    "kingdom":       "#1A237E",
+    "principality":  "#4E342E",
+    "republic":      "#1B5E20",
+    "confederation": "#4A148C",
+    "sultanate":     "#BF360C",
+    "papacy":        "#F9A825",
+    "other":         "#607D8B",
+}
 
 
 def display_year(year: int) -> str:
@@ -46,35 +59,7 @@ def export(conn: "psycopg2.connection | None" = None) -> int:
 
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-    # Events — join to locations for coordinates when not a point event
-    cur.execute("""
-        SELECT
-          e.id, e.slug, e.title, e.wikipedia_title, e.wikipedia_summary, e.wikipedia_url,
-          e.year_start, e.month_start, e.day_start,
-          e.year_end, e.month_end, e.day_end,
-          e.date_is_fuzzy, e.date_range_min, e.date_range_max,
-          e.location_level,
-          CASE WHEN e.location_level = 'point' THEN e.lng ELSE l.lng END AS lng,
-          CASE WHEN e.location_level = 'point' THEN e.lat ELSE l.lat END AS lat,
-          e.location_name,
-          l.slug AS location_slug,
-          e.categories, e.p31_qids, e.part_of_qids,
-          e.sitelinks_count,
-          e.data_version, e.pipeline_run
-        FROM events e
-        LEFT JOIN locations l ON e.location_wikidata_qid = l.wikidata_qid
-        WHERE (e.location_level = 'point' AND e.lng IS NOT NULL)
-           OR (e.location_wikidata_qid IS NOT NULL AND l.wikidata_qid IS NOT NULL)
-        ORDER BY e.year_start
-    """)
-    events = cur.fetchall()
-
-    # QID lookup for resolving part_of_qids to titles/slugs at export time
-    cur.execute("SELECT wikidata_qid, title, slug FROM events WHERE wikidata_qid IS NOT NULL")
-    qid_map = {
-        row["wikidata_qid"]: {"title": row["title"], "slug": row["slug"]}
-        for row in cur.fetchall()
-    }
+    # Events are served by the /api/events endpoint — not included in seed.geojson.
 
     # Locations
     cur.execute("""
@@ -95,9 +80,11 @@ def export(conn: "psycopg2.connection | None" = None) -> int:
           year_start, year_end, date_is_fuzzy,
           polity_type, capital_name, capital_wikidata_qid,
           lng, lat, preceded_by_qid, succeeded_by_qid,
-          sovereign_qids, p31_qids, data_version, pipeline_run
+          sovereign_qids, p31_qids, data_version, pipeline_run,
+          sitelinks_count
         FROM polities
         WHERE lng IS NOT NULL AND lat IS NOT NULL
+           OR id IN (SELECT DISTINCT polity_id FROM snapshot_polygons WHERE polity_id IS NOT NULL)
         ORDER BY year_start NULLS LAST
     """)
     polities = cur.fetchall()
@@ -109,74 +96,7 @@ def export(conn: "psycopg2.connection | None" = None) -> int:
         for row in cur.fetchall()
     }
 
-    # Locationless events — shown in Data Explorer only, not on map
-    cur.execute("""
-        SELECT
-          e.id, e.slug, e.title, e.wikipedia_title, e.wikipedia_summary, e.wikipedia_url,
-          e.year_start, e.month_start, e.day_start,
-          e.year_end, e.month_end, e.day_end,
-          e.date_is_fuzzy, e.date_range_min, e.date_range_max,
-          e.location_name,
-          e.categories, e.p31_qids, e.part_of_qids,
-          e.sitelinks_count,
-          e.data_version, e.pipeline_run
-        FROM events e
-        WHERE e.location_level IS NULL AND e.lat IS NULL
-        ORDER BY e.year_start
-    """)
-    unlocated = cur.fetchall()
-
-    cur.close()
-    if close_conn:
-        conn.close()
-
     features = []
-
-    for row in events:
-        if row["lng"] is None or row["lat"] is None:
-            print(f'  Skipping event "{row["title"]}" — no resolvable coordinates', file=sys.stderr)
-            continue
-
-        part_of_resolved = [
-            {"qid": qid, "title": qid_map[qid]["title"], "slug": qid_map[qid]["slug"]}
-            for qid in (row["part_of_qids"] or [])
-            if qid in qid_map
-        ]
-
-        features.append({
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [float(row["lng"]), float(row["lat"])]},
-            "properties": {
-                "featureType": "event",
-                "id": str(row["id"]),
-                "slug": row["slug"] or row["wikipedia_title"].replace(" ", "_"),
-                "title": row["title"],
-                "wikipediaTitle": row["wikipedia_title"],
-                "wikipediaSummary": row["wikipedia_summary"] or "",
-                "wikipediaUrl": row["wikipedia_url"],
-                "yearStart": row["year_start"],
-                "monthStart": row["month_start"],
-                "dayStart": row["day_start"],
-                "yearEnd": row["year_end"],
-                "monthEnd": row["month_end"],
-                "dayEnd": row["day_end"],
-                "dateIsFuzzy": row["date_is_fuzzy"],
-                "dateRangeMin": row["date_range_min"],
-                "dateRangeMax": row["date_range_max"],
-                "locationLevel": row["location_level"],
-                "locationName": row["location_name"],
-                "locationSlug": row["location_slug"],
-                "categories": row["categories"] or [],
-                "primaryCategory": (row["categories"] or ["unknown"])[0],
-                "wikidataClasses": row["p31_qids"] or [],
-                "partOf": row["part_of_qids"] or [],
-                "partOfResolved": part_of_resolved,
-                "sitelinksCount": row["sitelinks_count"],
-                "yearDisplay": display_year(row["year_start"]) if row["year_start"] is not None else "Unknown",
-                "dataVersion": row["data_version"],
-                "pipelineRun": row["pipeline_run"],
-            },
-        })
 
     for row in locations:
         if row["lng"] is None or row["lat"] is None:
@@ -232,9 +152,14 @@ def export(conn: "psycopg2.connection | None" = None) -> int:
             sovereign_resolved = {"qid": qid, "name": sov_name, "slug": polity_qid_map[qid]["slug"]}
             break
 
+        geom = (
+            {"type": "Point", "coordinates": [float(row["lng"]), float(row["lat"])]}
+            if row["lng"] is not None and row["lat"] is not None
+            else None
+        )
         features.append({
             "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [float(row["lng"]), float(row["lat"])]},
+            "geometry": geom,
             "properties": {
                 "featureType": "polity",
                 "id": str(row["id"]),
@@ -267,46 +192,6 @@ def export(conn: "psycopg2.connection | None" = None) -> int:
                 "primaryCategory": row["polity_type"],
                 "wikidataClasses": row["p31_qids"] or [],
                 "hasTerritory": False,  # true once polity_territories has data
-                "yearDisplay": display_year(row["year_start"]) if row["year_start"] is not None else "Unknown",
-                "dataVersion": row["data_version"],
-                "pipelineRun": row["pipeline_run"],
-            },
-        })
-
-    for row in unlocated:
-        part_of_resolved = [
-            {"qid": qid, "title": qid_map[qid]["title"], "slug": qid_map[qid]["slug"]}
-            for qid in (row["part_of_qids"] or [])
-            if qid in qid_map
-        ]
-        features.append({
-            "type": "Feature",
-            "geometry": None,  # null geometry — not rendered on map
-            "properties": {
-                "featureType": "event",
-                "id": str(row["id"]),
-                "slug": row["slug"] or (row["wikipedia_title"] or "").replace(" ", "_"),
-                "title": row["title"],
-                "wikipediaTitle": row["wikipedia_title"],
-                "wikipediaSummary": row["wikipedia_summary"] or "",
-                "wikipediaUrl": row["wikipedia_url"],
-                "yearStart": row["year_start"],
-                "monthStart": row["month_start"],
-                "dayStart": row["day_start"],
-                "yearEnd": row["year_end"],
-                "monthEnd": row["month_end"],
-                "dayEnd": row["day_end"],
-                "dateIsFuzzy": row["date_is_fuzzy"],
-                "dateRangeMin": row["date_range_min"],
-                "dateRangeMax": row["date_range_max"],
-                "locationLevel": None,
-                "locationName": row["location_name"] or "",
-                "locationSlug": None,
-                "categories": row["categories"] or [],
-                "primaryCategory": (row["categories"] or ["unknown"])[0],
-                "wikidataClasses": row["p31_qids"] or [],
-                "partOf": row["part_of_qids"] or [],
-                "partOfResolved": part_of_resolved,
                 "sitelinksCount": row["sitelinks_count"],
                 "yearDisplay": display_year(row["year_start"]) if row["year_start"] is not None else "Unknown",
                 "dataVersion": row["data_version"],
@@ -314,8 +199,7 @@ def export(conn: "psycopg2.connection | None" = None) -> int:
             },
         })
 
-    n_located = len(features) - len(unlocated)
-    print(f"  {n_located} located features ({len(polities)} polities) + {len(unlocated)} unlocated events", file=sys.stderr)
+    print(f"  {len(features)} features ({len(locations)} locations, {len(polities)} polities)", file=sys.stderr)
 
     geojson = {
         "type": "FeatureCollection",
@@ -324,6 +208,109 @@ def export(conn: "psycopg2.connection | None" = None) -> int:
     }
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(geojson, indent=2))
+
+    # ── Territory polygons ───────────────────────────────────────────────────
+    # Export snapshot_polygons as a separate territories.geojson.
+    # Each feature has intervalStart/intervalEnd for time-based filtering in MapView.
+    # Polygons linked to our polities use polityType for color + category filtering.
+    # Unlinked polygons (indigenous territories etc.) still render but without polity info.
+
+    # Compute ordered snapshot years so we can derive interval_end per polygon
+    cur.execute("SELECT snapshot_year FROM territory_snapshots ORDER BY snapshot_year")
+    snapshot_years = [r["snapshot_year"] for r in cur.fetchall()]
+    next_year: dict[int, int | None] = {}
+    for i, yr in enumerate(snapshot_years):
+        next_year[yr] = snapshot_years[i + 1] if i + 1 < len(snapshot_years) else None
+
+    # Build polity_id → polity metadata lookup from already-fetched polities
+    polity_id_map = {
+        str(row["id"]): row for row in polities
+    }
+
+    cur.execute("""
+        SELECT
+          sp.id, sp.snapshot_year, sp.hb_name, sp.hb_abbrevn,
+          sp.border_precision, sp.boundary, sp.accuracy,
+          sp.sub_year_start, sp.sub_year_end, sp.source_polygon_id,
+          COALESCE(sp.polity_id, tnm.polity_id) AS polity_id,
+          p.slug AS polity_slug, p.name AS polity_name,
+          p.polity_type, p.year_start AS polity_year_start, p.year_end AS polity_year_end
+        FROM snapshot_polygons sp
+        LEFT JOIN territory_name_mappings tnm
+          ON tnm.hb_name = sp.hb_name AND tnm.snapshot_year = sp.snapshot_year
+        LEFT JOIN polities p
+          ON p.id = COALESCE(sp.polity_id, tnm.polity_id)
+        ORDER BY sp.snapshot_year, sp.hb_name
+    """)
+    territory_rows = cur.fetchall()
+
+    territory_features = []
+    for tr in territory_rows:
+        snap_yr = tr["snapshot_year"]
+        poly_yr_start = tr["polity_year_start"]
+        poly_yr_end   = tr["polity_year_end"]
+
+        # interval_start: only defer to polity's founding year if it falls WITHIN
+        # this snapshot's interval (i.e. between snap_yr and next snapshot).
+        # If poly_yr_start is before snap_yr (normal) or way after (wrong-era match),
+        # just use snap_yr so the territory still renders correctly at this snapshot.
+        nxt_for_start = next_year.get(snap_yr)
+        interval_start = snap_yr
+        if poly_yr_start is not None:
+            upper = nxt_for_start if nxt_for_start is not None else snap_yr + 1000
+            if snap_yr < poly_yr_start <= upper:
+                interval_start = poly_yr_start
+
+        # interval_end: just before the next snapshot year (or null if newest snapshot).
+        nxt = next_year.get(snap_yr)
+        interval_end = (nxt - 1) if nxt is not None else None
+
+        # Sub-interval overrides: when set, these take precedence over derived interval.
+        # Used by expand-territory-polities.py to split a snapshot interval across
+        # multiple successor polities (e.g. First Republic 1800-1804, First Empire 1804-1814).
+        if tr["sub_year_start"] is not None:
+            interval_start = tr["sub_year_start"]
+        if tr["sub_year_end"] is not None:
+            interval_end = tr["sub_year_end"]
+
+        polity_type = tr["polity_type"]
+        color = _POLITY_COLORS.get(polity_type, "#607D8B") if polity_type else "#78909C"
+
+        territory_features.append({
+            "type": "Feature",
+            "geometry": tr["boundary"],   # already a dict (psycopg2 JSONB → dict)
+            "properties": {
+                "featureType": "territory",
+                "snapshotYear": snap_yr,
+                "intervalStart": interval_start,
+                "intervalEnd": interval_end,
+                "hbName": tr["hb_name"],
+                "hbAbbrevn": tr["hb_abbrevn"],
+                "borderPrecision": tr["border_precision"],
+                "polityId": str(tr["polity_id"]) if tr["polity_id"] else None,
+                "politySlug": tr["polity_slug"],
+                "polityName": tr["polity_name"],
+                "polityType": polity_type,
+                "polityYearStart": poly_yr_start,
+                "polityYearEnd": poly_yr_end,
+                "accuracy": tr["accuracy"],
+                "sourcePolygonId": str(tr["source_polygon_id"]) if tr["source_polygon_id"] else None,
+                "_color": color,
+            },
+        })
+
+    territories_geojson = {
+        "type": "FeatureCollection",
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "features": territory_features,
+    }
+    TERR_OUT_PATH.write_text(json.dumps(territories_geojson))
+    print(f"  {len(territory_features)} territory polygons → {TERR_OUT_PATH.name}", file=sys.stderr)
+
+    if close_conn:
+        cur.close()
+        conn.close()
+
     return len(features)
 
 

@@ -7,3 +7,6 @@ dist/
 # seed.geojson is committed so Railway can build without a pipeline run
 __pycache__/
 db/snapshots/
+.hb-cache/
+scripts/territory-unmatched-*.json
+frontend/public/data/territories.geojson

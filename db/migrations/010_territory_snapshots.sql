@@ -66,11 +66,14 @@ CREATE INDEX IF NOT EXISTS snapshot_polygons_hb_name_idx       ON snapshot_polyg
 CREATE INDEX IF NOT EXISTS snapshot_polygons_accuracy_idx      ON snapshot_polygons(accuracy);
 
 -- ── territory_name_mappings ────────────────────────────────────────────────
--- Persistent lookup: historical-basemaps NAME → our polity_id.
--- Built up incrementally across snapshot imports; manual corrections are
--- never overwritten by the auto-matcher.
+-- Persistent lookup: (hb_name, snapshot_year) → our polity_id.
+-- Keyed on both name AND snapshot_year because the same HB name can map to
+-- different polities at different historical periods (e.g. "France" in 1800
+-- = First French Republic; "France" in 1900 = Third French Republic).
+-- Built up incrementally; manual corrections are never overwritten by the auto-matcher.
 CREATE TABLE IF NOT EXISTS territory_name_mappings (
-  hb_name       TEXT PRIMARY KEY,           -- NAME from HB (stable key)
+  hb_name       TEXT NOT NULL,              -- NAME from HB
+  snapshot_year INT NOT NULL,              -- which snapshot year this mapping applies to
   polity_id     UUID REFERENCES polities(id) ON DELETE SET NULL,
   wikidata_qid  TEXT,                       -- redundant but useful for cross-referencing
   confidence    TEXT NOT NULL DEFAULT 'auto',
@@ -78,8 +81,10 @@ CREATE TABLE IF NOT EXISTS territory_name_mappings (
                 -- 'manual' = human assigned (never overwritten by auto-matcher)
   notes         TEXT,                       -- e.g. "HB calls this 'Great Britain'"
   created_at    TIMESTAMPTZ DEFAULT NOW(),
-  updated_at    TIMESTAMPTZ DEFAULT NOW()
+  updated_at    TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (hb_name, snapshot_year)
 );
 
 CREATE INDEX IF NOT EXISTS territory_name_mappings_polity_id_idx     ON territory_name_mappings(polity_id);
 CREATE INDEX IF NOT EXISTS territory_name_mappings_wikidata_qid_idx  ON territory_name_mappings(wikidata_qid);
+CREATE INDEX IF NOT EXISTS territory_name_mappings_snapshot_year_idx ON territory_name_mappings(snapshot_year);

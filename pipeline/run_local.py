@@ -127,6 +127,7 @@ def fetch_wikidata_entities(qids: list[str]) -> dict:
     """
     Fetches entity JSON from the Wikidata API for a list of QIDs.
     Splits into batches of 50 (API limit) and merges results.
+    Retries with exponential backoff on 429 rate-limit responses.
 
     Returns {qid: entity_dict}.
     """
@@ -143,8 +144,16 @@ def fetch_wikidata_entities(qids: list[str]) -> dict:
             "sitefilter": "enwiki",
             "format":    "json",
         }
-        resp = SESSION.get(WIKIDATA_API, params=params, timeout=30)
-        resp.raise_for_status()
+        wait = 60  # initial backoff on 429
+        for attempt in range(5):
+            resp = SESSION.get(WIKIDATA_API, params=params, timeout=30)
+            if resp.status_code == 429:
+                print(f"    [rate limited] waiting {wait}s before retry (attempt {attempt+1}/5)...")
+                time.sleep(wait)
+                wait = min(wait * 2, 300)
+                continue
+            resp.raise_for_status()
+            break
         entities = resp.json().get("entities", {})
         all_entities.update(entities)
 

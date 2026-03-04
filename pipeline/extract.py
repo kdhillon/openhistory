@@ -575,11 +575,6 @@ _REGION_P31: set[str] = {
     "Q34876",    # province (generic)
     "Q149621",   # district (generic)
     "Q4835091",  # territory (generic)
-    "Q1462047",  # vilayet
-    "Q44565",    # eyalet
-    "Q330425",   # sanjak
-    "Q1993723",  # administrative territorial entity of the Ottoman Empire
-    "Q113388921",# privileged Ottoman province
     "Q379817",   # theme of the Byzantine Empire
     "Q15649510", # satrapy of the Sasanian Empire
     "Q1615742",  # province of China
@@ -923,6 +918,12 @@ _POLITY_PRINCIPALITY: set[str] = {
     "Q196068",    # lordship
     "Q1371288",   # vassal state
     "Q463742",    # Hochstift (ecclesiastical principality in HRE)
+    # Ottoman / Islamic sub-state administrative units
+    "Q1462047",   # vilayet
+    "Q44565",     # eyalet
+    "Q330425",    # sanjak
+    "Q1993723",   # administrative territorial entity of the Ottoman Empire
+    "Q113388921", # privileged Ottoman province
 }
 
 _POLITY_REPUBLIC: set[str] = {

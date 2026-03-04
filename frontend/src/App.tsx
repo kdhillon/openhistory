@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { checkLogin } from './lib/wikidataApi';
-import { fetchOverrides } from './lib/api';
+import { fetchOverrides, fetchHiddenNations, addHiddenNation, removeHiddenNation, removeTerritoryMappingsByPolity, deleteTerritoryMapping } from './lib/api';
 import { MapView } from './components/MapView';
+import { TerritoryMappingModal } from './components/TerritoryMappingModal';
 import { TimelineBar } from './components/TimelineBar';
 import { InfoPanel } from './components/InfoPanel';
 import { CategoryFilter } from './components/CategoryFilter';
@@ -10,21 +11,37 @@ import { AboutPage } from './components/AboutPage';
 import { MajorEventsPanel } from './components/MajorEventsPanel';
 import { useTimeline, encodeDate, decodeDate, STEP_YEAR } from './hooks/useTimeline';
 import { useEventSource } from './hooks/useEventSource';
+import { useTerritoriesSource } from './hooks/useTerritoriesSource';
 import type { FeatureProperties, Category } from './types';
 import type { StackInfo, ZoomRequest } from './components/MapView';
 import { EVENT_CATEGORIES, POLITY_CATEGORIES } from './theme/categories';
 
-// Static seed data — locations + polities only (events come from API)
-import seedData from './data/seed.geojson';
-
-const seedFeatureCollection = seedData as GeoJSON.FeatureCollection;
-
-// Non-event features (locations + polities) — loaded in full from seed, kept in memory
-const staticFeatures = seedFeatureCollection.features.filter(
-  (f) => (f.properties as { featureType: string }).featureType !== 'event',
-);
+const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 export default function App() {
+  const [seedFeatureCollection, setSeedFeatureCollection] = useState<GeoJSON.FeatureCollection>(EMPTY_FC);
+
+  useEffect(() => {
+    fetch('/data/seed.geojson')
+      .then((r) => r.json())
+      .then((data: GeoJSON.FeatureCollection) => setSeedFeatureCollection(data))
+      .catch(console.error);
+  }, []);
+
+  const staticFeatures = useMemo(
+    () => seedFeatureCollection.features.filter(
+      (f) => (f.properties as { featureType: string }).featureType !== 'event',
+    ),
+    [seedFeatureCollection],
+  );
+
+  const polityFeatures = useMemo(
+    () => (seedFeatureCollection.features
+      .filter((f) => (f.properties as { featureType: string }).featureType === 'polity')
+      .map((f) => f.properties) as import('./types').FeatureProperties[])
+      .sort((a, b) => a.title.localeCompare(b.title)),
+    [seedFeatureCollection],
+  );
   const [currentPath, setCurrentPath] = useState(() => window.location.pathname);
 
   const timeline = useTimeline();
@@ -32,6 +49,9 @@ export default function App() {
 
   const { eventFeatures, windowInfo, isLoading: eventsLoading, error: eventsError } =
     useEventSource({ currentYear, stepSize: timeline.stepSize });
+
+  const { territoryFeatures } =
+    useTerritoriesSource({ currentYear, stepSize: timeline.stepSize });
 
   // Map of id → patched feature for manual edits (applied on top of base features)
   const [overrideMap, setOverrideMap] = useState<Map<string, GeoJSON.Feature>>(new Map());
@@ -47,6 +67,95 @@ export default function App() {
   const [zoomRequest, setZoomRequest] = useState<ZoomRequest | null>(null);
   const zoomIdRef = useRef(0);
   const [wikiAuth, setWikiAuth] = useState<string | null>(null);
+  // polityId → hideUntilYear for modern nations hidden in historical views
+  const [hiddenNations, setHiddenNations] = useState<Map<string, number>>(new Map());
+  // Unmatched territory the user clicked — shows the mapping assignment modal
+  const [mappingTarget, setMappingTarget] = useState<{ hbName: string; snapshotYear: number } | null>(null);
+  // QID of the major event chip selected in the bottom bar (null = no filter)
+  const [majorEventFilter, setMajorEventFilter] = useState<string | null>(null);
+  // Mappings saved in this session: "hbName::snapshotYear" → { polityId, polityName }
+  // Used to immediately reflect matched territory labels without re-exporting
+  const [localMappings, setLocalMappings] = useState<Map<string, { polityId: string; polityName: string }>>(new Map());
+  // Territories unlinked in this session: "hbName::snapshotYear"
+  // Overrides server data until the next API window fetch
+  const [localUnlinks, setLocalUnlinks] = useState<Set<string>>(new Set());
+
+  const territoriesFeatureCollection = useMemo(
+    (): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features: territoryFeatures }),
+    [territoryFeatures],
+  );
+
+  const patchedTerritories = useMemo(() => {
+    if (localMappings.size === 0 && localUnlinks.size === 0) return territoriesFeatureCollection;
+    return {
+      ...territoriesFeatureCollection,
+      features: territoriesFeatureCollection.features.map((f) => {
+        const p = f.properties as { hbName: string; snapshotYear: number; polityId: string | null };
+        const key = `${p.hbName}::${p.snapshotYear}`;
+        // Apply local unlinks first
+        if (localUnlinks.has(key)) {
+          return { ...f, properties: { ...f.properties, polityId: null, polityName: null } };
+        }
+        if (p.polityId) return f;
+        const mapping = localMappings.get(key);
+        if (!mapping) return f;
+        return { ...f, properties: { ...f.properties, polityId: mapping.polityId, polityName: mapping.polityName } };
+      }),
+    } as GeoJSON.FeatureCollection;
+  }, [localMappings, localUnlinks, territoriesFeatureCollection]);
+
+  // Pre-compute suppressed polity IDs for the current year.
+  // When multiple polities share a capital, only the shortest-lived (most historically
+  // specific) shows; longer-lived ones are suppressed. Recomputes once per year — polity
+  // boundaries are year-resolution so sub-year currentDateInt changes don't matter here.
+  const suppressedPolityIds = useMemo(() => {
+    const suppressed = new Set<string>();
+    type Entry = { id: string; capitalKey: string; lifespan: number };
+    const active: Entry[] = [];
+
+    for (const f of staticFeatures) {
+      const p = f.properties as FeatureProperties;
+      if (p.featureType !== 'polity' || !p.id || p.yearStart == null) continue;
+      if (p.yearStart > currentYear) continue;
+      if (p.yearEnd != null && currentYear > p.yearEnd) continue;
+
+      const capitalKey = p.capitalWikidataQid ?? p.capitalName?.toLowerCase() ?? '';
+      if (!capitalKey) continue;
+
+      const lifespan = p.yearEnd != null ? (p.yearEnd - p.yearStart) : 999999;
+      active.push({ id: p.id, capitalKey, lifespan });
+    }
+
+    const byCapital = new Map<string, Entry[]>();
+    for (const entry of active) {
+      const group = byCapital.get(entry.capitalKey);
+      if (group) group.push(entry);
+      else byCapital.set(entry.capitalKey, [entry]);
+    }
+
+    for (const group of byCapital.values()) {
+      if (group.length <= 1) continue;
+      const minLifespan = Math.min(...group.map((e) => e.lifespan));
+      for (const entry of group) {
+        if (entry.lifespan > minLifespan) suppressed.add(entry.id);
+      }
+    }
+
+    return suppressed;
+  }, [currentYear]); // staticFeatures is a module-level constant
+
+  // Polity IDs that have a matched, time-visible territory — their capital dot is redundant
+  const polityIdsWithTerritory = useMemo(() => {
+    const ids = new Set<string>();
+    for (const f of patchedTerritories.features) {
+      const p = f.properties as { polityId: string | null; intervalStart: number; intervalEnd: number | null };
+      if (!p.polityId) continue;
+      if (p.intervalStart > currentYear) continue;
+      if (p.intervalEnd !== null && currentYear > p.intervalEnd) continue;
+      ids.add(p.polityId);
+    }
+    return ids;
+  }, [patchedTerritories, currentYear]);
 
   // Derive the GeoJSON passed to MapView: static features + windowed events + overrides
   const geojson = useMemo((): GeoJSON.FeatureCollection => {
@@ -54,12 +163,43 @@ export default function App() {
     const features = overrideMap.size > 0
       ? baseFeatures.map((f) => overrideMap.get((f.properties as { id: string }).id) ?? f)
       : baseFeatures;
-    return { ...seedFeatureCollection, features };
-  }, [eventFeatures, overrideMap]);
+    return { type: 'FeatureCollection', features };
+  }, [staticFeatures, eventFeatures, overrideMap]);
 
   useEffect(() => {
     checkLogin().then((username) => setWikiAuth(username));
   }, []);
+
+  useEffect(() => {
+    fetchHiddenNations()
+      .then((list) => setHiddenNations(new Map(list.map((h) => [h.polityId, h.hideUntilYear]))))
+      .catch(() => {/* API not running — no hidden nations applied */});
+  }, []);
+
+  const handleUnlinkTerritory = useCallback((hbName: string, snapshotYear: number) => {
+    const key = `${hbName}::${snapshotYear}`;
+    deleteTerritoryMapping(hbName, snapshotYear).catch(console.error);
+    setLocalUnlinks((prev) => new Set(prev).add(key));
+    // Also remove any local mapping for the same key
+    setLocalMappings((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Map(prev);
+      next.delete(key);
+      return next;
+    });
+  }, []);
+
+  const handleToggleHiddenNation = useCallback((polityId: string) => {
+    if (hiddenNations.has(polityId)) {
+      removeHiddenNation(polityId).catch(console.error);
+      setHiddenNations((m) => { const n = new Map(m); n.delete(polityId); return n; });
+    } else {
+      // Hide the polity star and unlink its territory mappings (territory reverts to unassigned)
+      addHiddenNation(polityId).catch(console.error);
+      removeTerritoryMappingsByPolity(polityId).catch(console.error);
+      setHiddenNations((m) => new Map(m).set(polityId, 1900));
+    }
+  }, [hiddenNations]);
 
   // Merge API-persisted corrections over the baseline on startup
   useEffect(() => {
@@ -233,12 +373,19 @@ export default function App() {
       <div style={{ position: 'absolute', inset: '89px 0 104px 0' }}>
         <MapView
           geojson={geojson}
+          territoriesGeojson={patchedTerritories}
           currentDateInt={timeline.currentDateInt}
           stepSize={timeline.stepSize}
           activeCategories={activeCategories}
           activePolityCategories={activePolityCategories}
           onSelectFeature={handleSelectFeature}
           zoomRequest={zoomRequest}
+          hiddenNations={hiddenNations}
+          suppressedPolityIds={suppressedPolityIds}
+          polityIdsWithTerritory={polityIdsWithTerritory}
+          onUnmatchedTerritoryClick={(hbName, snapshotYear) => setMappingTarget({ hbName, snapshotYear })}
+          onUnlinkTerritory={handleUnlinkTerritory}
+          majorEventFilter={majorEventFilter}
         />
       </div>
 
@@ -251,6 +398,8 @@ export default function App() {
         wikiAuth={wikiAuth}
         onAuth={setWikiAuth}
         onFeatureUpdated={handleFeatureUpdated}
+        hiddenNations={hiddenNations}
+        onToggleHiddenNation={handleToggleHiddenNation}
       />
 
       <MajorEventsPanel
@@ -258,6 +407,8 @@ export default function App() {
         currentDateInt={timeline.currentDateInt}
         stepSize={timeline.stepSize}
         onNavigateToFeature={handleNavigateToFeature}
+        selectedQid={majorEventFilter}
+        onSelectQid={setMajorEventFilter}
       />
 
       <TimelineBar
@@ -272,6 +423,21 @@ export default function App() {
         onSetStepSize={timeline.setStepSize}
         onSetSpeed={timeline.setPlaybackSpeed}
       />
+
+      {mappingTarget && (
+        <TerritoryMappingModal
+          hbName={mappingTarget.hbName}
+          snapshotYear={mappingTarget.snapshotYear}
+          polities={polityFeatures}
+          onClose={() => setMappingTarget(null)}
+          onSaved={(polityId, polityName) => {
+            setLocalMappings((m) => new Map(m).set(
+              `${mappingTarget.hbName}::${mappingTarget.snapshotYear}`,
+              { polityId, polityName },
+            ));
+          }}
+        />
+      )}
     </div>
   );
 }

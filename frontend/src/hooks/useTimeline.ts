@@ -129,13 +129,14 @@ export function displayDate(dateInt: number, stepSize = STEP_YEAR): string {
 export const displayYear = displayDate;
 
 export function useTimeline() {
-  const [currentDateInt, setCurrentDateInt] = useState(() => encodeDate(1790, 1, 1));
+  const [currentDateInt, setCurrentDateInt] = useState(() => encodeDate(1800, 1, 1));
   const [stepSize,        setStepSize]      = useState(STEP_MONTH);
   const [isPlaying,       setIsPlaying]     = useState(false);
   const [playbackSpeed,   setPlaybackSpeed] = useState(1); // steps per second
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const seek = useCallback((dateInt: number) => {
+    if (!isFinite(dateInt)) return; // guard against NaN / Infinity from bad feature data
     setCurrentDateInt(
       Math.max(DATE_MIN, Math.min(DATE_MAX, normalizeDateInt(Math.round(dateInt)))),
     );
