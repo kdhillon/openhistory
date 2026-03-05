@@ -8,7 +8,7 @@ import { InfoPanel } from './components/InfoPanel';
 import { CategoryFilter } from './components/CategoryFilter';
 import { DataExplorer } from './components/DataExplorer';
 import { AboutPage } from './components/AboutPage';
-import { MajorEventsPanel } from './components/MajorEventsPanel';
+import { MajorEventsPanel, MAJOR_EVENTS_PANEL_HEIGHT } from './components/MajorEventsPanel';
 import { useTimeline, encodeDate, decodeDate, STEP_YEAR } from './hooks/useTimeline';
 import { useEventSource } from './hooks/useEventSource';
 import { useTerritoriesSource } from './hooks/useTerritoriesSource';
@@ -50,7 +50,7 @@ export default function App() {
   const { eventFeatures, windowInfo, isLoading: eventsLoading, error: eventsError } =
     useEventSource({ currentYear, stepSize: timeline.stepSize });
 
-  const { territoryFeatures } =
+  const { territoryFeatures, refresh: refreshTerritories } =
     useTerritoriesSource({ currentYear, stepSize: timeline.stepSize });
 
   // Map of id → patched feature for manual edits (applied on top of base features)
@@ -73,6 +73,7 @@ export default function App() {
   const [mappingTarget, setMappingTarget] = useState<{ hbName: string; snapshotYear: number } | null>(null);
   // QID of the major event chip selected in the bottom bar (null = no filter)
   const [majorEventFilter, setMajorEventFilter] = useState<string | null>(null);
+  const [hasMajorEvents, setHasMajorEvents] = useState(false);
   // Mappings saved in this session: "hbName::snapshotYear" → { polityId, polityName }
   // Used to immediately reflect matched territory labels without re-exporting
   const [localMappings, setLocalMappings] = useState<Map<string, { polityId: string; polityName: string }>>(new Map());
@@ -370,7 +371,7 @@ export default function App() {
         settings={{ windowInfo, isLoading: eventsLoading, error: eventsError }}
       />
 
-      <div style={{ position: 'absolute', inset: '89px 0 104px 0' }}>
+      <div style={{ position: 'absolute', inset: `89px 0 ${64 + (hasMajorEvents ? MAJOR_EVENTS_PANEL_HEIGHT : 0)}px 0` }}>
         <MapView
           geojson={geojson}
           territoriesGeojson={patchedTerritories}
@@ -409,6 +410,7 @@ export default function App() {
         onNavigateToFeature={handleNavigateToFeature}
         selectedQid={majorEventFilter}
         onSelectQid={setMajorEventFilter}
+        onHasEvents={setHasMajorEvents}
       />
 
       <TimelineBar
@@ -435,6 +437,7 @@ export default function App() {
               `${mappingTarget.hbName}::${mappingTarget.snapshotYear}`,
               { polityId, polityName },
             ));
+            refreshTerritories();
           }}
         />
       )}

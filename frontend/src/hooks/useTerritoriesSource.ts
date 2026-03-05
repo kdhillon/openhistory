@@ -146,9 +146,15 @@ export function useTerritoriesSource(opts: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const refresh = useCallback(() => {
+    const win = currentWindow;
+    if (win) doFetch(win.yearMin, win.yearMax);
+  }, [currentWindow, doFetch]);
+
   return {
     territoryFeatures: currentWindow?.features ?? [],
     isLoading,
     error,
+    refresh,
   };
 }
