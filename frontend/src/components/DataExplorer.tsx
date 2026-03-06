@@ -276,7 +276,8 @@ function TableRow({
   const color = getCategoryColor(row.primaryCategory);
   const prefix = row.dateIsFuzzy ? '~' : '';
   const isLocationFeature = row.featureType === 'city' || row.featureType === 'region';
-  const canEdit = row.featureType === 'event' && !!row.wikipediaTitle;
+  const canEditDate = (row.featureType === 'event' && !!row.wikipediaTitle) || row.featureType === 'polity';
+  const canEditLocation = row.featureType === 'event' && !!row.wikipediaTitle;
   const yearLabel = row.yearStart === null
     ? '—'
     : row.yearEnd !== null
@@ -312,7 +313,7 @@ function TableRow({
       <td style={{ ...s.td, ...s.monoCell }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <span>{yearLabel}</span>
-          {canEdit && row.yearStart !== null && (
+          {canEditDate && row.yearStart !== null && (
             <button
               style={s.pencilBtn}
               title="Edit date on Wikidata"
@@ -327,7 +328,7 @@ function TableRow({
       <td style={{ ...s.td, color: 'rgba(255,255,255,0.55)', fontSize: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <span>{row.locationName || <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>}</span>
-          {canEdit && (
+          {canEditLocation && (
             <button
               style={s.pencilBtn}
               title="Edit location on Wikidata"

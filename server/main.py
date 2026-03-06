@@ -14,7 +14,9 @@ import json
 import os
 import re
 import urllib.request
-from fastapi import FastAPI, HTTPException, Request, Depends, Header
+import httpx
+from fastapi import FastAPI, HTTPException, Request, Depends, Header, Response
+from fastapi.responses import Response as FastAPIResponse
 from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -1206,3 +1208,42 @@ def get_territories(year_min: int, year_max: int):
         }
     finally:
         conn.close()
+
+
+# ── Wikidata API proxy ────────────────────────────────────────────────────────
+# Proxies browser requests to https://www.wikidata.org/w/api.php, forwarding
+# cookies so the login session works in production (no Vite dev proxy there).
+
+_WD_API = "https://www.wikidata.org/w/api.php"
+_SKIP_HEADERS = {"host", "content-length", "transfer-encoding", "connection"}
+
+
+@app.api_route("/wikidata-api", methods=["GET", "POST"])
+async def wikidata_proxy(request: Request):
+    params = dict(request.query_params)
+    # Forward cookies from browser to Wikidata
+    cookie_header = request.headers.get("cookie", "")
+    headers = {"Cookie": cookie_header, "User-Agent": "OpenHistory/1.0 (https://openhistory.app)"}
+
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        if request.method == "POST":
+            body = await request.body()
+            content_type = request.headers.get("content-type", "application/x-www-form-urlencoded")
+            wd_resp = await client.post(_WD_API, params=params, content=body,
+                                        headers={**headers, "Content-Type": content_type})
+        else:
+            wd_resp = await client.get(_WD_API, params=params, headers=headers)
+
+    resp = FastAPIResponse(
+        content=wd_resp.content,
+        status_code=wd_resp.status_code,
+        media_type=wd_resp.headers.get("content-type", "application/json"),
+    )
+    # Forward Set-Cookie headers back to browser, stripping the wikidata.org domain
+    # so cookies are scoped to the current domain (api.openhistory.app → browser)
+    for value in wd_resp.headers.get_list("set-cookie"):
+        # Remove Domain= attribute so the browser uses the current domain
+        cleaned = re.sub(r';\s*[Dd]omain=[^;]+', '', value)
+        # Remove Secure flag — browser already on HTTPS but cookie would be for api.* subdomain
+        resp.headers.append("Set-Cookie", cleaned)
+    return resp

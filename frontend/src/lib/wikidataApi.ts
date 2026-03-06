@@ -1,6 +1,8 @@
-// Proxied through Vite dev server (/wikidata-api → https://www.wikidata.org/w/api.php)
-// so the browser never makes a direct cross-origin request (avoids Wikimedia CORS allowlist).
-const WD_API = '/wikidata-api';
+// In dev: Vite proxies /wikidata-api → https://www.wikidata.org/w/api.php
+// In production: requests go to the FastAPI backend proxy at api.openhistory.app/wikidata-api
+const WD_API = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/wikidata-api`
+  : '/wikidata-api';
 
 function wd(p: Record<string, string>) {
   return new URLSearchParams({ format: 'json', ...p }).toString();
@@ -21,7 +23,7 @@ export interface LoginResult {
   ok: boolean;
   error?: string;
   /** Set when Wikipedia requires email verification — show a code input */
-  ui?: { message: string; logintoken: string };
+  ui?: { message: string; logintoken: string; requestId: string; fieldName: string };
 }
 
 export async function login(username: string, password: string): Promise<LoginResult> {
@@ -44,18 +46,23 @@ export async function login(username: string, password: string): Promise<LoginRe
   if (data.clientlogin?.status === 'PASS') return { ok: true };
   // UI status = additional verification step required (e.g. email code)
   if (data.clientlogin?.status === 'UI') {
-    return { ok: false, ui: { message: data.clientlogin.message ?? 'Verification required', logintoken } };
+    // Extract the actual request ID and field name from the API response
+    const req = data.clientlogin.requests?.[0];
+    const requestId = req?.id ?? 'EmailAuthenticationRequest';
+    const fieldName = Object.keys(req?.fields ?? { code: 1 })[0] ?? 'code';
+    console.log('[wiki login] UI step, requestId=', requestId, 'fieldName=', fieldName);
+    return { ok: false, ui: { message: data.clientlogin.message ?? 'Verification required', logintoken, requestId, fieldName } };
   }
   return { ok: false, error: data.clientlogin?.message ?? 'Login failed' };
 }
 
 /** Continue login after a UI verification step (e.g. email code). */
-export async function loginContinue(logintoken: string, code: string): Promise<LoginResult> {
+export async function loginContinue(logintoken: string, code: string, requestId = 'EmailAuthenticationRequest', fieldName = 'code'): Promise<LoginResult> {
   const body = new URLSearchParams({
     action: 'clientlogin', format: 'json',
     logincontinue: '1',
     logintoken,
-    'EmailAuthenticationRequest.code': code,
+    [`${requestId}.${fieldName}`]: code,
   });
   const res = await fetch(WD_API, { method: 'POST', body, credentials: 'include' });
   const data = await res.json();

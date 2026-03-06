@@ -72,7 +72,7 @@ export function WikiEditForm({ feature, field, wikiAuth, onAuth, onSuccess, onCl
     if (!loginUi) return;
     setLoginError('');
     setLoggingIn(true);
-    const result = await loginContinue(loginUi.logintoken, verifyCode.trim());
+    const result = await loginContinue(loginUi.logintoken, verifyCode.trim(), loginUi.requestId, loginUi.fieldName);
     setLoggingIn(false);
     if (result.ok) {
       onAuth(loginUser);
