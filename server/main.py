@@ -719,6 +719,33 @@ def get_overrides():
         conn.close()
 
 
+@app.get("/api/polities/overrides")
+def get_polity_overrides():
+    """
+    Return all manually-edited polities as a GeoJSON FeatureCollection.
+
+    The frontend fetches this on startup and merges it over the static seed.geojson,
+    so user corrections (year_start, year_end, etc.) survive hard refreshes without
+    requiring a pipeline re-run.
+    """
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT id, wikidata_qid, slug, name, wikipedia_title, wikipedia_summary, wikipedia_url,
+                   year_start, year_end, date_is_fuzzy, polity_type,
+                   capital_name, capital_wikidata_qid, lng, lat,
+                   preceded_by_qid, succeeded_by_qid, sovereign_qids, p31_qids
+            FROM polities
+            WHERE manually_edited_at IS NOT NULL
+            ORDER BY manually_edited_at DESC
+        """)
+        features = [_build_polity_feature(dict(r)) for r in cur.fetchall()]
+        return {"type": "FeatureCollection", "features": features, "count": len(features)}
+    finally:
+        conn.close()
+
+
 @app.get("/api/hidden-modern-nations")
 def get_hidden_modern_nations():
     """Return all hidden modern nation polity ids with their hide_until_year."""

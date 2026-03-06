@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { checkLogin } from './lib/wikidataApi';
-import { fetchOverrides, fetchHiddenNations, addHiddenNation, removeHiddenNation, removeTerritoryMappingsByPolity, deleteTerritoryMapping, fetchManualPolities } from './lib/api';
+import { fetchOverrides, fetchPolityOverrides, fetchHiddenNations, addHiddenNation, removeHiddenNation, removeTerritoryMappingsByPolity, deleteTerritoryMapping, fetchManualPolities } from './lib/api';
 import { MapView } from './components/MapView';
 import { TerritoryMappingModal } from './components/TerritoryMappingModal';
 import { TimelineBar } from './components/TimelineBar';
@@ -252,16 +252,18 @@ export default function App() {
     }
   }, [hiddenNations]);
 
-  // Merge API-persisted corrections over the baseline on startup
+  // Merge API-persisted corrections over the baseline on startup (events + polities)
   useEffect(() => {
-    fetchOverrides()
-      .then((overrides) => {
-        if (overrides.features.length === 0) return;
+    Promise.allSettled([fetchOverrides(), fetchPolityOverrides()])
+      .then(([eventsResult, politiesResult]) => {
+        const allFeatures: GeoJSON.Feature[] = [];
+        if (eventsResult.status === 'fulfilled') allFeatures.push(...eventsResult.value.features);
+        if (politiesResult.status === 'fulfilled') allFeatures.push(...politiesResult.value.features);
+        if (allFeatures.length === 0) return;
         setOverrideMap(new Map(
-          overrides.features.map((f) => [(f.properties as { id: string }).id, f]),
+          allFeatures.map((f) => [(f.properties as { id: string }).id, f]),
         ));
-      })
-      .catch(() => {/* API not running — no overrides applied */});
+      });
   }, []);
 
   useEffect(() => {

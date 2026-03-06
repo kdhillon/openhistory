@@ -75,6 +75,16 @@ export async function fetchOverrides(): Promise<GeoJSON.FeatureCollection> {
   return res.json();
 }
 
+/**
+ * Fetch all manually-edited polities since the last GeoJSON generation.
+ * Returns a FeatureCollection to merge over the static seed.geojson.
+ */
+export async function fetchPolityOverrides(): Promise<GeoJSON.FeatureCollection> {
+  const res = await fetch(`${API_BASE}/polities/overrides`);
+  if (!res.ok) throw new Error(`API GET polity overrides failed (${res.status})`);
+  return res.json();
+}
+
 export interface HiddenNation {
   polityId: string;
   hideUntilYear: number;
