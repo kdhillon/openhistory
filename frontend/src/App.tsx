@@ -285,11 +285,13 @@ export default function App() {
       if (e.key !== 'Escape') return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (mappingTarget) { setMappingTarget(null); return; }
+      if (showWelcome) { setShowWelcome(false); return; }
       setSelectedFeature(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [mappingTarget, showWelcome]);
 
   const navigate = useCallback((to: string) => {
     window.history.pushState({}, '', to);
