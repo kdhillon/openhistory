@@ -1,41 +1,45 @@
-# Open History
+# OpenHistory
 
 An open-source interactive historical atlas. A real-world map with a timeline slider that lets you scroll through human history — watching events unfold and civilizations rise and fall.
 
-Built with MapLibre GL JS, React, TypeScript, and Wikipedia/Wikidata as the source of truth for all historical data.
+**Live at [openhistory.app](https://openhistory.app)**
+
+Built with MapLibre GL JS, React, TypeScript, and Wikipedia/Wikidata as the source of truth for all historical data. Territory polygons from [historical-basemaps](https://github.com/aourednik/historical-basemaps).
 
 ---
 
 ## Status: In Progress
 
-This project is under active development. The core map and data pipeline are working; the focus now is expanding data coverage and polishing the UX.
+This project is under active development. The core map, data pipeline, and deployment are working; the focus now is expanding data coverage and adding territory editing.
 
 ### Done
 - **Map** — MapLibre GL JS with OpenFreeMap basemap (light Wikipedia-style theme)
-- **Timeline** — scrubber, play/pause, step controls, keyboard shortcuts (←/→/Space)
-- **Events** — Maki icon markers per category (battle, war, politics, religion, disaster, exploration, science, culture)
+- **Timeline** — scrubber, play/pause, step controls, adjustable speed, keyboard shortcuts (←/→/Space)
+- **Events** — Lucide SVG icon markers per category (battle, war, politics, religion, disaster, exploration, science, culture)
 - **Locations** — cities, regions, and countries shown at appropriate zoom levels
-- **Polities** — time-bounded sovereign entities (empires, kingdoms, republics, etc.) shown as distinct markers at their capitals
+- **Polities** — time-bounded sovereign entities (empires, kingdoms, republics, colonies, viceroyalties, etc.) shown as markers at their capitals
+- **Territory polygons** — shaded boundary overlays from the historical-basemaps dataset, linked to polities via name matching; displayed per snapshot year and interpolated between snapshots
+- **Territory mapping UI** — users can link unmatched (grey) territories to polities by clicking and searching
 - **Category filter** — two-row bar for toggling event/location/polity types
 - **Info panel** — Wikipedia summary, categories, date range, and location for any clicked feature
-- **In-app editing** — dates and locations can be corrected in-app; edits persist via a FastAPI overrides system
-- **Data pipeline** — Wikidata SPARQL + Wikipedia API → PostgreSQL (37 active event categories using transitive P279*)
-- **Polity pipeline** — separate pipeline for sovereign political entities
+- **In-app Wikidata editing** — dates and locations can be corrected in-app and submitted **directly to Wikidata** (requires a Wikimedia account)
+- **Data pipeline** — Wikidata SPARQL + Wikipedia API → PostgreSQL (37+ active event categories using transitive P279*)
+- **Polity pipeline** — separate pipeline for sovereign political entities (14 SPARQL categories including colonies, viceroyalties, khanates, regencies)
 - **Post-processing** — cleanup, sitelinks backfill, GeoJSON export, LLM category assignment
 - **Event fade-out** — single-year events fade out over a 10-year window rather than snapping off
 - **Zoom filtering** — events filtered by importance (`sitelinks_count`) at low zoom levels
-- **Data loaded** — 1790–1810 (2,125 events, 742 locations)
+- **Major events panel** — bottom bar showing significant events in the current time window
+- **Deployment** — frontend + backend on [Railway](https://railway.app), auto-migrations on deploy
+- **Data loaded** — events: 1770–1820 · polities: ~1,300+ across all of history
 
 ### To Do
-- **Data coverage** — pipeline has only been run for 1790–1810; needs to expand across all of history
-- **Territory polygons** — `polity_territories` table is in the schema but unpopulated; no territory editor yet
+- **Data coverage** — pipeline has only been run for 1770–1820; needs to expand across all of history
+- **Territory boundary editing** — draw/correct polygon shapes and contribute back to the historical-basemaps project as new snapshots
 - **Location dates** — `founded_year` / `dissolved_year` mostly NULL; needs Wikidata backfill
 - **Polity succession** — `preceded_by` / `succeeded_by` chain is stored but not surfaced in the UI
-- **Related events** — semantically related events panel in the info card (see Vector Embeddings section below)
+- **Related events** — semantically related events panel in the info card
 - **Natural language search** — search by concept, not just by name
 - **Mobile layout** — not yet optimized for small screens
-- **Deployment** — not yet deployed; target is Vercel (frontend) + Railway (backend + DB)
-- **User contributions** — no account system yet; edits are local-admin only
 
 ---
 
@@ -46,8 +50,8 @@ This project is under active development. The core map and data pipeline are wor
 | Frontend | React 18, TypeScript, Vite |
 | Map | MapLibre GL JS, OpenFreeMap tiles |
 | Backend | FastAPI (Python), PostgreSQL 16 |
-| Data | Wikidata SPARQL, Wikipedia REST API |
-| Infrastructure | Docker (local DB), Vercel + Railway (planned) |
+| Data | Wikidata SPARQL, Wikipedia REST API, historical-basemaps GeoJSON |
+| Infrastructure | Docker (local DB), Railway (production) |
 
 ---
 
@@ -73,7 +77,7 @@ docker run -d \
   -v openhistory_pgdata:/var/lib/postgresql/data \
   postgres:16
 
-# Subsequent runs — just start the existing container
+# Subsequent runs
 docker start openhistory-postgres
 ```
 
@@ -86,7 +90,7 @@ for f in db/migrations/*.sql; do
 done
 ```
 
-Migrations run from `001_initial_schema.sql` through `010_polity_sovereign.sql`. Apply them in order; they are idempotent.
+Migrations are in `db/migrations/` and numbered sequentially. Apply them in order; they are idempotent.
 
 ### 3. Copy the environment file
 
@@ -101,7 +105,7 @@ cp .env.example .env
 # Events — fetch from Wikidata + Wikipedia for a date range
 python3 -m pipeline.run_local --min-year 1770 --max-year 1820
 
-# Polities — fetch sovereign political entities for the same range
+# Polities — fetch sovereign political entities
 python3 -m pipeline.run_polities --min-year 1770 --max-year 1820
 ```
 
@@ -124,7 +128,16 @@ python3 scripts/fix-empty-categories.py   # assign missing categories
 python3 scripts/quality-check.py --no-fail  # audit data quality
 ```
 
-### 5. Run the frontend
+### 5. Import territory polygons (optional)
+
+Territory boundary data comes from [historical-basemaps](https://github.com/aourednik/historical-basemaps). Import a snapshot:
+
+```bash
+python3 scripts/import-territories.py --snapshot 1800
+python3 scripts/expand-territory-polities.py --snapshot 1800
+```
+
+### 6. Run the frontend
 
 ```bash
 cd frontend && npm install && npm run dev
@@ -132,11 +145,10 @@ cd frontend && npm install && npm run dev
 
 Open [http://localhost:5173](http://localhost:5173).
 
-### 6. Run the API server (needed for in-app edits)
+### 7. Run the API server (needed for in-app edits)
 
 ```bash
-cd server && pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uvicorn server.main:app --reload --port 8000
 ```
 
 The frontend proxies `/api` to `localhost:8000` in dev via Vite config.
@@ -145,7 +157,7 @@ The frontend proxies `/api` to `localhost:8000` in dev via Vite config.
 
 ## Data Model
 
-All historical data flows from Wikidata + Wikipedia through the pipeline into three Postgres tables, then exported to a single GeoJSON file consumed by the frontend.
+All historical data flows from Wikidata + Wikipedia through the pipeline into Postgres, then exported to GeoJSON files consumed by the frontend.
 
 ### Entity types
 
@@ -153,14 +165,14 @@ All historical data flows from Wikidata + Wikipedia through the pipeline into th
 |---|---|---|---|
 | Historical event | `events` | `'event'` | Battles, treaties, disasters, etc. |
 | Location | `locations` | `'city'` / `'region'` / `'country'` | Geographic anchors used to pin events |
-| Polity | `polities` | `'polity'` | Time-bounded sovereign entities (empires, kingdoms, etc.) |
+| Polity | `polities` | `'polity'` | Time-bounded sovereign entities (empires, kingdoms, colonies, etc.) |
+| Territory polygon | `snapshot_polygons` | — (served via `/api/territories`) | Boundary polygons from historical-basemaps, linked to polities |
 
 ### `events` table
 
 | Column | Type | Description |
 |---|---|---|
 | `wikidata_qid` | TEXT UNIQUE | Wikidata Q-identifier |
-| `slug` | TEXT | Wikipedia title slug |
 | `title` | TEXT | Display title |
 | `year_start` / `year_end` | INT | Year range (negative = BCE) |
 | `date_is_fuzzy` | BOOL | Approximate date |
@@ -170,18 +182,6 @@ All historical data flows from Wikidata + Wikipedia through the pipeline into th
 | `categories` | TEXT[] | e.g. `['battle', 'war']` |
 | `part_of_qids` | TEXT[] | Wikidata P361 (part-of) parent event QIDs |
 | `sitelinks_count` | INT | Wikipedia language editions (importance signal for zoom filtering) |
-
-### `locations` table
-
-Referenced softly by `events.location_wikidata_qid` — no FK, so events are never dropped for a missing location.
-
-| Column | Type | Description |
-|---|---|---|
-| `wikidata_qid` | TEXT UNIQUE | Wikidata Q-identifier |
-| `name` | TEXT | Display name |
-| `lng` / `lat` | FLOAT | Centroid coordinates |
-| `location_type` | TEXT | `'city'`, `'region'`, or `'country'` |
-| `founded_year` / `dissolved_year` | INT | Lifespan from Wikidata P571/P576 |
 
 ### `polities` table
 
@@ -197,7 +197,15 @@ Time-bounded sovereign political entities — historically specific ("French Fir
 | `preceded_by_qid` / `succeeded_by_qid` | TEXT | Succession chain |
 | `sovereign_qids` | TEXT[] | Parent polity QIDs |
 
-The related `polity_territories` table (schema exists, currently empty) will hold time-varying polygon boundaries once a territory editor is built.
+### Territory tables
+
+Territory polygons are stored across three tables:
+
+- **`territory_snapshots`** — tracks which snapshot years have been imported (e.g. 1783, 1800, 1815)
+- **`snapshot_polygons`** — one row per polygon per snapshot, with the GeoJSON boundary stored as JSONB and a `polity_id` FK (nullable for unmatched territories)
+- **`territory_name_mappings`** — persistent `(hb_name, snapshot_year) → polity_id` lookup, built by auto-matching and user corrections
+
+Territory data comes from [aourednik/historical-basemaps](https://github.com/aourednik/historical-basemaps) (GPL-3.0), which provides 46 hand-curated snapshots spanning 100,000 BCE → 2010 CE.
 
 ### Location resolution (events → map coordinates)
 
