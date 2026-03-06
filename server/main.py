@@ -45,7 +45,7 @@ app.add_middleware(
         "https://www.openhistory.app",
     ],
     allow_methods=["GET", "PATCH", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Write-Secret"],
 )
 
 # ── DB helpers ─────────────────────────────────────────────────────────────────
