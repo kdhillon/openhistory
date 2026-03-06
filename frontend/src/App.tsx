@@ -53,14 +53,26 @@ export default function App() {
   const { territoryFeatures, refresh: refreshTerritories } =
     useTerritoriesSource({ currentYear, stepSize: timeline.stepSize });
 
-  const activeSnapshotYear = useMemo(() => {
+  const { activeSnapshotYear, prevSnapshotYear, nextSnapshotYear } = useMemo(() => {
+    const years = [...new Set(
+      territoryFeatures.map((f) => (f.properties as { snapshotYear: number }).snapshotYear)
+    )].sort((a, b) => a - b);
+
+    let active: number | null = null;
     for (const f of territoryFeatures) {
       const p = f.properties as { intervalStart: number; intervalEnd: number | null; snapshotYear: number };
       if (p.intervalStart <= currentYear && (p.intervalEnd === null || currentYear <= p.intervalEnd)) {
-        return p.snapshotYear;
+        active = p.snapshotYear;
+        break;
       }
     }
-    return null;
+
+    const idx = active != null ? years.indexOf(active) : -1;
+    return {
+      activeSnapshotYear: active,
+      prevSnapshotYear: idx > 0 ? years[idx - 1] : null,
+      nextSnapshotYear: idx >= 0 && idx < years.length - 1 ? years[idx + 1] : null,
+    };
   }, [territoryFeatures, currentYear]);
 
   // Map of id → patched feature for manual edits (applied on top of base features)
@@ -81,7 +93,6 @@ export default function App() {
   const [hiddenNations, setHiddenNations] = useState<Map<string, number>>(new Map());
   // Unmatched territory the user clicked — shows the mapping assignment modal
   const [mappingTarget, setMappingTarget] = useState<{ hbName: string; snapshotYear: number } | null>(null);
-  const [snapshotYears, setSnapshotYears] = useState<number[]>([]);
   // QID of the major event chip selected in the bottom bar (null = no filter)
   const [majorEventFilter, setMajorEventFilter] = useState<string | null>(null);
   const [hasMajorEvents, setHasMajorEvents] = useState(false);
@@ -180,14 +191,6 @@ export default function App() {
 
   useEffect(() => {
     checkLogin().then((username) => setWikiAuth(username));
-  }, []);
-
-  useEffect(() => {
-    const base = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
-    fetch(`${base}/territory-snapshots`)
-      .then((r) => r.json())
-      .then((d: { years: number[] }) => setSnapshotYears(d.years))
-      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -400,8 +403,8 @@ export default function App() {
             isLoading: eventsLoading,
             error: eventsError,
             snapshotYear: activeSnapshotYear,
-            prevSnapshotYear: activeSnapshotYear != null ? (snapshotYears[snapshotYears.indexOf(activeSnapshotYear) - 1] ?? null) : null,
-            nextSnapshotYear: activeSnapshotYear != null ? (snapshotYears[snapshotYears.indexOf(activeSnapshotYear) + 1] ?? null) : null,
+            prevSnapshotYear,
+            nextSnapshotYear,
             onSeekToSnapshot: (y) => timeline.seek(encodeDate(y, 1, 1)),
           }}
       />
