@@ -50,17 +50,8 @@ export default function App() {
   const { eventFeatures, windowInfo, isLoading: eventsLoading, error: eventsError } =
     useEventSource({ currentYear, stepSize: timeline.stepSize });
 
-  const { territoryFeatures, refresh: refreshTerritories } =
+  const { territoryFeatures, snapshotYears, refresh: refreshTerritories } =
     useTerritoriesSource({ currentYear, stepSize: timeline.stepSize });
-
-  const [allSnapshotYears, setAllSnapshotYears] = useState<number[]>([]);
-  useEffect(() => {
-    const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
-    fetch(`${API_BASE}/territory-snapshots`)
-      .then((r) => r.json())
-      .then((data: { years: number[] }) => setAllSnapshotYears(data.years))
-      .catch(console.error);
-  }, []);
 
   const { activeSnapshotYear, prevSnapshotYear, nextSnapshotYear } = useMemo(() => {
     let active: number | null = null;
@@ -72,13 +63,13 @@ export default function App() {
       }
     }
 
-    const idx = active != null ? allSnapshotYears.indexOf(active) : -1;
+    const idx = active != null ? snapshotYears.indexOf(active) : -1;
     return {
       activeSnapshotYear: active,
-      prevSnapshotYear: idx > 0 ? allSnapshotYears[idx - 1] : null,
-      nextSnapshotYear: idx >= 0 && idx < allSnapshotYears.length - 1 ? allSnapshotYears[idx + 1] : null,
+      prevSnapshotYear: idx > 0 ? snapshotYears[idx - 1] : null,
+      nextSnapshotYear: idx >= 0 && idx < snapshotYears.length - 1 ? snapshotYears[idx + 1] : null,
     };
-  }, [territoryFeatures, currentYear, allSnapshotYears]);
+  }, [territoryFeatures, currentYear, snapshotYears]);
 
   // Map of id → patched feature for manual edits (applied on top of base features)
   const [overrideMap, setOverrideMap] = useState<Map<string, GeoJSON.Feature>>(new Map());

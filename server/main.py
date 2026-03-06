@@ -646,12 +646,16 @@ def get_territories(year_min: int, year_max: int):
                 },
             })
 
+        cur.execute("SELECT snapshot_year FROM territory_snapshots ORDER BY snapshot_year")
+        all_snapshot_years = [row["snapshot_year"] for row in cur.fetchall()]
+
         return {
             "type": "FeatureCollection",
             "features": features,
             "count": len(features),
             "yearMin": year_min,
             "yearMax": year_max,
+            "snapshotYears": all_snapshot_years,
         }
     finally:
         conn.close()
