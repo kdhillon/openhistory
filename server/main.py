@@ -944,7 +944,7 @@ def get_territories(year_min: int, year_max: int):
                 sp.sub_year_start, sp.sub_year_end, sp.source_polygon_id,
                 sp.explicitly_unlinked,
                 CASE WHEN sp.explicitly_unlinked THEN NULL
-                     ELSE COALESCE(sp.polity_id, tnm.polity_id) END AS polity_id,
+                     ELSE COALESCE(tnm.polity_id, sp.polity_id) END AS polity_id,
                 p.slug  AS polity_slug,
                 p.name  AS polity_name,
                 p.polity_type,
