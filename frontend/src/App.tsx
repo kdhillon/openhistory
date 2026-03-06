@@ -72,11 +72,19 @@ export default function App() {
   const timeline = useTimeline();
   const currentYear = decodeDate(timeline.currentDateInt).year;
 
+  // Debounce year for API calls — UI renders at full speed but DB requests only
+  // fire 300ms after the user stops dragging, preventing a flood of cancelled queries.
+  const [debouncedYear, setDebouncedYear] = useState(currentYear);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedYear(currentYear), 300);
+    return () => clearTimeout(t);
+  }, [currentYear]);
+
   const { eventFeatures, windowInfo, isLoading: eventsLoading, error: eventsError } =
-    useEventSource({ currentYear, stepSize: timeline.stepSize });
+    useEventSource({ currentYear: debouncedYear, stepSize: timeline.stepSize });
 
   const { territoryFeatures, snapshotYears, refresh: refreshTerritories, isLoading: territoriesLoading, error: territoriesError } =
-    useTerritoriesSource({ currentYear, stepSize: timeline.stepSize });
+    useTerritoriesSource({ currentYear: debouncedYear, stepSize: timeline.stepSize });
 
   const { activeSnapshotYear, prevSnapshotYear, nextSnapshotYear } = useMemo(() => {
     // Active snapshot = highest snapshot year that has started (snapshotYear <= currentYear).
