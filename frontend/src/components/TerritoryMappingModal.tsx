@@ -18,11 +18,11 @@ export function TerritoryMappingModal({ hbName, snapshotYear, polities, onClose,
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
-  // Wikidata search state
+  // Wikipedia search state — only triggered on demand via "See More"
   const [wdResults, setWdResults] = useState<EntityResult[]>([]);
   const [wdLoading, setWdLoading] = useState(false);
+  const [wdOpen, setWdOpen] = useState(false);
   const [importingQid, setImportingQid] = useState<string | null>(null);
-  const wdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -36,21 +36,18 @@ export function TerritoryMappingModal({ hbName, snapshotYear, polities, onClose,
 
   const existingQids = useMemo(() => new Set(polities.map((p) => p.wikidataQid).filter(Boolean)), [polities]);
 
-  // Wikidata search — debounced, filters out QIDs already in DB
-  useEffect(() => {
-    if (wdTimerRef.current) clearTimeout(wdTimerRef.current);
-    const q = query.trim();
-    if (!q) { setWdResults([]); return; }
-    wdTimerRef.current = setTimeout(async () => {
-      setWdLoading(true);
-      try {
-        const results = await searchEntities(q);
-        setWdResults(results.filter((r) => !existingQids.has(r.id)));
-      } catch { setWdResults([]); }
-      finally { setWdLoading(false); }
-    }, 400);
-    return () => { if (wdTimerRef.current) clearTimeout(wdTimerRef.current); };
-  }, [query, existingQids]);
+  // Reset Wikipedia results when the query changes so "See More" re-searches
+  useEffect(() => { setWdResults([]); setWdOpen(false); }, [query]);
+
+  async function handleSeeMore() {
+    setWdOpen(true);
+    setWdLoading(true);
+    try {
+      const results = await searchEntities(query.trim() || hbName);
+      setWdResults(results.filter((r) => !existingQids.has(r.id)));
+    } catch { setWdResults([]); }
+    finally { setWdLoading(false); }
+  }
 
   const selected = polities.find((p) => p.id === selectedId) ?? null;
 
@@ -151,8 +148,19 @@ export function TerritoryMappingModal({ hbName, snapshotYear, polities, onClose,
                 ))}
               </div>
 
-              {/* Wikidata results — not in DB */}
-              {(wdResults.length > 0 || wdLoading) && (
+              {/* See More / Wikipedia results */}
+              {!wdOpen ? (
+                <button
+                  onClick={handleSeeMore}
+                  style={{
+                    background: 'none', border: '1px solid #2a3450', borderRadius: 6,
+                    color: '#8899bb', fontSize: 12, padding: '7px 12px',
+                    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                  }}
+                >
+                  See More — search Wikipedia
+                </button>
+              ) : (
                 <div style={{ flexShrink: 0 }}>
                   <div style={{
                     fontSize: 11, fontWeight: 600, letterSpacing: '0.06em',
@@ -160,36 +168,41 @@ export function TerritoryMappingModal({ hbName, snapshotYear, polities, onClose,
                   }}>
                     From Wikipedia {wdLoading && <span style={{ color: '#445', fontWeight: 400 }}>· searching…</span>}
                   </div>
-                  <div style={{ border: '1px solid #2a3450', borderRadius: 6, background: '#11172a' }}>
-                    {wdResults.map((r) => (
-                      <div
-                        key={r.id}
-                        style={{
-                          padding: '8px 12px', borderBottom: '1px solid #1e2a3e',
-                          display: 'flex', alignItems: 'baseline', gap: 8,
-                        }}
-                      >
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ fontSize: 13 }}>{r.label}</span>
-                          {r.description && (
-                            <span style={{ fontSize: 11, color: '#667', marginLeft: 8 }}>
-                              {r.description}
-                            </span>
-                          )}
+                  {!wdLoading && wdResults.length === 0 && (
+                    <div style={{ fontSize: 12, color: '#556', padding: '6px 0' }}>No results found.</div>
+                  )}
+                  {wdResults.length > 0 && (
+                    <div style={{ border: '1px solid #2a3450', borderRadius: 6, background: '#11172a' }}>
+                      {wdResults.map((r) => (
+                        <div
+                          key={r.id}
+                          style={{
+                            padding: '8px 12px', borderBottom: '1px solid #1e2a3e',
+                            display: 'flex', alignItems: 'baseline', gap: 8,
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ fontSize: 13 }}>{r.label}</span>
+                            {r.description && (
+                              <span style={{ fontSize: 11, color: '#667', marginLeft: 8 }}>
+                                {r.description}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                            <span style={{ fontSize: 10, color: '#445' }}>{r.id}</span>
+                            <button
+                              onClick={() => handleImport(r)}
+                              disabled={importingQid === r.id}
+                              style={btnStyle('#2a5a3a', importingQid === r.id)}
+                            >
+                              {importingQid === r.id ? 'Importing…' : 'Import'}
+                            </button>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                          <span style={{ fontSize: 10, color: '#445' }}>{r.id}</span>
-                          <button
-                            onClick={() => handleImport(r)}
-                            disabled={importingQid === r.id}
-                            style={btnStyle('#2a5a3a', importingQid === r.id)}
-                          >
-                            {importingQid === r.id ? 'Importing…' : 'Import'}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

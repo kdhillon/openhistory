@@ -190,11 +190,59 @@ export interface EntityResult { id: string; label: string; description: string }
 
 export async function searchEntities(query: string): Promise<EntityResult[]> {
   if (!query.trim()) return [];
-  const res = await fetch(`${WD_API}?${wd({ action: 'wbsearchentities', search: query, language: 'en', limit: '8', type: 'item' })}`);
-  const data = await res.json();
-  return (data.search ?? []).map((r: { id: string; label?: string; description?: string }) => ({
-    id: r.id, label: r.label ?? r.id, description: r.description ?? '',
-  }));
+  // Run Wikidata entity search and Wikipedia article search in parallel.
+  // Wikipedia search handles disambiguated titles (e.g. "Louisiana (New France)")
+  // that Wikidata label search misses entirely.
+  const [wdResults, wpResults] = await Promise.all([
+    _searchWikidata(query),
+    _searchViaWikipedia(query),
+  ]);
+  // Merge: Wikidata results first, then Wikipedia-resolved results not already included
+  const seen = new Set(wdResults.map((r) => r.id));
+  return [...wdResults, ...wpResults.filter((r) => !seen.has(r.id))];
+}
+
+async function _searchWikidata(query: string): Promise<EntityResult[]> {
+  try {
+    const res = await fetch(`${WD_API}?${wd({ action: 'wbsearchentities', search: query, language: 'en', limit: '8', type: 'item' })}`);
+    const data = await res.json();
+    return (data.search ?? []).map((r: { id: string; label?: string; description?: string }) => ({
+      id: r.id, label: r.label ?? r.id, description: r.description ?? '',
+    }));
+  } catch { return []; }
+}
+
+async function _searchViaWikipedia(query: string): Promise<EntityResult[]> {
+  try {
+    // 1. Search Wikipedia article titles (CORS-safe via origin=*)
+    const wpRes = await fetch(`https://en.wikipedia.org/w/api.php?${new URLSearchParams({
+      action: 'query', list: 'search', srsearch: query, format: 'json',
+      srlimit: '8', srnamespace: '0', origin: '*',
+    })}`);
+    const wpData = await wpRes.json();
+    const titles: string[] = (wpData.query?.search ?? []).map((r: { title: string }) => r.title);
+    if (!titles.length) return [];
+
+    // 2. Resolve article titles → Wikidata QIDs via our proxy
+    const wdRes = await fetch(`${WD_API}?${wd({
+      action: 'wbgetentities', sites: 'enwiki', titles: titles.join('|'),
+      props: 'info|labels|descriptions', languages: 'en',
+    })}`);
+    const wdData = await wdRes.json();
+    return Object.values(wdData.entities ?? {})
+      .filter((e: unknown) => {
+        const ent = e as { id?: string; missing?: string };
+        return ent.id && !ent.id.startsWith('-') && ent.missing === undefined;
+      })
+      .map((e: unknown) => {
+        const ent = e as { id: string; labels?: Record<string, { value: string }>; descriptions?: Record<string, { value: string }> };
+        return {
+          id: ent.id,
+          label: ent.labels?.en?.value ?? ent.id,
+          description: ent.descriptions?.en?.value ?? '',
+        };
+      });
+  } catch { return []; }
 }
 
 export async function submitLocationEdit(
