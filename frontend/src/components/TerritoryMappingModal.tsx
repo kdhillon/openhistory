@@ -182,7 +182,16 @@ export function TerritoryMappingModal({ hbName, snapshotYear, polities, onClose,
                           }}
                         >
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <span style={{ fontSize: 13 }}>{r.label}</span>
+                            <a
+                              href={`https://en.wikipedia.org/wiki/${r.label.replace(/ /g, '_')}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ fontSize: 13, color: '#aac4ff', textDecoration: 'none' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+                              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
+                            >
+                              {r.label}
+                            </a>
                             {r.description && (
                               <span style={{ fontSize: 11, color: '#667', marginLeft: 8 }}>
                                 {r.description}
