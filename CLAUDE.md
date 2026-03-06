@@ -27,6 +27,22 @@ psql $DATABASE_URL -f db/migrations/XXX_new_migration.sql
 
 No local testing step — apply directly to Railway. Keep migrations idempotent (`IF NOT EXISTS`, `ON CONFLICT`, etc.) so they're safe to re-run.
 
+## Development workflow
+
+**Always test backend changes locally before deploying.** The local server connects to the Railway DB, so the full stack works locally:
+
+```
+Browser (localhost:5173) → Vite proxy → local uvicorn (:8000) → Railway DB
+```
+
+Start both before testing any backend change:
+```bash
+source .env && uvicorn server.main:app --reload --port 8000   # terminal 1
+cd frontend && npm run dev                                     # terminal 2
+```
+
+Do NOT deploy to Railway just to test — run locally first. Only deploy when the feature is ready.
+
 ## Key commands
 ```bash
 # Set Railway as active DB (required before any pipeline/script work)
