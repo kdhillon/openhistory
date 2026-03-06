@@ -47,6 +47,16 @@ export default function App() {
   const timeline = useTimeline();
   const currentYear = decodeDate(timeline.currentDateInt).year;
 
+  const activeSnapshotYear = useMemo(() => {
+    for (const f of territoryFeatures) {
+      const p = f.properties as { intervalStart: number; intervalEnd: number | null; snapshotYear: number };
+      if (p.intervalStart <= currentYear && (p.intervalEnd === null || currentYear <= p.intervalEnd)) {
+        return p.snapshotYear;
+      }
+    }
+    return null;
+  }, [territoryFeatures, currentYear]);
+
   const { eventFeatures, windowInfo, isLoading: eventsLoading, error: eventsError } =
     useEventSource({ currentYear, stepSize: timeline.stepSize });
 
@@ -368,7 +378,7 @@ export default function App() {
         onTogglePolity={handleTogglePolityCategory}
         onOpenAbout={() => navigate('/about')}
         onOpenData={() => navigate('/data')}
-        settings={{ windowInfo, isLoading: eventsLoading, error: eventsError }}
+        settings={{ windowInfo, isLoading: eventsLoading, error: eventsError, snapshotYear: activeSnapshotYear, onSeekToSnapshot: (y) => timeline.seek(encodeDate(y, 1, 1)) }}
       />
 
       <div style={{ position: 'absolute', inset: `89px 0 ${64 + (hasMajorEvents ? MAJOR_EVENTS_PANEL_HEIGHT : 0)}px 0` }}>

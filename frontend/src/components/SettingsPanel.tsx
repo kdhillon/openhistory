@@ -9,9 +9,11 @@ export interface SettingsPanelProps {
   windowInfo: WindowInfo | null;
   isLoading: boolean;
   error: string | null;
+  snapshotYear: number | null;
+  onSeekToSnapshot: (year: number) => void;
 }
 
-export function SettingsPanel({ windowInfo, isLoading, error }: SettingsPanelProps) {
+export function SettingsPanel({ windowInfo, isLoading, error, snapshotYear, onSeekToSnapshot }: SettingsPanelProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -80,6 +82,28 @@ export function SettingsPanel({ windowInfo, isLoading, error }: SettingsPanelPro
               <span style={{ color: '#aaa', fontSize: 12 }}>No data loaded</span>
             )}
           </div>
+
+          {snapshotYear !== null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+              <span style={{ color: '#555', fontSize: 12 }}>Territory snapshot</span>
+              <button
+                onClick={() => onSeekToSnapshot(snapshotYear)}
+                style={{
+                  marginLeft: 'auto',
+                  background: '#f0f0f0',
+                  border: 'none',
+                  borderRadius: 4,
+                  padding: '1px 6px',
+                  fontSize: 11,
+                  color: '#444',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {snapshotYear}
+              </button>
+            </div>
+          )}
 
           {error && (
             <div
