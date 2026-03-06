@@ -1,13 +1,9 @@
 -- Migration 013: fix territory tables + add missing events columns
 --
--- 1. Drops and recreates territory tables that were partially created on Railway
---    due to a failed 010_territory_snapshots.sql. Safe: no territory data on Railway.
--- 2. Adds month_start/day_start/month_end/day_end/sitelinks_count to events —
---    these were added locally but never via a migration.
-
-DROP TABLE IF EXISTS territory_name_mappings CASCADE;
-DROP TABLE IF EXISTS snapshot_polygons CASCADE;
-DROP TABLE IF EXISTS territory_snapshots CASCADE;
+-- Originally dropped and recreated territory tables; DROP statements removed
+-- now that Railway has live territory data. CREATE IF NOT EXISTS is a no-op
+-- when tables already exist with the correct schema.
+-- Also adds month_start/day_start/month_end/day_end/sitelinks_count to events.
 
 CREATE TABLE IF NOT EXISTS territory_snapshots (
   snapshot_year   INT PRIMARY KEY,
