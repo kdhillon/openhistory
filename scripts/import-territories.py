@@ -80,39 +80,37 @@ def fetch_snapshot(year: int) -> dict:
     return data
 
 
-# Common word substitutions for normalizing name variants before fuzzy matching.
-# These handle cases where HB and Wikidata use different conventions for the
-# same entity (e.g. "Qing Empire" vs "Qing dynasty").
-_WORD_SUBS = [
-    ("empire", "dynasty"),
-    ("dynasty", "empire"),
-    ("kingdom", "empire"),
-    ("empire", "kingdom"),
-]
+# Generic political type words that carry no discriminative value and should be
+# stripped from both sides before comparing. Without this, "Mysore Kingdom" and
+# "Haji Kingdom" would share the " kingdom" suffix and get inflated similarity.
+# Stripping these also makes _WORD_SUBS unnecessary: "Qing Empire" and
+# "Qing dynasty" both reduce to "qing" and match perfectly.
+_STOPWORDS = {
+    "kingdom", "empire", "dynasty", "republic", "sultanate", "duchy",
+    "principality", "confederation", "confederacy", "union", "territory",
+    "province", "state", "khanate", "caliphate", "emirate", "shogunate",
+    "electorate", "margraviate", "landgraviate", "palatinate", "dominion",
+    "the", "of", "and",
+}
 
 
 def normalize(name: str) -> str:
-    """Lowercase, strip common prefixes/articles for fuzzy matching."""
+    """Lowercase, strip generic prefixes, then remove stopword tokens."""
     s = name.lower().strip()
     for prefix in ("the ", "kingdom of ", "empire of ", "republic of ",
                    "sultanate of ", "duchy of ", "principality of ",
                    "confederation of ", "union of ", "imperial "):
         if s.startswith(prefix):
             s = s[len(prefix):]
-    return s
+    # Remove generic political-type words from anywhere in the name so that
+    # shared suffixes like " kingdom" or " empire" don't inflate match scores.
+    tokens = [t for t in s.split() if t not in _STOPWORDS]
+    return " ".join(tokens).strip() if tokens else s
 
 
 def similarity(a: str, b: str) -> float:
     na, nb = normalize(a), normalize(b)
-    base = SequenceMatcher(None, na, nb).ratio()
-    # Also try word substitutions to catch "Qing Empire" vs "Qing dynasty" etc.
-    best = base
-    for w_from, w_to in _WORD_SUBS:
-        alt = na.replace(w_from, w_to)
-        s = SequenceMatcher(None, alt, nb).ratio()
-        if s > best:
-            best = s
-    return best
+    return SequenceMatcher(None, na, nb).ratio()
 
 
 def match_name(

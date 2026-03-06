@@ -82,42 +82,7 @@ export function TimelineBar({
 
   return (
     <div style={styles.bar}>
-      {/* Playback controls */}
-      <div style={styles.controls}>
-        <button style={styles.jumpBtn} onClick={jumpBack} title={`Back ${JUMP_STEPS} steps`}>−5</button>
-        <button style={styles.stepBtn} onClick={() => onStep(-1)} title="Step back (←)">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M3 2v10M10.5 2L5 7l5.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-        <button style={{ ...styles.playBtn, background: isPlaying ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.05)' }} onClick={onTogglePlay} title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}>
-          {isPlaying
-            ? <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="4" height="12" rx="1"/><rect x="8" y="1" width="4" height="12" rx="1"/></svg>
-            : <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M3 1.5l10 5.5-10 5.5V1.5z"/></svg>
-          }
-        </button>
-        <button style={styles.stepBtn} onClick={() => onStep(1)} title="Step forward (→)">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M11 2v10M3.5 2L9 7 3.5 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-        <button style={styles.jumpBtn} onClick={jumpForward} title={`Forward ${JUMP_STEPS} steps`}>+5</button>
-      </div>
-
-      {/* Slider — operates in dateInt space */}
-      <div style={styles.sliderTrack}>
-        <input
-          type="range"
-          min={DATE_MIN}
-          max={DATE_MAX}
-          step={stepSize}
-          value={currentDateInt}
-          onChange={(e) => onSeek(normalizeDateInt(Number(e.target.value)))}
-          style={styles.slider}
-        />
-      </div>
-
-      {/* Date display — click to type */}
+      {/* Date display — large, bottom left, click to type */}
       <div style={styles.yearBlock}>
         {editing ? (
           <input
@@ -140,6 +105,28 @@ export function TimelineBar({
         )}
       </div>
 
+      {/* Playback controls */}
+      <div style={styles.controls}>
+        <button style={styles.jumpBtn} onClick={jumpBack} title={`Back ${JUMP_STEPS} steps`}>−5</button>
+        <button style={styles.stepBtn} onClick={() => onStep(-1)} title="Step back (←)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 2v10M10.5 2L5 7l5.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        <button style={{ ...styles.playBtn, background: isPlaying ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.05)' }} onClick={onTogglePlay} title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}>
+          {isPlaying
+            ? <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="4" height="12" rx="1"/><rect x="8" y="1" width="4" height="12" rx="1"/></svg>
+            : <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M3 1.5l10 5.5-10 5.5V1.5z"/></svg>
+          }
+        </button>
+        <button style={styles.stepBtn} onClick={() => onStep(1)} title="Step forward (→)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M11 2v10M3.5 2L9 7 3.5 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        <button style={styles.jumpBtn} onClick={jumpForward} title={`Forward ${JUMP_STEPS} steps`}>+5</button>
+      </div>
+
       {/* Settings */}
       <div style={styles.settings}>
         <div style={styles.settingGroup} title="How much time each step/tick advances">
@@ -155,6 +142,19 @@ export function TimelineBar({
           </select>
         </div>
       </div>
+
+      {/* Slider — operates in dateInt space */}
+      <div style={styles.sliderTrack}>
+        <input
+          type="range"
+          min={DATE_MIN}
+          max={DATE_MAX}
+          step={stepSize}
+          value={currentDateInt}
+          onChange={(e) => onSeek(normalizeDateInt(Number(e.target.value)))}
+          style={styles.slider}
+        />
+      </div>
     </div>
   );
 }
@@ -165,7 +165,7 @@ const styles: Record<string, React.CSSProperties> = {
     bottom: 0,
     left: 0,
     right: 0,
-    height: 60,
+    height: 64,
     background: '#ffffff',
     display: 'flex',
     alignItems: 'center',
@@ -216,24 +216,25 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sliderTrack: { flex: 1, display: 'flex', alignItems: 'center' },
   slider: { width: '100%', accentColor: '#3366cc', height: 4, cursor: 'pointer' },
-  yearBlock: { flexShrink: 0, minWidth: 110, textAlign: 'center' },
+  yearBlock: { flexShrink: 0, minWidth: 130, textAlign: 'left' },
   yearLabel: {
-    fontSize: 18,
+    fontSize: 26,
     fontWeight: 700,
     color: '#202122',
-    letterSpacing: '-0.03em',
+    letterSpacing: '-0.04em',
     fontVariantNumeric: 'tabular-nums',
     cursor: 'text',
+    lineHeight: 1,
   },
   yearInput: {
-    width: 130,
-    fontSize: 18,
+    width: 150,
+    fontSize: 26,
     fontWeight: 700,
     color: '#202122',
-    letterSpacing: '-0.03em',
+    letterSpacing: '-0.04em',
     fontVariantNumeric: 'tabular-nums',
     fontFamily: 'inherit',
-    textAlign: 'center',
+    textAlign: 'left',
     background: 'transparent',
     border: 'none',
     borderBottom: '2px solid #3366cc',

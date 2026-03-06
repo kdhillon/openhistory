@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect } from 'react';
 import type { FeatureProperties } from '../types';
 import { eventDateRange, STEP_YEAR } from '../hooks/useTimeline';
 
@@ -12,6 +12,8 @@ interface MajorEvent {
   count: number;
 }
 
+const PANEL_HEIGHT = 44;
+
 interface Props {
   geojson: GeoJSON.FeatureCollection;
   currentDateInt: number;
@@ -19,9 +21,12 @@ interface Props {
   onNavigateToFeature: (feature: FeatureProperties) => void;
   selectedQid: string | null;
   onSelectQid: (qid: string | null) => void;
+  onHasEvents?: (has: boolean) => void;
 }
 
-export function MajorEventsPanel({ geojson, currentDateInt, stepSize, onNavigateToFeature, selectedQid, onSelectQid }: Props) {
+export { PANEL_HEIGHT as MAJOR_EVENTS_PANEL_HEIGHT };
+
+export function MajorEventsPanel({ geojson, currentDateInt, stepSize, onNavigateToFeature, selectedQid, onSelectQid, onHasEvents }: Props) {
   const majorEvents = useMemo<MajorEvent[]>(() => {
     const counts = new Map<string, MajorEvent>();
     const effectiveNow = currentDateInt + stepSize - 1;
@@ -64,12 +69,16 @@ export function MajorEventsPanel({ geojson, currentDateInt, stepSize, onNavigate
     onSelectQid(ev.qid);
   }, [selectedQid, onSelectQid]);
 
+  useEffect(() => {
+    onHasEvents?.(majorEvents.length > 0);
+  }, [majorEvents.length > 0, onHasEvents]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (majorEvents.length === 0) return null;
 
   return (
     <div style={{
       position: 'fixed',
-      bottom: 60,
+      bottom: 64,
       left: 0,
       right: 0,
       height: 44,

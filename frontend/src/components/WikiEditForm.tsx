@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { FeatureProperties } from '../types';
 import {
-  login, logout, getQid, getCsrf,
+  login, loginContinue, logout, getQid, getCsrf,
   submitDateEdit, submitLocationEdit, searchEntities,
   type EntityResult,
 } from '../lib/wikidataApi';
@@ -26,6 +26,9 @@ export function WikiEditForm({ feature, field, wikiAuth, onAuth, onSuccess, onCl
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
+  // Email verification step — set when Wikipedia responds with status=UI
+  const [loginUi, setLoginUi] = useState<{ message: string; logintoken: string } | null>(null);
+  const [verifyCode, setVerifyCode] = useState('');
 
   // Date edit fields — pre-filled from feature
   const [startYear, setStartYear] = useState(feature.yearStart != null ? String(Math.abs(feature.yearStart)) : '');
@@ -58,8 +61,27 @@ export function WikiEditForm({ feature, field, wikiAuth, onAuth, onSuccess, onCl
     if (result.ok) {
       onAuth(loginUser);
       setPhase('edit');
+    } else if (result.ui) {
+      setLoginUi(result.ui);
     } else {
       setLoginError(result.error ?? 'Login failed');
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!loginUi) return;
+    setLoginError('');
+    setLoggingIn(true);
+    const result = await loginContinue(loginUi.logintoken, verifyCode.trim());
+    setLoggingIn(false);
+    if (result.ok) {
+      onAuth(loginUser);
+      setPhase('edit');
+    } else if (result.ui) {
+      setLoginUi(result.ui);
+      setVerifyCode('');
+    } else {
+      setLoginError(result.error ?? 'Verification failed');
     }
   };
 
@@ -137,34 +159,61 @@ export function WikiEditForm({ feature, field, wikiAuth, onAuth, onSuccess, onCl
         <p style={s.desc}>
           Log in with your Wikipedia account to submit edits to Wikidata.
         </p>
-        <div style={s.field}>
-          <label style={s.label}>Username</label>
-          <input
-            style={s.input}
-            value={loginUser}
-            onChange={(e) => setLoginUser(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-            autoFocus
-            autoComplete="username"
-            placeholder="Your Wikipedia username"
-          />
-        </div>
-        <div style={s.field}>
-          <label style={s.label}>Password</label>
-          <input
-            style={s.input}
-            type="password"
-            value={loginPass}
-            onChange={(e) => setLoginPass(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-            autoComplete="current-password"
-          />
-        </div>
+        {loginUi ? (
+          // Email verification step
+          <>
+            <p style={{ ...s.desc, color: '#54595d', marginBottom: 12 }}>{loginUi.message}</p>
+            <div style={s.field}>
+              <label style={s.label}>Verification code</label>
+              <input
+                style={s.input}
+                value={verifyCode}
+                onChange={(e) => setVerifyCode(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleVerifyCode()}
+                autoFocus
+                placeholder="Enter the code from your email"
+                autoComplete="one-time-code"
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={s.field}>
+              <label style={s.label}>Username</label>
+              <input
+                style={s.input}
+                value={loginUser}
+                onChange={(e) => setLoginUser(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                autoFocus
+                autoComplete="username"
+                placeholder="Your Wikipedia username"
+              />
+            </div>
+            <div style={s.field}>
+              <label style={s.label}>Password</label>
+              <input
+                style={s.input}
+                type="password"
+                value={loginPass}
+                onChange={(e) => setLoginPass(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                autoComplete="current-password"
+              />
+            </div>
+          </>
+        )}
         {loginError && <p style={s.errorText}>{loginError}</p>}
         <div style={s.actions}>
-          <button style={s.primaryBtn} onClick={handleLogin} disabled={loggingIn}>
-            {loggingIn ? 'Logging in…' : 'Log in'}
-          </button>
+          {loginUi ? (
+            <button style={s.primaryBtn} onClick={handleVerifyCode} disabled={loggingIn || !verifyCode.trim()}>
+              {loggingIn ? 'Verifying…' : 'Verify'}
+            </button>
+          ) : (
+            <button style={s.primaryBtn} onClick={handleLogin} disabled={loggingIn}>
+              {loggingIn ? 'Logging in…' : 'Log in'}
+            </button>
+          )}
           <a href="https://www.wikipedia.org/wiki/Special:CreateAccount" target="_blank" rel="noopener noreferrer" style={s.ghostLink}>
             Create account ↗
           </a>

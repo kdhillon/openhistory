@@ -17,7 +17,14 @@ export async function checkLogin(): Promise<string | null> {
   } catch { return null; }
 }
 
-export async function login(username: string, password: string): Promise<{ ok: boolean; error?: string }> {
+export interface LoginResult {
+  ok: boolean;
+  error?: string;
+  /** Set when Wikipedia requires email verification — show a code input */
+  ui?: { message: string; logintoken: string };
+}
+
+export async function login(username: string, password: string): Promise<LoginResult> {
   // Step 1: login token
   const tokenRes = await fetch(
     `${WD_API}?${wd({ action: 'query', meta: 'tokens', type: 'login' })}`,
@@ -25,8 +32,6 @@ export async function login(username: string, password: string): Promise<{ ok: b
   );
   const tokenData = await tokenRes.json();
   const logintoken = tokenData.query?.tokens?.logintoken as string;
-  console.log('[WikiAuth] token response:', tokenData);
-  console.log('[WikiAuth] logintoken:', logintoken);
 
   // Step 2: authenticate
   const body = new URLSearchParams({
@@ -36,9 +41,29 @@ export async function login(username: string, password: string): Promise<{ ok: b
   });
   const res = await fetch(WD_API, { method: 'POST', body, credentials: 'include' });
   const data = await res.json();
-  console.log('[WikiAuth] login response:', data);
   if (data.clientlogin?.status === 'PASS') return { ok: true };
+  // UI status = additional verification step required (e.g. email code)
+  if (data.clientlogin?.status === 'UI') {
+    return { ok: false, ui: { message: data.clientlogin.message ?? 'Verification required', logintoken } };
+  }
   return { ok: false, error: data.clientlogin?.message ?? 'Login failed' };
+}
+
+/** Continue login after a UI verification step (e.g. email code). */
+export async function loginContinue(logintoken: string, code: string): Promise<LoginResult> {
+  const body = new URLSearchParams({
+    action: 'clientlogin', format: 'json',
+    logincontinue: '1',
+    logintoken,
+    'EmailAuthenticationRequest.code': code,
+  });
+  const res = await fetch(WD_API, { method: 'POST', body, credentials: 'include' });
+  const data = await res.json();
+  if (data.clientlogin?.status === 'PASS') return { ok: true };
+  if (data.clientlogin?.status === 'UI') {
+    return { ok: false, ui: { message: data.clientlogin.message ?? 'Verification required', logintoken } };
+  }
+  return { ok: false, error: data.clientlogin?.message ?? 'Verification failed' };
 }
 
 export async function logout(): Promise<void> {
