@@ -161,7 +161,7 @@ async function submitClaim(entityId: string, claim: Claim, csrf: string, summary
 
   const res = await fetch(WD_API, { method: 'POST', body, credentials: 'include' });
   const data = await res.json();
-  if (data.error) throw new Error(data.error.info ?? JSON.stringify(data.error));
+  if (data.error) throw new Error(`[${data.error.code ?? '?'}] ${data.error.info ?? JSON.stringify(data.error)}`);
 }
 
 export async function submitDateEdit(
