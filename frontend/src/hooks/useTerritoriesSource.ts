@@ -141,13 +141,6 @@ export function useTerritoriesSource(opts: {
     }
   }, [currentYear, stepSize, currentWindow, doFetch, doPrefetch]);
 
-  // Initial fetch on mount
-  useEffect(() => {
-    const { yearMin, yearMax } = computeWindow(currentYear, stepSize);
-    doFetch(yearMin, yearMax);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const refresh = useCallback(() => {
     const win = currentWindow;
     if (win) doFetch(win.yearMin, win.yearMax);
