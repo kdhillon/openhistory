@@ -1226,6 +1226,7 @@ async def wikidata_proxy(request: Request):
         "User-Agent": "OpenHistory/1.0 (https://openhistory.app)",
         "Accept": "application/json",
     }
+    print(f"[wd-proxy] {request.method} cookies_len={len(cookie_header)}", flush=True)
 
     qs = urllib.parse.urlencode(dict(request.query_params))
     url = f"{_WD_API}?{qs}" if qs else _WD_API
@@ -1249,8 +1250,9 @@ async def wikidata_proxy(request: Request):
     resp = FastAPIResponse(content=content, status_code=status, media_type=content_type)
 
     # Forward Set-Cookie headers, stripping wikidata.org domain so cookies apply to current domain
-    for k, v in resp_headers:
-        if k.lower() == "set-cookie":
-            cleaned = re.sub(r';\s*[Dd]omain=[^;]+', '', v)
-            resp.headers.append("Set-Cookie", cleaned)
+    set_cookies = [(k, v) for k, v in resp_headers if k.lower() == "set-cookie"]
+    print(f"[wd-proxy] response status={status} set-cookie-count={len(set_cookies)}", flush=True)
+    for k, v in set_cookies:
+        cleaned = re.sub(r';\s*[Dd]omain=[^;]+', '', v)
+        resp.headers.append("Set-Cookie", cleaned)
     return resp

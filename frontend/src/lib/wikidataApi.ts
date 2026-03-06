@@ -36,11 +36,10 @@ export async function login(username: string, password: string): Promise<LoginRe
   const logintoken = tokenData.query?.tokens?.logintoken as string;
 
   // Step 2: authenticate
-  // Note: loginreturnurl is for redirect-based OAuth flows and must NOT be included
-  // for direct API-mode login with logincontinue (they are mutually exclusive modes).
   const body = new URLSearchParams({
     action: 'clientlogin', format: 'json',
     logintoken, username, password,
+    loginreturnurl: window.location.origin,
   });
   const res = await fetch(WD_API, { method: 'POST', body, credentials: 'include' });
   const data = await res.json();
