@@ -51,13 +51,14 @@ export function TerritoryMappingModal({ hbName, snapshotYear, polities, onClose,
 
   const selected = polities.find((p) => p.id === selectedId) ?? null;
 
-  async function handleSave() {
-    if (!selected) return;
+  async function handleSave(polity?: FeatureProperties) {
+    const p = polity ?? selected;
+    if (!p) return;
     setStatus('saving');
     try {
-      await saveTerritoryMapping(hbName, snapshotYear, selected.id, selected.wikidataQid ?? null);
+      await saveTerritoryMapping(hbName, snapshotYear, p.id, p.wikidataQid ?? null);
       setStatus('saved');
-      onSaved?.(selected.id, selected.title);
+      onSaved?.(p.id, p.title);
     } catch {
       setStatus('error');
     }
@@ -136,6 +137,7 @@ export function TerritoryMappingModal({ hbName, snapshotYear, polities, onClose,
                   <div
                     key={p.id}
                     onClick={() => setSelectedId(p.id)}
+                    onDoubleClick={() => { setSelectedId(p.id); handleSave(p); }}
                     style={{
                       padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #1e2a3e',
                       background: p.id === selectedId ? '#2a3a5a' : 'transparent',
