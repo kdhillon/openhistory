@@ -14,13 +14,22 @@ import json
 import os
 import re
 import urllib.request
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends, Header
+from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 import psycopg2
 import psycopg2.extras
 
 DATABASE_URL = os.environ["DATABASE_URL"]  # set via Railway env
+
+# Optional write secret — if set, all mutating endpoints require the
+# X-Write-Secret header to match. Unset in local dev to skip the check.
+WRITE_SECRET = os.environ.get("WRITE_SECRET")
+
+async def require_write_secret(x_write_secret: Optional[str] = Header(default=None)):
+    if WRITE_SECRET and x_write_secret != WRITE_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 app = FastAPI(title="OurStory API", version="0.1.0")
 
@@ -258,7 +267,7 @@ _ALLOWED_FIELDS = {
 
 
 @app.patch("/api/features/{event_id}")
-async def patch_feature(event_id: str, request: Request):
+async def patch_feature(event_id: str, request: Request, _: None = Depends(require_write_secret)):
     """
     Save a user correction to Postgres and return the updated GeoJSON feature.
 
@@ -319,7 +328,7 @@ _POLITY_ALLOWED_FIELDS = {
 
 
 @app.patch("/api/polities/{polity_id}")
-async def patch_polity(polity_id: str, request: Request):
+async def patch_polity(polity_id: str, request: Request, _: None = Depends(require_write_secret)):
     """
     Save a user correction to a polity record in Postgres.
 
@@ -550,7 +559,7 @@ import urllib.parse
 
 
 @app.post("/api/polities/import-from-wikidata", status_code=201)
-async def import_polity_from_wikidata(request: Request):
+async def import_polity_from_wikidata(request: Request, _: None = Depends(require_write_secret)):
     """
     Fetch a Wikidata entity by QID and import it as a polity.
 
@@ -773,7 +782,7 @@ def get_hidden_modern_nations():
 
 
 @app.post("/api/hidden-modern-nations", status_code=201)
-def add_hidden_modern_nation(body: dict):
+def add_hidden_modern_nation(body: dict, _: None = Depends(require_write_secret)):
     """Add a polity to the hidden modern nations list."""
     polity_id = body.get("polityId")
     hide_until_year = int(body.get("hideUntilYear", 1900))
@@ -795,7 +804,7 @@ def add_hidden_modern_nation(body: dict):
 
 
 @app.delete("/api/hidden-modern-nations/{polity_id}", status_code=204)
-def remove_hidden_modern_nation(polity_id: str):
+def remove_hidden_modern_nation(polity_id: str, _: None = Depends(require_write_secret)):
     """Remove a polity from the hidden modern nations list."""
     conn = get_conn()
     try:
@@ -807,7 +816,7 @@ def remove_hidden_modern_nation(polity_id: str):
 
 
 @app.delete("/api/territory-mappings/by-polity/{polity_id}", status_code=204)
-def remove_territory_mappings_for_polity(polity_id: str):
+def remove_territory_mappings_for_polity(polity_id: str, _: None = Depends(require_write_secret)):
     """Remove all territory_name_mappings rows for a given polity (unlinks its territories)."""
     conn = get_conn()
     try:
@@ -819,7 +828,7 @@ def remove_territory_mappings_for_polity(polity_id: str):
 
 
 @app.delete("/api/territory-mappings", status_code=204)
-def delete_territory_mapping(hb_name: str, snapshot_year: int):
+def delete_territory_mapping(hb_name: str, snapshot_year: int, _: None = Depends(require_write_secret)):
     """Delete a single territory name mapping and clear the polygon's polity_id."""
     conn = get_conn()
     try:
@@ -838,7 +847,7 @@ def delete_territory_mapping(hb_name: str, snapshot_year: int):
 
 
 @app.post("/api/territory-mappings", status_code=201)
-async def save_territory_mapping(request: Request):
+async def save_territory_mapping(request: Request, _: None = Depends(require_write_secret)):
     """
     Persist a manual territory name → polity mapping.
     Upserts into territory_name_mappings with confidence='manual'.
@@ -912,8 +921,148 @@ def get_territory_snapshots():
         conn.close()
 
 
+@app.post("/api/snapshot-polygons/{polygon_id}/assign", status_code=200)
+async def assign_polygon(polygon_id: str, request: Request, _: None = Depends(require_write_secret)):
+    """
+    Assign a polity to a specific territory polygon.
+
+    Validates that the polity's date range overlaps with the polygon's effective interval.
+    If the polity only covers part of the interval, automatically creates unassigned gap
+    rows (source_polygon_id → this polygon) for the periods before and/or after.
+    Also removes any group-level territory_name_mapping for this hb_name so the
+    per-polygon polity_id values take effect.
+
+    Body: { "polityId": "<uuid>" }
+    Returns 422 if no overlap.
+    """
+    body = await request.json()
+    polity_id = body.get("polityId")
+    if not polity_id:
+        raise HTTPException(400, "polityId required")
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Fetch polygon + its snapshot interval
+        cur.execute("""
+            WITH snapshot_intervals AS (
+                SELECT snapshot_year,
+                       LEAD(snapshot_year) OVER (ORDER BY snapshot_year) AS next_snapshot_year
+                FROM territory_snapshots
+            )
+            SELECT sp.id, sp.snapshot_year, sp.hb_name, sp.sub_year_start, sp.sub_year_end,
+                   si.next_snapshot_year
+            FROM snapshot_polygons sp
+            JOIN snapshot_intervals si ON si.snapshot_year = sp.snapshot_year
+            WHERE sp.id = %s
+        """, (polygon_id,))
+        polygon = cur.fetchone()
+        if not polygon:
+            raise HTTPException(404, "Polygon not found")
+
+        snap_yr      = polygon["snapshot_year"]
+        next_snap_yr = polygon["next_snapshot_year"]
+
+        # Effective interval for this polygon row
+        interval_start = polygon["sub_year_start"] if polygon["sub_year_start"] is not None else snap_yr
+        interval_end   = polygon["sub_year_end"]   if polygon["sub_year_end"]   is not None else (
+            (next_snap_yr - 1) if next_snap_yr is not None else None
+        )
+
+        # Fetch polity dates
+        cur.execute("SELECT id, year_start, year_end FROM polities WHERE id = %s", (polity_id,))
+        polity = cur.fetchone()
+        if not polity:
+            raise HTTPException(404, "Polity not found")
+
+        p_start = polity["year_start"]
+        p_end   = polity["year_end"]
+
+        # Overlap check (treat None as ±∞)
+        iv_end_num = interval_end if interval_end is not None else 9999
+        p_start_num = p_start if p_start is not None else -9999
+        p_end_num   = p_end   if p_end   is not None else  9999
+
+        if p_start_num > iv_end_num or p_end_num < interval_start:
+            raise HTTPException(422,
+                f"Polity ({p_start}–{p_end}) doesn't overlap with this territory's "
+                f"window ({interval_start}–{interval_end})")
+
+        # Compute the polity's slice within the interval
+        slice_start = max(p_start_num, interval_start)
+
+        if p_end is None and interval_end is None:
+            slice_end = None
+        elif p_end is None:
+            slice_end = interval_end
+        elif interval_end is None:
+            slice_end = p_end
+        else:
+            slice_end = min(p_end, interval_end)
+
+        needs_before = slice_start > interval_start
+        needs_after  = slice_end is not None and (interval_end is None or slice_end < interval_end)
+
+        # Delete any child splits previously created from this polygon
+        cur.execute("DELETE FROM snapshot_polygons WHERE source_polygon_id = %s", (polygon_id,))
+
+        # Update this polygon: set polity + sub-interval for the slice
+        cur.execute("""
+            UPDATE snapshot_polygons
+            SET polity_id = %s, sub_year_start = %s, sub_year_end = %s, explicitly_unlinked = FALSE
+            WHERE id = %s
+        """, (polity_id,
+              slice_start if needs_before else None,
+              slice_end   if needs_after  else None,
+              polygon_id))
+
+        # Gap before (unassigned)
+        if needs_before:
+            before_sub_start = interval_start if interval_start != snap_yr else None
+            cur.execute("""
+                INSERT INTO snapshot_polygons
+                    (id, snapshot_year, hb_name, hb_abbrevn, border_precision,
+                     boundary, accuracy, source_polygon_id, sub_year_start, sub_year_end, polity_id)
+                SELECT gen_random_uuid(), snapshot_year, hb_name, hb_abbrevn, border_precision,
+                       boundary, accuracy, %s, %s, %s, NULL
+                FROM snapshot_polygons WHERE id = %s
+            """, (polygon_id, before_sub_start, slice_start - 1, polygon_id))
+
+        # Gap after (unassigned)
+        if needs_after:
+            cur.execute("""
+                INSERT INTO snapshot_polygons
+                    (id, snapshot_year, hb_name, hb_abbrevn, border_precision,
+                     boundary, accuracy, source_polygon_id, sub_year_start, sub_year_end, polity_id)
+                SELECT gen_random_uuid(), snapshot_year, hb_name, hb_abbrevn, border_precision,
+                       boundary, accuracy, %s, %s, %s, NULL
+                FROM snapshot_polygons WHERE id = %s
+            """, (polygon_id, slice_end + 1, interval_end, polygon_id))
+
+        # Remove group-level mapping so per-polygon polity_id values take effect
+        # (group mapping would override sp.polity_id via COALESCE, making gap rows appear assigned)
+        cur.execute(
+            "DELETE FROM territory_name_mappings WHERE hb_name = %s AND snapshot_year = %s",
+            (polygon["hb_name"], snap_yr),
+        )
+
+        conn.commit()
+        return {
+            "ok": True,
+            "intervalStart": interval_start,
+            "intervalEnd": interval_end,
+            "sliceStart": slice_start,
+            "sliceEnd": slice_end,
+            "createdBefore": needs_before,
+            "createdAfter": needs_after,
+        }
+    finally:
+        conn.close()
+
+
 @app.patch("/api/snapshot-polygons/{polygon_id}/unlink", status_code=204)
-def unlink_polygon(polygon_id: str):
+def unlink_polygon(polygon_id: str, _: None = Depends(require_write_secret)):
     """
     Mark a single snapshot_polygon as explicitly_unlinked=TRUE.
     The polygon stops inheriting its hb_name group mapping and renders as 'Unknown'.

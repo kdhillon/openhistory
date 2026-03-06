@@ -115,7 +115,7 @@ interface Props {
   /** Polity IDs whose territory polygon is visible — hides the capital dot only (not the territory) */
   polityIdsWithTerritory?: Set<string>;
   /** Called when user clicks an unmatched territory (no polity linked) */
-  onUnmatchedTerritoryClick?: (hbName: string, snapshotYear: number) => void;
+  onUnmatchedTerritoryClick?: (hbName: string, snapshotYear: number, polygonId: string, intervalStart: number, intervalEnd: number | null) => void;
   /** Called when user clicks × to unlink a single polygon from its polity */
   onUnlinkPolygon?: (polygonId: string) => void;
   /** When set, only events whose partOf[] includes this QID are shown */
@@ -440,10 +440,13 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         const polityId = top.properties?.polityId as string | null;
         if (!polityId) {
           // Unmatched territory — open the mapping assignment UI
-          const hbName = top.properties?.hbName as string | undefined;
+          const hbName       = top.properties?.hbName       as string | undefined;
           const snapshotYear = top.properties?.snapshotYear as number | undefined;
-          if (hbName && snapshotYear != null) {
-            onUnmatchedTerritoryRef.current?.(hbName, snapshotYear);
+          const polygonId    = top.properties?.polygonId    as string | undefined;
+          const intervalStart = top.properties?.intervalStart as number | undefined;
+          const intervalEnd   = top.properties?.intervalEnd   as number | null | undefined;
+          if (hbName && snapshotYear != null && polygonId) {
+            onUnmatchedTerritoryRef.current?.(hbName, snapshotYear, polygonId, intervalStart ?? snapshotYear, intervalEnd ?? null);
           }
           return;
         }

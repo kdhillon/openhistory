@@ -9,6 +9,15 @@
 // In production, set VITE_API_URL to the Railway backend URL (no trailing slash).
 const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
+// Injected at build time. Set VITE_WRITE_SECRET in Railway (frontend service) to match
+// the WRITE_SECRET env var on the backend. Unset in local dev to skip the check.
+const WRITE_SECRET = import.meta.env.VITE_WRITE_SECRET ?? '';
+
+function withWriteSecret(headers: Record<string, string> = {}): Record<string, string> {
+  if (!WRITE_SECRET) return headers;
+  return { ...headers, 'X-Write-Secret': WRITE_SECRET };
+}
+
 export interface FeaturePatch {
   // Date fields — send null to clear
   year_start?: number | null;
@@ -30,7 +39,7 @@ export interface FeaturePatch {
 export async function patchFeature(eventId: string, patch: FeaturePatch): Promise<GeoJSON.Feature> {
   const res = await fetch(`${API_BASE}/features/${eventId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withWriteSecret({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(patch),
   });
   if (!res.ok) {
@@ -55,7 +64,7 @@ export interface PolityPatch {
 export async function patchPolity(polityId: string, patch: PolityPatch): Promise<GeoJSON.Feature> {
   const res = await fetch(`${API_BASE}/polities/${polityId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withWriteSecret({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(patch),
   });
   if (!res.ok) {
@@ -90,7 +99,7 @@ export async function fetchPolityOverrides(): Promise<GeoJSON.FeatureCollection>
  * Only affects this polygon — others sharing the same hb_name remain linked.
  */
 export async function unlinkPolygon(polygonId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/snapshot-polygons/${polygonId}/unlink`, { method: 'PATCH' });
+  const res = await fetch(`${API_BASE}/snapshot-polygons/${polygonId}/unlink`, { method: 'PATCH', headers: withWriteSecret() });
   if (!res.ok) throw new Error(`API PATCH unlink polygon failed (${res.status})`);
 }
 
@@ -109,31 +118,56 @@ export async function fetchHiddenNations(): Promise<HiddenNation[]> {
 export async function addHiddenNation(polityId: string, hideUntilYear = 1900): Promise<void> {
   const res = await fetch(`${API_BASE}/hidden-modern-nations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withWriteSecret({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ polityId, hideUntilYear }),
   });
   if (!res.ok) throw new Error(`API POST hidden-modern-nations failed (${res.status})`);
 }
 
 export async function removeHiddenNation(polityId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/hidden-modern-nations/${polityId}`, { method: 'DELETE' });
+  const res = await fetch(`${API_BASE}/hidden-modern-nations/${polityId}`, { method: 'DELETE', headers: withWriteSecret() });
   if (!res.ok) throw new Error(`API DELETE hidden-modern-nations failed (${res.status})`);
 }
 
 export async function removeTerritoryMappingsByPolity(polityId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/territory-mappings/by-polity/${polityId}`, { method: 'DELETE' });
+  const res = await fetch(`${API_BASE}/territory-mappings/by-polity/${polityId}`, { method: 'DELETE', headers: withWriteSecret() });
   if (!res.ok) throw new Error(`API DELETE territory-mappings/by-polity failed (${res.status})`);
 }
 
 export async function deleteTerritoryMapping(hbName: string, snapshotYear: number): Promise<void> {
   const params = new URLSearchParams({ hb_name: hbName, snapshot_year: String(snapshotYear) });
-  const res = await fetch(`${API_BASE}/territory-mappings?${params}`, { method: 'DELETE' });
+  const res = await fetch(`${API_BASE}/territory-mappings?${params}`, { method: 'DELETE', headers: withWriteSecret() });
   if (!res.ok) throw new Error(`API DELETE territory-mappings failed (${res.status})`);
 }
 
 /**
  * Fetch IDs of all manually-hidden polities and events.
  */
+export interface AssignResult {
+  sliceStart: number;
+  sliceEnd: number | null;
+  createdBefore: boolean;
+  createdAfter: boolean;
+}
+
+/**
+ * Assign a polity to a specific territory polygon.
+ * Validates overlap and creates gap rows automatically.
+ * Throws with a descriptive message on 422 (no overlap) or other errors.
+ */
+export async function assignPolygon(polygonId: string, polityId: string): Promise<AssignResult> {
+  const res = await fetch(`${API_BASE}/snapshot-polygons/${polygonId}/assign`, {
+    method: 'POST',
+    headers: withWriteSecret({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ polityId }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Assign failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
 export async function fetchHiddenFeatures(): Promise<string[]> {
   const res = await fetch(`${API_BASE}/hidden-features`);
   if (!res.ok) return [];
@@ -150,7 +184,7 @@ export async function setFeatureHidden(id: string, type: 'polity' | 'event', hid
     : `${API_BASE}/features/${id}`;
   const res = await fetch(url, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withWriteSecret({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ manually_hidden: hidden }),
   });
   if (!res.ok) {
@@ -169,7 +203,7 @@ export async function fetchManualPolities(): Promise<GeoJSON.Feature[]> {
 export async function importPolityFromWikidata(qid: string): Promise<GeoJSON.Feature> {
   const res = await fetch(`${API_BASE}/polities/import-from-wikidata`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withWriteSecret({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ qid }),
   });
   if (!res.ok) {
@@ -187,7 +221,7 @@ export async function saveTerritoryMapping(
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/territory-mappings`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withWriteSecret({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ hbName, snapshotYear, polityId, wikidataQid }),
   });
   if (!res.ok) {

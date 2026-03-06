@@ -46,7 +46,7 @@ export function AboutPage({ onBack }: Props) {
         <ul style={styles.ul}>
           <li><strong>Events</strong> — battles, elections, treaties, disasters, discoveries, and more, each with a date and location</li>
           <li><strong>Locations</strong> — cities, regions, and countries referenced by events</li>
-          <li><strong>Polities</strong> — kingdoms, empires, republics, colonies, viceroyalties, and other political entities, with founding and dissolution dates</li>
+          <li><strong>Polities</strong> — kingdoms, empires, republics, colonies, viceroyalties, and other political entities. They may have founding and dissolution dates and a capital, and can be assigned to a territory.</li>
         </ul>
         <p style={styles.p}>
           Current event coverage: <strong>1770–1820</strong>. Other periods are being added progressively.

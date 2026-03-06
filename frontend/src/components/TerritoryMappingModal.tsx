@@ -1,19 +1,52 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import type { FeatureProperties } from '../types';
-import { saveTerritoryMapping, importPolityFromWikidata } from '../lib/api';
+import { assignPolygon, importPolityFromWikidata } from '../lib/api';
 import { searchEntities } from '../lib/wikidataApi';
 import type { EntityResult } from '../lib/wikidataApi';
 
 interface Props {
   hbName: string;
   snapshotYear: number;
+  polygonId: string;
+  intervalStart: number;
+  intervalEnd: number | null;
   polities: FeatureProperties[];
   onClose: () => void;
   onPolityImported?: (feature: GeoJSON.Feature) => void;
   onSaved?: (polityId: string, polityName: string) => void;
 }
 
-export function TerritoryMappingModal({ hbName, snapshotYear, polities, onClose, onPolityImported, onSaved }: Props) {
+interface OverlapInfo {
+  overlaps: boolean;
+  sliceStart: number;
+  sliceEnd: number | null;
+  hasBefore: boolean;
+  hasAfter: boolean;
+}
+
+function computeOverlap(polity: FeatureProperties, intervalStart: number, intervalEnd: number | null): OverlapInfo {
+  const ps = polity.yearStart ?? -9999;
+  const pe = polity.yearEnd   ??  9999;
+  const ie = intervalEnd      ??  9999;
+  if (ps > ie || pe < intervalStart) {
+    return { overlaps: false, sliceStart: 0, sliceEnd: null, hasBefore: false, hasAfter: false };
+  }
+  const sliceStart = Math.max(ps, intervalStart);
+  let sliceEnd: number | null;
+  if (polity.yearEnd === null && intervalEnd === null) sliceEnd = null;
+  else if (polity.yearEnd === null) sliceEnd = intervalEnd;
+  else if (intervalEnd === null)    sliceEnd = polity.yearEnd;
+  else sliceEnd = Math.min(polity.yearEnd, intervalEnd);
+  return {
+    overlaps: true,
+    sliceStart,
+    sliceEnd,
+    hasBefore: sliceStart > intervalStart,
+    hasAfter:  sliceEnd !== null && (intervalEnd === null || sliceEnd < intervalEnd),
+  };
+}
+
+export function TerritoryMappingModal({ hbName, snapshotYear, polygonId, intervalStart, intervalEnd, polities, onClose, onPolityImported, onSaved }: Props) {
   const [query, setQuery] = useState(hbName);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -50,13 +83,17 @@ export function TerritoryMappingModal({ hbName, snapshotYear, polities, onClose,
   }, [query, wdOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selected = polities.find((p) => p.id === selectedId) ?? null;
+  const overlap  = selected ? computeOverlap(selected, intervalStart, intervalEnd) : null;
+  const canSave  = !!selected && (overlap?.overlaps ?? false);
 
   async function handleSave(polity?: FeatureProperties) {
     const p = polity ?? selected;
     if (!p) return;
+    const ov = computeOverlap(p, intervalStart, intervalEnd);
+    if (!ov.overlaps) return; // blocked — button is disabled
     setStatus('saving');
     try {
-      await saveTerritoryMapping(hbName, snapshotYear, p.id, p.wikidataQid ?? null);
+      await assignPolygon(polygonId, p.id);
       setStatus('saved');
       onSaved?.(p.id, p.title);
     } catch {
@@ -137,7 +174,7 @@ export function TerritoryMappingModal({ hbName, snapshotYear, polities, onClose,
                   <div
                     key={p.id}
                     onClick={() => setSelectedId(p.id)}
-                    onDoubleClick={() => { setSelectedId(p.id); handleSave(p); }}
+                    onDoubleClick={() => { setSelectedId(p.id); if (computeOverlap(p, intervalStart, intervalEnd).overlaps) handleSave(p); }}
                     style={{
                       padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #1e2a3e',
                       background: p.id === selectedId ? '#2a3a5a' : 'transparent',
@@ -229,6 +266,21 @@ export function TerritoryMappingModal({ hbName, snapshotYear, polities, onClose,
               )}
             </div>
 
+            {/* Overlap feedback */}
+            {overlap && !overlap.overlaps && (
+              <div style={{ fontSize: 12, color: '#ef5350', lineHeight: 1.4 }}>
+                {selected!.title} ({selected!.yearStart ?? '?'}–{selected!.yearEnd ?? '∞'}) doesn't
+                overlap with this territory's window ({intervalStart}–{intervalEnd ?? '∞'}). Cannot assign.
+              </div>
+            )}
+            {overlap && overlap.overlaps && (overlap.hasBefore || overlap.hasAfter) && (
+              <div style={{ fontSize: 12, color: '#ffb74d', lineHeight: 1.4 }}>
+                Will assign {overlap.sliceStart}–{overlap.sliceEnd ?? '∞'}.
+                {overlap.hasBefore && ` Unassigned gap before: ${intervalStart}–${overlap.sliceStart - 1}.`}
+                {overlap.hasAfter  && ` Unassigned gap after: ${overlap.sliceEnd! + 1}–${intervalEnd ?? '∞'}.`}
+              </div>
+            )}
+
             {status === 'error' && (
               <div style={{ fontSize: 12, color: '#ef5350' }}>Save failed — is the API running?</div>
             )}
@@ -236,9 +288,9 @@ export function TerritoryMappingModal({ hbName, snapshotYear, polities, onClose,
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button onClick={onClose} style={btnStyle('#2a3450')}>Cancel</button>
               <button
-                onClick={handleSave}
-                disabled={!selected || status === 'saving'}
-                style={btnStyle(selected ? '#3a6bbf' : '#2a3450', !selected)}
+                onClick={() => handleSave()}
+                disabled={!canSave || status === 'saving'}
+                style={btnStyle(canSave ? '#3a6bbf' : '#2a3450', !canSave)}
               >
                 {status === 'saving' ? 'Saving…' : 'Save mapping'}
               </button>
