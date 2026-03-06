@@ -98,7 +98,9 @@ export async function getQid(wikipediaTitle: string): Promise<string | null> {
 export async function getCsrf(): Promise<string> {
   const res = await fetch(`${WD_API}?${wd({ action: 'query', meta: 'tokens' })}`, { credentials: 'include' });
   const data = await res.json();
-  return data.query.tokens.csrftoken as string;
+  const token = data.query.tokens.csrftoken as string;
+  console.log('[getCsrf] token (last 4):', token?.slice(-4));
+  return token;
 }
 
 // ── Claims ───────────────────────────────────────────────────────────────────
@@ -161,7 +163,10 @@ async function submitClaim(entityId: string, claim: Claim, csrf: string, summary
 
   const res = await fetch(WD_API, { method: 'POST', body, credentials: 'include' });
   const data = await res.json();
-  if (data.error) throw new Error(`[${data.error.code ?? '?'}] ${data.error.info ?? JSON.stringify(data.error)}`);
+  if (data.error) {
+    console.error('[submitClaim] Wikidata error:', JSON.stringify(data.error));
+    throw new Error(`[${data.error.code ?? '?'}] ${data.error.info ?? JSON.stringify(data.error)}`);
+  }
 }
 
 export async function submitDateEdit(
