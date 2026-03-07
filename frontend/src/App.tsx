@@ -13,6 +13,7 @@ import { AboutPage } from './components/AboutPage';
 import { WelcomeModal, shouldShowWelcome } from './components/WelcomeModal';
 import { MajorEventsPanel, MAJOR_EVENTS_PANEL_HEIGHT } from './components/MajorEventsPanel';
 import { DataOverlay } from './components/DataOverlay';
+import { UnlocatedEventsPanel } from './components/UnlocatedEventsPanel';
 import { useTimeline, encodeDate, decodeDate, STEP_YEAR } from './hooks/useTimeline';
 import { useEventSource } from './hooks/useEventSource';
 import { useTerritoriesSource } from './hooks/useTerritoriesSource';
@@ -438,6 +439,15 @@ export default function App() {
           locationCount={locationCount}
           polityCount={polityCount}
           onOpenAbout={() => navigate('/about')}
+        />
+        <UnlocatedEventsPanel
+          eventFeatures={eventFeatures}
+          currentDateInt={timeline.currentDateInt}
+          stepSize={timeline.stepSize}
+          onSelectFeature={(props) => {
+            setSelectedFeature(props);
+            setStack({ index: 0, total: 1 });
+          }}
         />
         <MapView
           geojson={geojson}
