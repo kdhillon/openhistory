@@ -119,7 +119,6 @@ export function UnlocatedEventsPanel({ eventFeatures, currentDateInt, stepSize, 
   }, [eventFeatures, currentDateInt, stepSize]);
 
   const total = active.length + recent.length;
-  if (total === 0) return null;
 
   return (
     <div style={{
@@ -149,7 +148,7 @@ export function UnlocatedEventsPanel({ eventFeatures, currentDateInt, stepSize, 
         onClick={() => setCollapsed((v) => !v)}
       >
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', flex: 1 }}>
-          {collapsed ? `Unlocated (${total})` : 'Unlocated Events'}
+          {collapsed ? (total > 0 ? `Unlocated (${total})` : 'Unlocated') : 'Unlocated Events'}
         </span>
         <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', lineHeight: 1 }}>
           {collapsed ? '▸' : '▾'}
@@ -164,6 +163,11 @@ export function UnlocatedEventsPanel({ eventFeatures, currentDateInt, stepSize, 
           padding: '0 4px 6px',
           borderTop: '1px solid rgba(255,255,255,0.07)',
         }}>
+          {total === 0 && (
+            <div style={{ padding: '6px 8px', fontSize: 11, color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
+              No unlocated events
+            </div>
+          )}
           {active.length > 0 && (
             <>
               <SectionHeader label="Active" count={active.length} />
