@@ -11,6 +11,7 @@ export type Category =
   | 'exploration'
   | 'science'
   | 'culture'
+  | 'sport'
   | 'city'
   | 'region'
   // Polity subtypes

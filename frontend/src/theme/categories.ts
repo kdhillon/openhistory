@@ -9,6 +9,7 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   exploration:   '#009688',  // teal
   science:       '#3F51B5',  // indigo
   culture:       '#2E7D32',  // green
+  sport:         '#00897B',  // teal
   city:          '#4285F4',  // blue
   region:        '#00897B',  // dark teal
   // Polity subtypes
@@ -34,6 +35,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   exploration:   'Exploration',
   science:       'Science',
   culture:       'Culture',
+  sport:         'Sport',
   city:          'City',
   region:        'Region',
   // Polity subtypes
@@ -59,6 +61,7 @@ export const EVENT_CATEGORIES: Category[] = [
   'exploration',
   'science',
   'culture',
+  'sport',
 ];
 
 export const LOCATION_CATEGORIES: Category[] = [

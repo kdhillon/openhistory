@@ -128,7 +128,21 @@ WIKIDATA_TO_CATEGORY: dict[str, Optional[str]] = {
     "Q1784537": "culture",       # art movement
     "Q464980":  "culture",       # art exhibition (Royal Academy, Paris Salon, etc.)
     "Q188686":  "culture",       # world's fair / international exposition
-    "Q5389":    "culture",       # Olympic Games (ancient + modern)
+
+    # Sport
+    "Q349":     "sport",         # sport (root)
+    "Q5389":    "sport",         # Olympic Games (ancient + modern)
+    "Q16510064":"sport",         # sporting event
+    "Q27020041":"sport",         # sports season
+    "Q4438121": "sport",         # sports competition
+    "Q57733494":"sport",         # sports championship
+    "Q26907166":"sport",         # sports tournament
+    "Q665078":  "sport",         # cricket season
+    "Q26887310":"sport",         # association football team season
+    "Q18536594":"sport",         # sports league season
+    "Q17299750":"sport",         # sports event
+    "Q1543615": "sport",         # horse race
+    "Q5753667": "sport",         # horse racing event
 
     # Known false positives — override to None so LLM handles them properly
     "Q180548":   None,           # Neolithic Revolution — prehistoric process, not political
@@ -241,8 +255,8 @@ WIKIDATA_TO_CATEGORY: dict[str, Optional[str]] = {
     "Q235687":  None,          # common year starting and ending on Monday — generic/excluded
     "Q235690":  None,          # common year starting and ending on Thursday — generic/excluded
     "Q24706":  None,          # Japanese era name — generic/excluded
-    "Q26887310":  None,          # association football team season — generic/excluded
-    "Q27020041":  None,          # sports season — generic/excluded
+    "Q26887310":  "sport",       # association football team season
+    "Q27020041":  "sport",       # sports season
     "Q30715568":  None,          # political era of the United States — generic/excluded
     "Q3186692":  None,          # calendar year — generic/excluded
     "Q37002670":  None,          # unicameral legislature — generic/excluded
