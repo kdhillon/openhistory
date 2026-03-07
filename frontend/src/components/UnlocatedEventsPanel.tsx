@@ -37,10 +37,10 @@ function EventRow({ props, onSelect }: { props: FeatureProperties; onSelect: () 
         alignItems: 'flex-start',
         gap: 7,
         width: '100%',
-        background: hovered ? 'rgba(255,255,255,0.08)' : 'transparent',
+        background: hovered ? 'rgba(0,0,0,0.04)' : 'transparent',
         border: 'none',
         borderRadius: 4,
-        padding: '4px 6px',
+        padding: '4px 8px',
         cursor: 'pointer',
         textAlign: 'left',
         fontFamily: 'inherit',
@@ -54,7 +54,7 @@ function EventRow({ props, onSelect }: { props: FeatureProperties; onSelect: () 
         flexShrink: 0,
         marginTop: 4,
       }} />
-      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 1.4 }}>
+      <span style={{ fontSize: 13, color: '#202122', lineHeight: 1.4 }}>
         {props.title}
       </span>
     </button>
@@ -68,8 +68,8 @@ function SectionHeader({ label, count }: { label: string; count: number }) {
       fontWeight: 700,
       letterSpacing: '0.07em',
       textTransform: 'uppercase',
-      color: 'rgba(255,255,255,0.35)',
-      padding: '6px 6px 2px',
+      color: '#9a9a9a',
+      padding: '8px 8px 3px',
     }}>
       {label} <span style={{ fontWeight: 400 }}>({count})</span>
     </div>
@@ -126,11 +126,11 @@ export function UnlocatedEventsPanel({ eventFeatures, currentDateInt, stepSize, 
       bottom: 10,
       left: 10,
       zIndex: 10,
-      background: 'rgba(30,30,30,0.82)',
-      backdropFilter: 'blur(6px)',
-      borderRadius: 8,
-      fontSize: 12,
-      color: 'rgba(255,255,255,0.9)',
+      background: '#ffffff',
+      borderRadius: 12,
+      border: '1px solid rgba(0,0,0,0.1)',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
+      color: '#202122',
       pointerEvents: 'auto',
       userSelect: 'none',
       maxWidth: 240,
@@ -142,15 +142,15 @@ export function UnlocatedEventsPanel({ eventFeatures, currentDateInt, stepSize, 
           display: 'flex',
           alignItems: 'center',
           gap: 6,
-          padding: '6px 10px',
+          padding: '10px 14px',
           cursor: 'pointer',
         }}
         onClick={() => setCollapsed((v) => !v)}
       >
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.45)', flex: 1 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#54595d', flex: 1 }}>
           {collapsed ? (total > 0 ? `Unlocated (${total})` : 'Unlocated') : 'Unlocated Events'}
         </span>
-        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', lineHeight: 1 }}>
+        <span style={{ fontSize: 12, color: '#9a9a9a', lineHeight: 1 }}>
           {collapsed ? '▸' : '▾'}
         </span>
       </div>
@@ -160,11 +160,11 @@ export function UnlocatedEventsPanel({ eventFeatures, currentDateInt, stepSize, 
         <div style={{
           maxHeight: 280,
           overflowY: 'auto',
-          padding: '0 4px 6px',
-          borderTop: '1px solid rgba(255,255,255,0.07)',
+          padding: '0 6px 8px',
+          borderTop: '1px solid rgba(0,0,0,0.06)',
         }}>
           {total === 0 && (
-            <div style={{ padding: '6px 8px', fontSize: 11, color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
+            <div style={{ padding: '8px 8px', fontSize: 12, color: '#9a9a9a', fontStyle: 'italic' }}>
               No unlocated events
             </div>
           )}
