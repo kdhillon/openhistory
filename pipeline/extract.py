@@ -89,8 +89,8 @@ WIKIDATA_TO_CATEGORY: dict[str, Optional[str]] = {
     "Q2334788": "founding",      # declaration of independence
 
     # Discovery / Exploration
-    "Q43229":   "discovery",     # discovery
-    "Q2678658": "discovery",     # scientific discovery
+    # Q43229 removed — QID is "organization", not a discovery class
+    "Q2678658": "science",       # scientific discovery
     "Q2685356": "exploration",   # exploration
     "Q43702":   "exploration",   # expedition
     "Q170584":  "exploration",   # expedition (alt)
@@ -106,7 +106,7 @@ WIKIDATA_TO_CATEGORY: dict[str, Optional[str]] = {
 
     # Science & Discovery (additional classes)
     "Q1318295": "science",       # astronomical discovery (planet/comet/asteroid finds)
-    "Q42471":   "discovery",     # archaeological discovery (Rosetta Stone, Pompeii, etc.)
+    "Q42471":   "science",       # archaeological discovery (Rosetta Stone, Pompeii, etc.)
 
     # Politics (additional classes)
     "Q175482":  "politics",      # protest / demonstration
@@ -136,7 +136,7 @@ WIKIDATA_TO_CATEGORY: dict[str, Optional[str]] = {
     "Q27020041":"sport",         # sports season
     "Q4438121": "sport",         # sports competition
     "Q57733494":"sport",         # sports championship
-    "Q26907166":"sport",         # sports tournament
+    # Q26907166 removed — QID is "temporal entity", not sports tournament
     "Q665078":  "sport",         # cricket season
     "Q26887310":"sport",         # association football team season
     "Q18536594":"sport",         # sports league season
