@@ -90,9 +90,9 @@ export function CategoryFilter({ activeCategories, onToggle, activePolityCategor
       {/* Row 1: wordmark + nav buttons */}
       <div style={styles.row}>
         <div style={styles.wordmark}>OpenHistory</div>
-        <button onClick={onOpenAbout} style={styles.dataBtn}>About</button>
         <div style={{ flex: 1 }} />
         <button onClick={onOpenData} style={styles.dataBtn}>Data Explorer ↗</button>
+        <button onClick={onOpenAbout} style={styles.dataBtn}>About</button>
       </div>
 
       <div style={styles.rowDivider} />

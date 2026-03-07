@@ -325,6 +325,7 @@ def match_territory(
         results.append({
             "polity_id":    pid,
             "polity_name":  p["name"],
+            "polity_type":  p.get("polity_type"),
             "year_start":   p.get("year_start"),
             "year_end":     p.get("year_end"),
             "wikidata_qid": p.get("wikidata_qid"),
@@ -367,6 +368,12 @@ def match_territory(
                     # Prevents "Africa" ⊆ "Caritas Middle East and North Africa"
                     if len(hb_tokens) / len(p_tokens) < 0.5:
                         continue
+                    # Skip diaspora/people polities that have EXTRA qualifier tokens
+                    # beyond the territory name. "Achagua people" (same tokens after
+                    # stopword removal) is fine; "Chinese people in Algeria" is not —
+                    # "chinese" is an extra token that makes it a poor territory match.
+                    if p.get("polity_type") == "people" and p_tokens != hb_tokens:
+                        continue
                     add(p, 0.80, "contained_in")
                 elif p_tokens <= hb_tokens:
                     # Require polity name covers ≥60% of hb_name tokens
@@ -399,11 +406,14 @@ def match_territory(
 
     def _rank(m: dict) -> tuple:
         ys, ye = m.get("year_start"), m.get("year_end")
+        # Priority: confidence → has both dates → non-people type → shortest lifespan
+        # not the governing entity of a territory. Prefer empire/kingdom/republic/etc.
+        is_people = 1 if m.get("polity_type") == "people" else 0
         # Prefer polities with both start AND end year (has_both=0 sorts first)
         has_both = 0 if (ys is not None and ye is not None) else 1
         # Among those, prefer tightest lifespan that still covers the interval
         lifespan = (ye - ys) if has_both == 0 else 999_999
-        return (-m["confidence"], has_both, lifespan)
+        return (-m["confidence"], has_both, is_people, lifespan)
 
     results.sort(key=_rank)
     return results
@@ -427,7 +437,7 @@ def main():
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     # Load all polities
-    cur.execute("SELECT id, name, short_name, year_start, year_end, wikidata_qid, slug FROM polities ORDER BY name")
+    cur.execute("SELECT id, name, short_name, year_start, year_end, wikidata_qid, slug, polity_type FROM polities ORDER BY name")
     all_polities = [dict(r) for r in cur.fetchall()]
     print(f"Loaded {len(all_polities)} polities from DB")
 

@@ -108,6 +108,7 @@ def fetch_polity_sparql_qids(
     limit: int,
     min_year: Optional[int] = None,
     max_year: Optional[int] = 2015,
+    direct_p31: bool = False,
 ) -> list[str]:
     """
     Fetches Wikidata QIDs for polities (instances/subclasses of class_qid)
@@ -117,13 +118,17 @@ def fetch_polity_sparql_qids(
 
     Requires an English Wikipedia article.
     Returns a list of Q-ID strings.
+
+    If direct_p31=True, uses wdt:P31 only (no transitive P279*). Faster but
+    misses subclasses — use when P279* queries are timing out on WDQS.
     """
     inception_filter = f"(!BOUND(?inception) || YEAR(?inception) <= {max_year})" if max_year else "TRUE"
     dissolved_filter = f"(!BOUND(?dissolved) || YEAR(?dissolved) >= {min_year})" if min_year else "TRUE"
+    p31_path = "wdt:P31" if direct_p31 else "wdt:P31/wdt:P279*"
 
     query = f"""
     SELECT DISTINCT ?item WHERE {{
-      ?item wdt:P31/wdt:P279* wd:{class_qid} .
+      ?item {p31_path} wd:{class_qid} .
       OPTIONAL {{ ?item wdt:P571 ?inception . }}
       OPTIONAL {{ ?item wdt:P576 ?dissolved . }}
       FILTER({inception_filter} && {dissolved_filter})
@@ -577,6 +582,10 @@ def main():
     parser.add_argument("--categories", type=str, default=None,
                         help="Comma-separated category labels to run, e.g. "
                              "'ethnic group,tribe,indigenous people'. Defaults to all.")
+    parser.add_argument("--direct-p31", action="store_true", dest="direct_p31",
+                        help="Use wdt:P31 only (no P279* transitive). Faster when WDQS is slow.")
+    parser.add_argument("--qid-file", type=str, default=None, dest="qid_file",
+                        help="Skip SPARQL; load QIDs from a newline-delimited text file.")
     args = parser.parse_args()
 
     # Filter categories if requested
@@ -591,34 +600,40 @@ def main():
         print(f"Running {len(categories)} selected categories: {[l for l,_ in categories]}")
 
     # ------------------------------------------------------------------
-    # Step 1: SPARQL → QIDs per polity superclass
+    # Step 1: SPARQL → QIDs per polity superclass  (or load from file)
     # ------------------------------------------------------------------
-    print(f"\n[Step 1] Fetching polity QIDs via SPARQL "
-          f"({len(categories)} categories, "
-          f"window: {args.min_year or 'any'}–{args.max_year})...")
+    if args.qid_file:
+        with open(args.qid_file) as _f:
+            all_qids = [ln.strip() for ln in _f if ln.strip()]
+        print(f"\n[Step 1] Loaded {len(all_qids)} QIDs from {args.qid_file} (skipping SPARQL)")
+    else:
+        print(f"\n[Step 1] Fetching polity QIDs via SPARQL "
+              f"({len(categories)} categories, "
+              f"window: {args.min_year or 'any'}\u2013{args.max_year})...")
 
-    all_qids: list[str] = []
-    seen: set[str] = set()
+        all_qids: list[str] = []
+        seen: set[str] = set()
 
-    for label, class_qid in categories:
-        print(f"  Querying {label} (wd:{class_qid})... ", end="", flush=True)
-        try:
-            qids = fetch_polity_sparql_qids(
-                class_qid, args.limit,
-                min_year=args.min_year, max_year=args.max_year,
-            )
-            new_qids = [q for q in qids if q not in seen]
-            seen.update(new_qids)
-            all_qids.extend(new_qids)
-            print(f"{len(new_qids)} QIDs")
-        except Exception as exc:
-            print(f"ERROR: {exc}", file=sys.stderr)
-        time.sleep(1.0)
+        for label, class_qid in categories:
+            print(f"  Querying {label} (wd:{class_qid})... ", end="", flush=True)
+            try:
+                qids = fetch_polity_sparql_qids(
+                    class_qid, args.limit,
+                    min_year=args.min_year, max_year=args.max_year,
+                    direct_p31=args.direct_p31,
+                )
+                new_qids = [q for q in qids if q not in seen]
+                seen.update(new_qids)
+                all_qids.extend(new_qids)
+                print(f"{len(new_qids)} QIDs")
+            except Exception as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+            time.sleep(1.0)
 
-    print(f"  Total unique polity QIDs: {len(all_qids)}")
-    if not all_qids:
-        print("No QIDs fetched. Exiting.")
-        return
+        print(f"  Total unique polity QIDs: {len(all_qids)}")
+        if not all_qids:
+            print("No QIDs fetched. Exiting.")
+            return
 
     # ------------------------------------------------------------------
     # Step 2: Wikidata API batch fetch

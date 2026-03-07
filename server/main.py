@@ -849,11 +849,73 @@ def delete_territory_mapping(hb_name: str, snapshot_year: int, _: None = Depends
         conn.close()
 
 
+def _cascade_territory_mapping(cur, hb_name: str, origin_year: int, polity_id: str, wikidata_qid, snapshot_years: list[int], polity_year_start, polity_year_end) -> list[int]:
+    """
+    Walk snapshot years outward from origin_year in both directions.
+    For each adjacent snapshot where:
+      - the polity is active (year_start <= snap_year and (year_end is None or year_end >= snap_year))
+      - hb_name exists in snapshot_polygons for that year
+      - the polygon has no existing polity assignment (polity_id IS NULL)
+      - no manual territory_name_mapping already exists for that (hb_name, snap_year)
+    ... assign the same polity.
+    Stops in each direction when any of those conditions fail.
+    Returns list of snapshot years where cascade assignments were made.
+    """
+    cascaded = []
+    origin_idx = snapshot_years.index(origin_year)
+
+    for direction in (-1, 1):
+        idx = origin_idx + direction
+        while 0 <= idx < len(snapshot_years):
+            snap_year = snapshot_years[idx]
+
+            # Check polity is active at this snapshot
+            if polity_year_start is not None and snap_year < polity_year_start:
+                break
+            if polity_year_end is not None and snap_year > polity_year_end:
+                break
+
+            # Check hb_name exists in this snapshot with no polity assigned
+            cur.execute("""
+                SELECT sp.polity_id,
+                       (SELECT COUNT(*) FROM territory_name_mappings
+                        WHERE hb_name = %s AND snapshot_year = %s) AS has_manual
+                FROM snapshot_polygons sp
+                WHERE sp.hb_name = %s AND sp.snapshot_year = %s
+                LIMIT 1
+            """, (hb_name, snap_year, hb_name, snap_year))
+            row = cur.fetchone()
+
+            if row is None:
+                # hb_name doesn't exist in this snapshot — stop
+                break
+            if row["polity_id"] is not None or row["has_manual"] > 0:
+                # Already assigned or has a manual mapping — stop
+                break
+
+            # Assign
+            cur.execute("""
+                INSERT INTO territory_name_mappings (hb_name, snapshot_year, polity_id, wikidata_qid, confidence)
+                VALUES (%s, %s, %s, %s, 'manual')
+                ON CONFLICT (hb_name, snapshot_year) DO NOTHING
+            """, (hb_name, snap_year, polity_id, wikidata_qid))
+            cur.execute(
+                "UPDATE snapshot_polygons SET polity_id = %s WHERE hb_name = %s AND snapshot_year = %s AND polity_id IS NULL",
+                (polity_id, hb_name, snap_year),
+            )
+            cascaded.append(snap_year)
+            idx += direction
+
+    return sorted(cascaded)
+
+
 @app.post("/api/territory-mappings", status_code=201)
 async def save_territory_mapping(request: Request, _: None = Depends(require_write_secret)):
     """
     Persist a manual territory name → polity mapping.
     Upserts into territory_name_mappings with confidence='manual'.
+    Also cascades the assignment to adjacent snapshots while the polity is active
+    and the territory is unassigned.
     """
     body = await request.json()
     hb_name = body.get("hbName")
@@ -867,6 +929,8 @@ async def save_territory_mapping(request: Request, _: None = Depends(require_wri
     conn = get_conn()
     try:
         cur = conn.cursor()
+
+        # Primary upsert
         cur.execute("""
             INSERT INTO territory_name_mappings (hb_name, snapshot_year, polity_id, wikidata_qid, confidence)
             VALUES (%s, %s, %s, %s, 'manual')
@@ -883,8 +947,25 @@ async def save_territory_mapping(request: Request, _: None = Depends(require_wri
             "UPDATE snapshot_polygons SET polity_id = %s WHERE hb_name = %s AND snapshot_year = %s",
             (polity_id, hb_name, snapshot_year),
         )
+
+        # Cascade to adjacent snapshots
+        cur.execute("SELECT snapshot_year FROM territory_snapshots ORDER BY snapshot_year")
+        snapshot_years = [r["snapshot_year"] for r in cur.fetchall()]
+
+        cur.execute("SELECT year_start, year_end FROM polities WHERE id = %s", (polity_id,))
+        polity_row = cur.fetchone()
+        polity_year_start = polity_row["year_start"] if polity_row else None
+        polity_year_end   = polity_row["year_end"]   if polity_row else None
+
+        cascaded = []
+        if snapshot_year in snapshot_years:
+            cascaded = _cascade_territory_mapping(
+                cur, hb_name, snapshot_year, polity_id, wikidata_qid,
+                snapshot_years, polity_year_start, polity_year_end,
+            )
+
         conn.commit()
-        return {"hbName": hb_name, "snapshotYear": snapshot_year, "polityId": polity_id}
+        return {"hbName": hb_name, "snapshotYear": snapshot_year, "polityId": polity_id, "cascaded": cascaded}
     finally:
         conn.close()
 
@@ -1063,6 +1144,25 @@ async def assign_polygon(polygon_id: str, request: Request, _: None = Depends(re
             (polygon["hb_name"], snap_yr),
         )
 
+        # Cascade to adjacent snapshots
+        # Use a plain cursor — _cascade_territory_mapping uses index-based row access
+        plain_cur = conn.cursor()
+        plain_cur.execute("SELECT snapshot_year FROM territory_snapshots ORDER BY snapshot_year")
+        snapshot_years = [r["snapshot_year"] for r in plain_cur.fetchall()]
+
+        wikidata_qid = None
+        plain_cur.execute("SELECT wikidata_qid FROM polities WHERE id = %s", (polity_id,))
+        wqrow = plain_cur.fetchone()
+        if wqrow:
+            wikidata_qid = wqrow["wikidata_qid"]
+
+        cascaded = []
+        if snap_yr in snapshot_years:
+            cascaded = _cascade_territory_mapping(
+                plain_cur, polygon["hb_name"], snap_yr, polity_id, wikidata_qid,
+                snapshot_years, p_start, p_end,
+            )
+
         conn.commit()
         return {
             "ok": True,
@@ -1072,6 +1172,7 @@ async def assign_polygon(polygon_id: str, request: Request, _: None = Depends(re
             "sliceEnd": slice_end,
             "createdBefore": needs_before,
             "createdAfter": needs_after,
+            "cascaded": cascaded,
         }
     finally:
         conn.close()
