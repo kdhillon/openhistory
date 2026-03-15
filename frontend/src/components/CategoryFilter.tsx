@@ -26,9 +26,6 @@ interface Props {
   seedLoading: boolean;
   locationCount: number;
   polityCount: number;
-  // Territory source toggle
-  territorySource: 'hb' | 'ohm';
-  onTerritorySourceChange: (src: 'hb' | 'ohm') => void;
 }
 
 function Spinner() {
@@ -118,7 +115,7 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
   );
 }
 
-export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, onOpenData, onOpenAbout, onEditTerritory, editorMode, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, territorySource, onTerritorySourceChange }: Props) {
+export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, onOpenData, onOpenAbout, onEditTerritory, editorMode, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount }: Props) {
   const bordersColor = '#607D8B';
   const otherPolitiesColor = '#9C27B0';
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -148,19 +145,6 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
         <div style={styles.wordmark}>OpenHistory</div>
         <div style={{ flex: 1 }} />
         <button onClick={onEditTerritory} style={{ ...styles.dataBtn, ...(editorMode ? styles.dataBtnActive : {}) }}>Edit Borders ✎</button>
-        {/* Territory source toggle */}
-        <div style={{ display: 'flex', border: '1px solid rgba(0,0,0,0.18)', borderRadius: 6, overflow: 'hidden', flexShrink: 0 }}>
-          <button
-            onClick={() => onTerritorySourceChange('hb')}
-            title="Classic territory data (historical-basemaps)"
-            style={{ ...styles.dataBtn, border: 'none', borderRadius: 0, ...(territorySource === 'hb' ? styles.dataBtnActive : {}), padding: '5px 10px' }}
-          >Classic</button>
-          <button
-            onClick={() => onTerritorySourceChange('ohm')}
-            title="OpenHistoricalMap territory data"
-            style={{ ...styles.dataBtn, border: 'none', borderLeft: '1px solid rgba(0,0,0,0.18)', borderRadius: 0, ...(territorySource === 'ohm' ? styles.dataBtnActive : {}), padding: '5px 10px' }}
-          >OHM</button>
-        </div>
         <button onClick={onOpenData} style={styles.dataBtn}>Data Explorer ↗</button>
         {/* Gear / settings */}
         <button

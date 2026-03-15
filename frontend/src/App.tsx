@@ -91,17 +91,10 @@ export default function App() {
   const { eventFeatures, windowInfo, isLoading: eventsLoading, error: eventsError } =
     useEventSource({ currentYear: debouncedYear, stepSize: timeline.stepSize });
 
-  const [territorySource, setTerritorySource] = useState<'hb' | 'ohm'>(
-    () => (localStorage.getItem('oh_territory_source') as 'hb' | 'ohm') ?? 'ohm',
-  );
-
-  const handleTerritorySourceChange = useCallback((src: 'hb' | 'ohm') => {
-    setTerritorySource(src);
-    localStorage.setItem('oh_territory_source', src);
-  }, []);
+  const territorySource = 'ohm' as const;
 
   const { territoryFeatures, refresh: refreshTerritories, isLoading: territoriesLoading, error: territoriesError } =
-    useTerritoriesSource({ currentYear: debouncedYear, stepSize: timeline.stepSize, source: territorySource === 'ohm' ? 'hb' : territorySource });
+    useTerritoriesSource({ currentYear: debouncedYear, stepSize: timeline.stepSize, source: 'hb' });
 
   const { links: ohmLinks, refresh: refreshOhmLinks } = useOhmLinks();
 
@@ -542,8 +535,6 @@ export default function App() {
         seedLoading={seedLoading}
         locationCount={locationCount}
         polityCount={polityCount}
-        territorySource={territorySource}
-        onTerritorySourceChange={handleTerritorySourceChange}
       />
 
       <div style={{ position: 'absolute', inset: `69px 0 ${TIMELINE_BAR_HEIGHT}px 0` }}>
