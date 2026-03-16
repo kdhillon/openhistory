@@ -42,7 +42,6 @@ This project is under active development. The core map, data pipeline, and deplo
 - **Polity succession** — `preceded_by` / `succeeded_by` chain is stored but not surfaced in the UI
 - **Related events** — semantically related events panel in the info card
 - **Natural language search** — search by concept, not just by name
-- **Mobile layout** — not yet optimized for small screens
 
 ---
 

@@ -88,6 +88,7 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
   const [loadingSections, setLoadingSections] = useState<Set<number>>(new Set());
   const [imageIndex, setImageIndex] = useState(0);
   const [imageExpanded, setImageExpanded] = useState(false);
+  const [showImages, setShowImages] = useState(!isMobile);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const [categorySaving, setCategorySaving] = useState(false);
 
@@ -365,7 +366,7 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
       width: expanded ? expandedWidth : 360,
       height: expanded ? 'calc(100vh - 136px)' : 'auto',
       maxHeight: isMobile ? 'calc(100vh - 160px)' : 'calc(100vh - 220px)',
-      overflow: expanded ? 'hidden' : 'visible',
+      overflow: (expanded || isMobile) ? 'hidden' : 'visible',
       transition: dragRef.current ? 'none' : 'width 0.25s ease',
     }}>
       {/* Resize handle — left edge, expanded only */}
@@ -536,8 +537,16 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
         </div>
       </div>
 
-      {/* Image carousel — expanded only */}
-      {expanded && (
+      {/* Image toggle row — shown once article loaded and has images */}
+      {article && article.images.length > 0 && (
+        <button onClick={() => setShowImages((v) => !v)} style={styles.imageToggle}>
+          <span>Photos ({article.images.length})</span>
+          <span style={{ fontSize: 10, opacity: 0.6 }}>{showImages ? '▾' : '▸'}</span>
+        </button>
+      )}
+
+      {/* Image carousel */}
+      {showImages && (
         article && article.images.length > 0
           ? (
             <div style={{ position: 'relative', flexShrink: 0, background: '#000', cursor: 'pointer' }} onClick={() => setImageExpanded((v) => !v)}>
@@ -546,8 +555,8 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
                 alt={`${feature.title} ${imageIndex + 1}`}
                 style={{
                   width: '100%',
-                  height: imageExpanded ? 'auto' : 240,
-                  maxHeight: imageExpanded ? '55vh' : 240,
+                  height: imageExpanded ? 'auto' : 200,
+                  maxHeight: imageExpanded ? '50vh' : 200,
                   objectFit: imageExpanded ? 'contain' : 'cover',
                   display: 'block',
                 }}
@@ -927,8 +936,8 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
       {/* Body — scrollable only when expanded */}
       <div ref={bodyRef} onClick={handleBodyClick} style={{
         ...styles.body,
-        flex: expanded ? 1 : undefined,
-        overflowY: expanded ? 'auto' : 'visible',
+        flex: (expanded || isMobile) ? 1 : undefined,
+        overflowY: (expanded || isMobile) ? 'auto' : 'visible',
       }}>
         {!expanded ? (
           (() => {
@@ -1181,6 +1190,23 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     padding: '2px 7px',
     borderRadius: 10,
+  },
+  imageToggle: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    padding: '6px 0',
+    background: 'none',
+    border: 'none',
+    borderTop: '1px solid rgba(0,0,0,0.07)',
+    borderBottom: '1px solid rgba(0,0,0,0.07)',
+    color: '#555',
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    marginBottom: 2,
   },
   imageLoader: {
     width: '100%',
