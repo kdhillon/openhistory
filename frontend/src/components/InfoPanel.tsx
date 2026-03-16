@@ -39,6 +39,7 @@ interface Props {
   onHideFeature?: (id: string, type: 'polity' | 'event') => void;
   selectedLang?: string;
   onStartStory?: (slug: string) => void;
+  isMobile?: boolean;
 }
 
 function wikiApi(lang: string) {
@@ -71,7 +72,7 @@ function PencilIcon() {
   );
 }
 
-export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated, hiddenNations, onToggleHiddenNation, onHideFeature, selectedLang = 'en', onStartStory }: Props) {
+export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated, hiddenNations, onToggleHiddenNation, onHideFeature, selectedLang = 'en', onStartStory, isMobile }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [expandedWidth, setExpandedWidth] = useState(468);
   const [editField, setEditField] = useState<'date' | 'location' | 'capital' | 'sovereign' | null>(null);
@@ -360,9 +361,10 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
   return (
     <div style={{
       ...styles.panel,
+      top: isMobile ? 56 : 114,
       width: expanded ? expandedWidth : 360,
       height: expanded ? 'calc(100vh - 136px)' : 'auto',
-      maxHeight: 'calc(100vh - 220px)',
+      maxHeight: isMobile ? 'calc(100vh - 160px)' : 'calc(100vh - 220px)',
       overflow: expanded ? 'hidden' : 'visible',
       transition: dragRef.current ? 'none' : 'width 0.25s ease',
     }}>

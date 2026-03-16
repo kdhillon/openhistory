@@ -628,6 +628,7 @@ export default function App() {
           onPrev={handlePrevBeat}
           onJumpToBeat={handleJumpToBeat}
           onExit={exitStory}
+          isMobile={isMobile}
         />
       ) : (
         <InfoPanel
@@ -644,6 +645,7 @@ export default function App() {
           onHideFeature={handleHideFeature}
           selectedLang={selectedLang}
           onStartStory={handleStartStory}
+          isMobile={isMobile}
         />
       )}
 

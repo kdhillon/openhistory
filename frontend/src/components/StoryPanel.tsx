@@ -17,6 +17,7 @@ interface Props {
   onPrev: () => void;
   onJumpToBeat: (index: number) => void;
   onExit: () => void;
+  isMobile?: boolean;
 }
 
 function formatBeatDate(beat: StoryBeat, event: FeatureProperties | null): string | null {
@@ -36,7 +37,7 @@ function formatBeatDate(beat: StoryBeat, event: FeatureProperties | null): strin
   return null;
 }
 
-export function StoryPanel({ story, beatIndex, currentBeat, currentBeatEvent, onNext, onPrev, onJumpToBeat, onExit }: Props) {
+export function StoryPanel({ story, beatIndex, currentBeat, currentBeatEvent, onNext, onPrev, onJumpToBeat, onExit, isMobile }: Props) {
   if (!currentBeat) return null;
 
   const isFirst = beatIndex === 0;
@@ -54,7 +55,7 @@ export function StoryPanel({ story, beatIndex, currentBeat, currentBeatEvent, on
   const isChapterStart = currentBeat.chapter_title != null;
 
   return (
-    <div style={styles.panel}>
+    <div style={{ ...styles.panel, top: isMobile ? 56 : 114, maxHeight: isMobile ? 'calc(100vh - 160px)' : 'calc(100vh - 220px)' }}>
       {/* Top bar */}
       <div style={styles.topBar}>
         <button onClick={onExit} style={styles.exitBtn}>
