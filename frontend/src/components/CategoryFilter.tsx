@@ -16,6 +16,7 @@ interface Props {
   onToggleOtherPolities: () => void;
   onOpenData: () => void;
   onOpenAbout: () => void;
+  onOpenStories: () => void;
   onEditTerritory: () => void;
   editorMode: boolean;
   territorySource: 'hb' | 'ohm';
@@ -119,7 +120,7 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
   );
 }
 
-export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, onOpenData, onOpenAbout, onEditTerritory, editorMode, territorySource, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount }: Props) {
+export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, onOpenData, onOpenAbout, onOpenStories, onEditTerritory, editorMode, territorySource, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount }: Props) {
   const bordersColor = '#607D8B';
   const otherPolitiesColor = '#9C27B0';
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -154,6 +155,13 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
           <button onClick={onEditTerritory} style={{ ...styles.dataBtn, ...(editorMode ? styles.dataBtnActive : {}) }}>Edit Borders ✎</button>
         )}
         <button onClick={onOpenData} style={styles.dataBtn}>Data Explorer ↗</button>
+        <button onClick={onOpenStories} title="Story Browser" style={styles.dataBtn}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5, marginBottom: 1 }}>
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+          </svg>
+          Stories
+        </button>
         {/* Gear / settings */}
         <button
           ref={gearRef}
@@ -264,6 +272,7 @@ interface MobileTopBarProps {
   showOtherPolities: boolean;
   onToggleOtherPolities: () => void;
   onOpenAbout: () => void;
+  onOpenStories: () => void;
   selectedLang: string;
   onLangChange: (lang: string) => void;
   stepSize: number;
@@ -277,7 +286,7 @@ export function MobileTopBar({
   activeCategories, onToggle,
   showBorders, onToggleBorders,
   showOtherPolities, onToggleOtherPolities,
-  onOpenAbout, selectedLang, onLangChange,
+  onOpenAbout, onOpenStories, selectedLang, onLangChange,
   stepSize, stepOptions, onSetStepSize,
   playbackSpeed, onSetSpeed,
 }: MobileTopBarProps) {
@@ -291,6 +300,17 @@ export function MobileTopBar({
         <button onClick={onOpenAbout} title="About OpenHistory" style={mb.infoBtn}>i</button>
         <div style={mb.wordmark}>OpenHistory</div>
         <div style={{ flex: 1 }} />
+        <button
+          onClick={onOpenStories}
+          title="Story Browser"
+          style={{ ...mb.iconBtn, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, padding: '4px 10px' }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+          </svg>
+          Stories
+        </button>
         <button
           onClick={() => setSheetOpen((v) => !v)}
           title="Filters & settings"

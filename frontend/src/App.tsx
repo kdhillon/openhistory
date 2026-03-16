@@ -16,6 +16,7 @@ import { WelcomeModal, shouldShowWelcome } from './components/WelcomeModal';
 import { MajorEventsPanel } from './components/MajorEventsPanel';
 import { UnlocatedEventsPanel } from './components/UnlocatedEventsPanel';
 import { StoryPanel } from './components/StoryPanel';
+import { StoryBrowserModal } from './components/StoryBrowserModal';
 import { useTimeline, encodeDate, decodeDate, STEP_YEAR, STEP_DAY } from './hooks/useTimeline';
 import { useStory } from './hooks/useStory';
 import { useEventSource } from './hooks/useEventSource';
@@ -141,6 +142,7 @@ export default function App() {
   const [hiddenFeatureIds, setHiddenFeatureIds] = useState<Set<string>>(new Set());
   // Territory editor
   const [editorMode, setEditorMode] = useState(false);
+  const [storyBrowserOpen, setStoryBrowserOpen] = useState(false);
   const [mapInstance, setMapInstance] = useState<MaplibreMap | null>(null);
   // Wikipedia language + polity label translations
   const [selectedLang, setSelectedLang] = useState(() => localStorage.getItem('oh_lang') ?? 'en');
@@ -532,6 +534,7 @@ export default function App() {
           showOtherPolities={showOtherPolities}
           onToggleOtherPolities={handleToggleOtherPolities}
           onOpenAbout={() => navigate('/about')}
+          onOpenStories={() => setStoryBrowserOpen(true)}
           selectedLang={selectedLang}
           onLangChange={handleLangChange}
           stepSize={timeline.stepSize}
@@ -550,6 +553,7 @@ export default function App() {
           onToggleOtherPolities={handleToggleOtherPolities}
           onOpenAbout={() => navigate('/about')}
           onOpenData={() => navigate('/data')}
+          onOpenStories={() => setStoryBrowserOpen(true)}
           onEditTerritory={() => setEditorMode((v) => !v)}
           editorMode={editorMode}
           territorySource={territorySource}
@@ -639,6 +643,13 @@ export default function App() {
           onToggleHiddenNation={handleToggleHiddenNation}
           onHideFeature={handleHideFeature}
           selectedLang={selectedLang}
+          onStartStory={handleStartStory}
+        />
+      )}
+
+      {storyBrowserOpen && (
+        <StoryBrowserModal
+          onClose={() => setStoryBrowserOpen(false)}
           onStartStory={handleStartStory}
         />
       )}
