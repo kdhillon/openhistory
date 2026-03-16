@@ -3,6 +3,9 @@ import type { Category } from '../types';
 import { EVENT_CATEGORIES, LOCATION_CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS } from '../theme/categories';
 import { WIKIPEDIA_LANGUAGES } from '../lib/languages';
 import type { WindowInfo } from '../hooks/useEventSource';
+import { MOBILE_TIMELINE_BAR_HEIGHT, SPEED_OPTIONS, formatStepLabel } from './TimelineBar';
+
+export const MOBILE_TOP_BAR_HEIGHT = 48;
 
 interface Props {
   activeCategories: Set<Category>;
@@ -15,6 +18,7 @@ interface Props {
   onOpenAbout: () => void;
   onEditTerritory: () => void;
   editorMode: boolean;
+  territorySource: 'hb' | 'ohm';
   selectedLang: string;
   onLangChange: (lang: string) => void;
   // Data stats (from DataOverlay)
@@ -115,7 +119,7 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
   );
 }
 
-export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, onOpenData, onOpenAbout, onEditTerritory, editorMode, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount }: Props) {
+export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, onOpenData, onOpenAbout, onEditTerritory, editorMode, territorySource, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount }: Props) {
   const bordersColor = '#607D8B';
   const otherPolitiesColor = '#9C27B0';
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -144,7 +148,11 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
         <button onClick={onOpenAbout} title="About OpenHistory" style={styles.infoBtn}>i</button>
         <div style={styles.wordmark}>OpenHistory</div>
         <div style={{ flex: 1 }} />
-        <button onClick={onEditTerritory} style={{ ...styles.dataBtn, ...(editorMode ? styles.dataBtnActive : {}) }}>Edit Borders ✎</button>
+        {territorySource === 'ohm' ? (
+          <a href="https://www.openhistoricalmap.org" target="_blank" rel="noreferrer" style={{ ...styles.dataBtn, textDecoration: 'none' }}>Edit Borders ✎</a>
+        ) : (
+          <button onClick={onEditTerritory} style={{ ...styles.dataBtn, ...(editorMode ? styles.dataBtnActive : {}) }}>Edit Borders ✎</button>
+        )}
         <button onClick={onOpenData} style={styles.dataBtn}>Data Explorer ↗</button>
         {/* Gear / settings */}
         <button
@@ -247,6 +255,238 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
     </div>
   );
 }
+
+interface MobileTopBarProps {
+  activeCategories: Set<Category>;
+  onToggle: (cat: Category) => void;
+  showBorders: boolean;
+  onToggleBorders: () => void;
+  showOtherPolities: boolean;
+  onToggleOtherPolities: () => void;
+  onOpenAbout: () => void;
+  selectedLang: string;
+  onLangChange: (lang: string) => void;
+  stepSize: number;
+  stepOptions: number[];
+  onSetStepSize: (s: number) => void;
+  playbackSpeed: number;
+  onSetSpeed: (s: number) => void;
+}
+
+export function MobileTopBar({
+  activeCategories, onToggle,
+  showBorders, onToggleBorders,
+  showOtherPolities, onToggleOtherPolities,
+  onOpenAbout, selectedLang, onLangChange,
+  stepSize, stepOptions, onSetStepSize,
+  playbackSpeed, onSetSpeed,
+}: MobileTopBarProps) {
+  const bordersColor = '#607D8B';
+  const otherPolitiesColor = '#9C27B0';
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  return (
+    <>
+      <div style={mb.bar}>
+        <button onClick={onOpenAbout} title="About OpenHistory" style={mb.infoBtn}>i</button>
+        <div style={mb.wordmark}>OpenHistory</div>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={() => setSheetOpen((v) => !v)}
+          title="Filters & settings"
+          style={{ ...mb.iconBtn, color: sheetOpen ? '#3366cc' : '#202122', background: sheetOpen ? '#e8f0fe' : 'transparent', borderColor: sheetOpen ? '#3366cc' : 'rgba(0,0,0,0.18)' }}
+        >⚙</button>
+      </div>
+
+      {sheetOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={() => setSheetOpen(false)}
+            style={{ position: 'fixed', inset: `${MOBILE_TOP_BAR_HEIGHT}px 0 ${MOBILE_TIMELINE_BAR_HEIGHT}px 0`, zIndex: 149, background: 'rgba(0,0,0,0.2)' }}
+          />
+          {/* Bottom sheet */}
+          <div style={mb.sheet}>
+            <div style={mb.sheetSection}>
+              <div style={mb.sectionLabel}>Layers</div>
+              <div style={mb.chipRow}>
+                <button
+                  onClick={onToggleBorders}
+                  style={{ ...mb.chip, background: showBorders ? `${bordersColor}22` : 'transparent', borderColor: showBorders ? `${bordersColor}88` : 'rgba(0,0,0,0.15)', color: showBorders ? '#202122' : '#9a9a9a' }}
+                >
+                  <span style={{ ...mb.dot, background: bordersColor, opacity: showBorders ? 1 : 0.4 }} />Borders
+                </button>
+                <button
+                  onClick={onToggleOtherPolities}
+                  style={{ ...mb.chip, background: showOtherPolities ? `${otherPolitiesColor}22` : 'transparent', borderColor: showOtherPolities ? `${otherPolitiesColor}88` : 'rgba(0,0,0,0.15)', color: showOtherPolities ? '#202122' : '#9a9a9a' }}
+                >
+                  <span style={{ ...mb.dot, background: otherPolitiesColor, opacity: showOtherPolities ? 1 : 0.4 }} />Other Polities
+                </button>
+              </div>
+            </div>
+
+            <div style={mb.sheetSection}>
+              <div style={mb.sectionLabel}>Events</div>
+              <div style={mb.chipRow}>
+                <ChipGroup cats={EVENT_CATEGORIES} activeCategories={activeCategories} onToggle={onToggle} />
+              </div>
+            </div>
+
+            <div style={mb.sheetSection}>
+              <div style={mb.sectionLabel}>Locations</div>
+              <div style={mb.chipRow}>
+                <ChipGroup cats={LOCATION_CATEGORIES} activeCategories={activeCategories} onToggle={onToggle} />
+              </div>
+            </div>
+
+            <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.08)', margin: '4px 0 10px' }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <span style={mb.settingLabel}>Language</span>
+              <select value={selectedLang} onChange={(e) => onLangChange(e.target.value)} style={mb.select}>
+                {WIKIPEDIA_LANGUAGES.map(([code, native]) => (
+                  <option key={code} value={code}>{native}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={mb.settingLabel}>Step</span>
+                <select value={stepSize} onChange={(e) => { onSetStepSize(Number(e.target.value)); e.currentTarget.blur(); }} style={mb.select}>
+                  {stepOptions.map((s) => <option key={s} value={s}>{formatStepLabel(s)}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={mb.settingLabel}>Speed</span>
+                <select value={playbackSpeed} onChange={(e) => { onSetSpeed(Number(e.target.value)); e.currentTarget.blur(); }} style={mb.select}>
+                  {SPEED_OPTIONS.map((s) => <option key={s} value={s}>{s}×</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+const mb: Record<string, React.CSSProperties> = {
+  bar: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: MOBILE_TOP_BAR_HEIGHT,
+    background: '#ffffff',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '0 14px',
+    zIndex: 100,
+    borderBottom: '1px solid rgba(0,0,0,0.1)',
+  },
+  infoBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: '50%',
+    border: '1.5px solid rgba(0,0,0,0.3)',
+    background: 'transparent',
+    color: 'rgba(0,0,0,0.5)',
+    fontSize: 12,
+    fontWeight: 700,
+    fontStyle: 'italic',
+    fontFamily: 'Georgia, serif',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    padding: 0,
+    lineHeight: 1,
+  },
+  wordmark: {
+    fontSize: 17,
+    fontWeight: 700,
+    letterSpacing: '-0.02em',
+    color: '#202122',
+    flexShrink: 0,
+  },
+  iconBtn: {
+    fontSize: 18,
+    lineHeight: 1,
+    padding: '4px 8px',
+    border: '1px solid rgba(0,0,0,0.18)',
+    borderRadius: 6,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    flexShrink: 0,
+  },
+  sheet: {
+    position: 'fixed',
+    bottom: MOBILE_TIMELINE_BAR_HEIGHT,
+    left: 0,
+    right: 0,
+    maxHeight: '70vh',
+    overflowY: 'auto',
+    background: '#ffffff',
+    borderTop: '1px solid rgba(0,0,0,0.1)',
+    boxShadow: '0 -4px 20px rgba(0,0,0,0.12)',
+    zIndex: 150,
+    padding: '12px 16px 16px',
+  },
+  sheetSection: { marginBottom: 12 },
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: '0.07em',
+    textTransform: 'uppercase',
+    color: 'rgba(0,0,0,0.35)',
+    marginBottom: 8,
+  },
+  chipRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  chip: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 5,
+    border: '1px solid',
+    borderRadius: 6,
+    fontSize: 13,
+    fontWeight: 500,
+    padding: '6px 12px',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    fontFamily: 'inherit',
+  },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: '50%',
+    flexShrink: 0,
+  },
+  settingLabel: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#202122',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  },
+  select: {
+    fontSize: 13,
+    color: '#202122',
+    background: '#f3f4f6',
+    border: '1px solid rgba(0,0,0,0.12)',
+    borderRadius: 6,
+    padding: '5px 8px',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    flex: 1,
+  },
+};
 
 const styles: Record<string, React.CSSProperties> = {
   bar: {

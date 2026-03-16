@@ -6,6 +6,13 @@ import {
 } from '../hooks/useTimeline';
 
 export const TIMELINE_BAR_HEIGHT = 64;
+export const MOBILE_TIMELINE_BAR_HEIGHT = 90;
+export const SPEED_OPTIONS = [1, 5, 10, 25, 50];
+export function formatStepLabel(s: number): string {
+  if (s < STEP_MONTH) return '1d';
+  if (s < STEP_YEAR)  return '1mo';
+  return `${s / STEP_YEAR}yr`;
+}
 
 interface Props {
   currentDateInt: number;
@@ -40,13 +47,6 @@ function parseYearInput(raw: string): number | null {
   return encodeDate(year, 1, 1);
 }
 
-function formatStepLabel(s: number): string {
-  if (s < STEP_MONTH)           return '1d';
-  if (s < STEP_YEAR)            return '1mo';
-  return `${s / STEP_YEAR}yr`;
-}
-
-const SPEED_OPTIONS = [1, 5, 10, 25, 50];
 const JUMP_STEPS = 5; // how many steps the ±5 buttons jump
 
 // ── Year bookmark strip ───────────────────────────────────────────────────────
@@ -214,6 +214,222 @@ export function TimelineBar({
     </div>
   );
 }
+
+export function MobileTimelineBar({
+  currentDateInt,
+  stepSize,
+  isPlaying,
+  onSeek,
+  onStep,
+  onTogglePlay,
+}: Pick<Props, 'currentDateInt' | 'stepSize' | 'isPlaying' | 'onSeek' | 'onStep' | 'onTogglePlay'>) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const sliderTrackRef = useRef<HTMLDivElement>(null);
+  const [sliderPx, setSliderPx] = useState(0);
+
+  useEffect(() => {
+    const el = sliderTrackRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => setSliderPx(entries[0].contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const yearMarkers = useMemo(() => getYearMarkers(sliderPx), [sliderPx]);
+
+  const startEdit = useCallback(() => {
+    setDraft(displayDate(currentDateInt, stepSize));
+    setEditing(true);
+    requestAnimationFrame(() => inputRef.current?.select());
+  }, [currentDateInt, stepSize]);
+
+  const commit = useCallback(() => {
+    const dateInt = parseYearInput(draft);
+    if (dateInt !== null) onSeek(dateInt);
+    setEditing(false);
+  }, [draft, onSeek]);
+
+  const jumpBack    = useCallback(() => { for (let i = 0; i < JUMP_STEPS; i++) onStep(-1); }, [onStep]);
+  const jumpForward = useCallback(() => { for (let i = 0; i < JUMP_STEPS; i++) onStep(1);  }, [onStep]);
+
+  return (
+    <div style={mStyles.bar}>
+      {/* Row 1: year + playback controls */}
+      <div style={mStyles.row1}>
+        <div style={mStyles.yearBlock}>
+          {editing ? (
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                if (e.key === 'Escape') setEditing(false);
+              }}
+              onBlur={commit}
+              autoFocus
+              style={mStyles.yearInput}
+              placeholder="e.g. 600 BCE"
+            />
+          ) : (
+            <span style={mStyles.yearLabel} onClick={startEdit} title="Tap to type a year">
+              {displayDate(currentDateInt, stepSize)}
+            </span>
+          )}
+        </div>
+        <div style={mStyles.controls}>
+          <button style={mStyles.jumpBtn} onClick={jumpBack} title="Back 5 steps">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M3 2v10M10.5 2L5 7l5.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ marginLeft: -6 }}>
+              <path d="M3 2v10M10.5 2L5 7l5.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <button style={mStyles.stepBtn} onClick={() => onStep(-1)} title="Step back">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M3 2v10M10.5 2L5 7l5.5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <button style={{ ...mStyles.playBtn, background: isPlaying ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.05)' }} onClick={onTogglePlay}>
+            {isPlaying
+              ? <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="4" height="12" rx="1"/><rect x="8" y="1" width="4" height="12" rx="1"/></svg>
+              : <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M3 1.5l10 5.5-10 5.5V1.5z"/></svg>
+            }
+          </button>
+          <button style={mStyles.stepBtn} onClick={() => onStep(1)} title="Step forward">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M11 2v10M3.5 2L9 7 3.5 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <button style={mStyles.jumpBtn} onClick={jumpForward} title="Forward 5 steps">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M11 2v10M3.5 2L9 7 3.5 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ marginLeft: -6 }}>
+              <path d="M11 2v10M3.5 2L9 7 3.5 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      {/* Row 2: slider */}
+      <div style={mStyles.sliderTrack} ref={sliderTrackRef}>
+        <input
+          type="range"
+          min={DATE_MIN}
+          max={DATE_MAX}
+          step={stepSize}
+          value={currentDateInt}
+          onChange={(e) => onSeek(normalizeDateInt(Number(e.target.value)))}
+          style={mStyles.slider}
+        />
+        <div style={styles.yearStrip}>
+          {yearMarkers.map((y) => {
+            const trackPx = sliderPx - THUMB_RADIUS * 2;
+            const left = THUMB_RADIUS + ((y - YEAR_MIN) / YEAR_RANGE) * trackPx;
+            return (
+              <button key={y} onClick={() => onSeek(encodeDate(y, 1, 1))} style={{ ...styles.markerBtn, left }}>
+                <div style={styles.markerTick} />
+                {fmtMarker(y)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const mStyles: Record<string, React.CSSProperties> = {
+  bar: {
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: MOBILE_TIMELINE_BAR_HEIGHT,
+    background: '#ffffff',
+    display: 'flex',
+    flexDirection: 'column',
+    zIndex: 100,
+    borderTop: '1px solid rgba(0,0,0,0.1)',
+    padding: '6px 12px 4px',
+    gap: 2,
+  },
+  row1: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flex: '0 0 auto',
+  },
+  yearBlock: { flexShrink: 0 },
+  yearLabel: {
+    fontSize: 28,
+    fontWeight: 700,
+    color: '#202122',
+    letterSpacing: '-0.04em',
+    fontVariantNumeric: 'tabular-nums',
+    cursor: 'text',
+    lineHeight: 1,
+  },
+  yearInput: {
+    width: 160,
+    fontSize: 28,
+    fontWeight: 700,
+    color: '#202122',
+    letterSpacing: '-0.04em',
+    fontVariantNumeric: 'tabular-nums',
+    fontFamily: 'inherit',
+    background: 'transparent',
+    border: 'none',
+    borderBottom: '2px solid #3366cc',
+    outline: 'none',
+    padding: '0 2px',
+  },
+  controls: { display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 },
+  stepBtn: {
+    background: 'rgba(0,0,0,0.05)',
+    border: '1px solid rgba(0,0,0,0.1)',
+    borderRadius: 8,
+    color: '#202122',
+    width: 36,
+    height: 36,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: 'inherit',
+  },
+  jumpBtn: {
+    background: 'rgba(0,0,0,0.05)',
+    border: '1px solid rgba(0,0,0,0.1)',
+    borderRadius: 8,
+    color: '#54595d',
+    width: 36,
+    height: 36,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: 'inherit',
+  },
+  playBtn: {
+    border: '1px solid rgba(0,0,0,0.15)',
+    borderRadius: 8,
+    color: '#202122',
+    width: 44,
+    height: 36,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontFamily: 'inherit',
+    transition: 'background 0.15s',
+  },
+  sliderTrack: { flex: 1, position: 'relative', display: 'flex', alignItems: 'center' },
+  slider: { width: '100%', accentColor: '#3366cc', height: 4, cursor: 'pointer' },
+};
 
 const styles: Record<string, React.CSSProperties> = {
   bar: {

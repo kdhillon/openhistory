@@ -7,9 +7,9 @@ import { MapView } from './components/MapView';
 import { TerritoryEditor } from './editor/TerritoryEditor';
 import { TerritoryMappingModal } from './components/TerritoryMappingModal';
 import { OhmMappingModal } from './components/OhmMappingModal';
-import { TimelineBar, TIMELINE_BAR_HEIGHT } from './components/TimelineBar';
+import { TimelineBar, TIMELINE_BAR_HEIGHT, MobileTimelineBar, MOBILE_TIMELINE_BAR_HEIGHT } from './components/TimelineBar';
 import { InfoPanel } from './components/InfoPanel';
-import { CategoryFilter } from './components/CategoryFilter';
+import { CategoryFilter, MobileTopBar, MOBILE_TOP_BAR_HEIGHT } from './components/CategoryFilter';
 import { DataExplorer } from './components/DataExplorer';
 import { AboutPage } from './components/AboutPage';
 import { WelcomeModal, shouldShowWelcome } from './components/WelcomeModal';
@@ -28,6 +28,16 @@ import { EVENT_CATEGORIES, POLITY_CATEGORIES } from './theme/categories';
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 export default function App() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
+  const topBarHeight    = isMobile ? MOBILE_TOP_BAR_HEIGHT    : 69;
+  const bottomBarHeight = isMobile ? MOBILE_TIMELINE_BAR_HEIGHT : TIMELINE_BAR_HEIGHT;
+
   const [seedFeatureCollection, setSeedFeatureCollection] = useState<GeoJSON.FeatureCollection>(EMPTY_FC);
   const [seedLoading, setSeedLoading] = useState(true);
 
@@ -513,30 +523,50 @@ export default function App() {
   return (
     <TranslationContext.Provider value={translationMap}>
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden', background: '#f8f9fa' }}>
-      <CategoryFilter
-        activeCategories={activeCategories}
-        onToggle={handleToggleCategory}
-        showBorders={showBorders}
-        onToggleBorders={handleToggleBorders}
-        showOtherPolities={showOtherPolities}
-        onToggleOtherPolities={handleToggleOtherPolities}
-        onOpenAbout={() => navigate('/about')}
-        onOpenData={() => navigate('/data')}
-        onEditTerritory={() => setEditorMode((v) => !v)}
-        editorMode={editorMode}
-        selectedLang={selectedLang}
-        onLangChange={handleLangChange}
-        windowInfo={windowInfo}
-        eventsLoading={eventsLoading}
-        eventsError={eventsError}
-        territoriesLoading={territoriesLoading}
-        territoriesError={territoriesError}
-        seedLoading={seedLoading}
-        locationCount={locationCount}
-        polityCount={polityCount}
-      />
+      {isMobile ? (
+        <MobileTopBar
+          activeCategories={activeCategories}
+          onToggle={handleToggleCategory}
+          showBorders={showBorders}
+          onToggleBorders={handleToggleBorders}
+          showOtherPolities={showOtherPolities}
+          onToggleOtherPolities={handleToggleOtherPolities}
+          onOpenAbout={() => navigate('/about')}
+          selectedLang={selectedLang}
+          onLangChange={handleLangChange}
+          stepSize={timeline.stepSize}
+          stepOptions={timeline.stepOptions}
+          onSetStepSize={timeline.setStepSize}
+          playbackSpeed={timeline.playbackSpeed}
+          onSetSpeed={timeline.setPlaybackSpeed}
+        />
+      ) : (
+        <CategoryFilter
+          activeCategories={activeCategories}
+          onToggle={handleToggleCategory}
+          showBorders={showBorders}
+          onToggleBorders={handleToggleBorders}
+          showOtherPolities={showOtherPolities}
+          onToggleOtherPolities={handleToggleOtherPolities}
+          onOpenAbout={() => navigate('/about')}
+          onOpenData={() => navigate('/data')}
+          onEditTerritory={() => setEditorMode((v) => !v)}
+          editorMode={editorMode}
+          territorySource={territorySource}
+          selectedLang={selectedLang}
+          onLangChange={handleLangChange}
+          windowInfo={windowInfo}
+          eventsLoading={eventsLoading}
+          eventsError={eventsError}
+          territoriesLoading={territoriesLoading}
+          territoriesError={territoriesError}
+          seedLoading={seedLoading}
+          locationCount={locationCount}
+          polityCount={polityCount}
+        />
+      )}
 
-      <div style={{ position: 'absolute', inset: `69px 0 ${TIMELINE_BAR_HEIGHT}px 0` }}>
+      <div style={{ position: 'absolute', inset: `${topBarHeight}px 0 ${bottomBarHeight}px 0` }}>
         <div style={{ position: 'absolute', bottom: 10, left: 10, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none', maxWidth: 240 }}>
           <UnlocatedEventsPanel
             eventFeatures={eventFeatures}
@@ -613,18 +643,29 @@ export default function App() {
         />
       )}
 
-      <TimelineBar
-        currentDateInt={timeline.currentDateInt}
-        stepSize={timeline.stepSize}
-        stepOptions={timeline.stepOptions}
-        isPlaying={timeline.isPlaying}
-        playbackSpeed={timeline.playbackSpeed}
-        onSeek={timeline.seek}
-        onStep={timeline.step}
-        onTogglePlay={timeline.togglePlay}
-        onSetStepSize={timeline.setStepSize}
-        onSetSpeed={timeline.setPlaybackSpeed}
-      />
+      {isMobile ? (
+        <MobileTimelineBar
+          currentDateInt={timeline.currentDateInt}
+          stepSize={timeline.stepSize}
+          isPlaying={timeline.isPlaying}
+          onSeek={timeline.seek}
+          onStep={timeline.step}
+          onTogglePlay={timeline.togglePlay}
+        />
+      ) : (
+        <TimelineBar
+          currentDateInt={timeline.currentDateInt}
+          stepSize={timeline.stepSize}
+          stepOptions={timeline.stepOptions}
+          isPlaying={timeline.isPlaying}
+          playbackSpeed={timeline.playbackSpeed}
+          onSeek={timeline.seek}
+          onStep={timeline.step}
+          onTogglePlay={timeline.togglePlay}
+          onSetStepSize={timeline.setStepSize}
+          onSetSpeed={timeline.setPlaybackSpeed}
+        />
+      )}
 
       {mappingTarget && (
         <TerritoryMappingModal
