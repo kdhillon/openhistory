@@ -1,11 +1,12 @@
-// In dev: Vite proxies /wikidata-api → https://www.wikidata.org/w/api.php
-// In production: requests go to the FastAPI backend proxy at api.openhistory.app/wikidata-api
-const WD_API = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/wikidata-api`
-  : '/wikidata-api';
+// Always call Wikidata directly from the browser.
+// Railway's server IP range is globally blocked on Wikimedia (open proxy block),
+// so proxying through the backend breaks edits. Direct CORS requests work fine.
+// MediaWiki CORS: include origin= param so Wikidata returns Access-Control-Allow-* headers.
+const WD_API = 'https://www.wikidata.org/w/api.php';
+const WD_ORIGIN = typeof window !== 'undefined' ? window.location.origin : 'https://openhistory.app';
 
 function wd(p: Record<string, string>) {
-  return new URLSearchParams({ format: 'json', ...p }).toString();
+  return new URLSearchParams({ format: 'json', origin: WD_ORIGIN, ...p }).toString();
 }
 
 // ── Auth ────────────────────────────────────────────────────────────────────
@@ -41,7 +42,7 @@ export async function login(username: string, password: string): Promise<LoginRe
     logintoken, username, password,
     loginreturnurl: window.location.origin,
   });
-  const res = await fetch(WD_API, { method: 'POST', body, credentials: 'include' });
+  const res = await fetch(`${WD_API}?origin=${encodeURIComponent(WD_ORIGIN)}`, { method: 'POST', body, credentials: 'include' });
   const data = await res.json();
   if (data.clientlogin?.status === 'PASS') return { ok: true };
   // UI status = additional verification step required (e.g. email code)
@@ -64,7 +65,7 @@ export async function loginContinue(logintoken: string, code: string, requestId 
     logintoken,
     [fieldName]: code,
   });
-  const res = await fetch(WD_API, { method: 'POST', body, credentials: 'include' });
+  const res = await fetch(`${WD_API}?origin=${encodeURIComponent(WD_ORIGIN)}`, { method: 'POST', body, credentials: 'include' });
   const data = await res.json();
   if (data.clientlogin?.status === 'PASS') return { ok: true };
   if (data.clientlogin?.status === 'UI') {
@@ -78,7 +79,7 @@ export async function logout(): Promise<void> {
   const tokenData = await tokenRes.json();
   const token = tokenData.query?.tokens?.csrftoken as string;
   const body = new URLSearchParams({ action: 'logout', format: 'json', token });
-  await fetch(WD_API, { method: 'POST', body, credentials: 'include' });
+  await fetch(`${WD_API}?origin=${encodeURIComponent(WD_ORIGIN)}`, { method: 'POST', body, credentials: 'include' });
 }
 
 // ── Entity lookup ────────────────────────────────────────────────────────────
@@ -161,7 +162,7 @@ async function submitClaim(entityId: string, claim: Claim, csrf: string, summary
     });
   }
 
-  const res = await fetch(WD_API, { method: 'POST', body, credentials: 'include' });
+  const res = await fetch(`${WD_API}?origin=${encodeURIComponent(WD_ORIGIN)}`, { method: 'POST', body, credentials: 'include' });
   const data = await res.json();
   if (data.error) {
     console.error('[submitClaim] Wikidata error:', JSON.stringify(data.error));
