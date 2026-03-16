@@ -314,8 +314,14 @@ export function MobileTopBar({
         <button
           onClick={() => setSheetOpen((v) => !v)}
           title="Filters & settings"
-          style={{ ...mb.iconBtn, color: sheetOpen ? '#3366cc' : '#202122', background: sheetOpen ? '#e8f0fe' : 'transparent', borderColor: sheetOpen ? '#3366cc' : 'rgba(0,0,0,0.18)' }}
-        >⚙</button>
+          style={{ ...mb.iconBtn, color: sheetOpen ? '#3366cc' : '#202122', background: sheetOpen ? '#e8f0fe' : 'transparent', borderColor: sheetOpen ? '#3366cc' : 'rgba(0,0,0,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <line x1="2" y1="4" x2="14" y2="4"/>
+            <line x1="2" y1="8" x2="14" y2="8"/>
+            <line x1="2" y1="12" x2="14" y2="12"/>
+          </svg>
+        </button>
       </div>
 
       {sheetOpen && (

@@ -317,7 +317,6 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       attributionControl: false,
     });
 
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
     map.on('load', async () => {
