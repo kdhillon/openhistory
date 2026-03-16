@@ -1096,6 +1096,7 @@ const styles: Record<string, React.CSSProperties> = {
     top: 114,
     right: 16,
     width: 360,
+    maxWidth: 'calc(100vw - 24px)',
     background: '#ffffff',
     borderRadius: 12,
     border: '1px solid rgba(0,0,0,0.1)',

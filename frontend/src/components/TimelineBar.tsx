@@ -218,11 +218,13 @@ export function TimelineBar({
 export function MobileTimelineBar({
   currentDateInt,
   stepSize,
+  stepOptions,
   isPlaying,
   onSeek,
   onStep,
   onTogglePlay,
-}: Pick<Props, 'currentDateInt' | 'stepSize' | 'isPlaying' | 'onSeek' | 'onStep' | 'onTogglePlay'>) {
+  onSetStepSize,
+}: Pick<Props, 'currentDateInt' | 'stepSize' | 'stepOptions' | 'isPlaying' | 'onSeek' | 'onStep' | 'onTogglePlay' | 'onSetStepSize'>) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -279,6 +281,13 @@ export function MobileTimelineBar({
             </span>
           )}
         </div>
+        <select
+          value={stepSize}
+          onChange={(e) => { onSetStepSize(Number(e.target.value)); e.currentTarget.blur(); }}
+          style={mStyles.stepSelect}
+        >
+          {stepOptions.map((s) => <option key={s} value={s}>{formatStepLabel(s)}</option>)}
+        </select>
         <div style={mStyles.controls}>
           <button style={mStyles.jumpBtn} onClick={jumpBack} title="Back 5 steps">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -388,6 +397,19 @@ const mStyles: Record<string, React.CSSProperties> = {
     padding: '0 2px',
   },
   controls: { display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 },
+  stepSelect: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: '#202122',
+    background: 'rgba(0,0,0,0.05)',
+    border: '1px solid rgba(0,0,0,0.1)',
+    borderRadius: 6,
+    padding: '4px 4px',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    flexShrink: 0,
+    height: 30,
+  },
   stepBtn: {
     background: 'rgba(0,0,0,0.05)',
     border: '1px solid rgba(0,0,0,0.1)',

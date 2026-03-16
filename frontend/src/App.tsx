@@ -658,10 +658,12 @@ export default function App() {
         <MobileTimelineBar
           currentDateInt={timeline.currentDateInt}
           stepSize={timeline.stepSize}
+          stepOptions={timeline.stepOptions}
           isPlaying={timeline.isPlaying}
           onSeek={timeline.seek}
           onStep={timeline.step}
           onTogglePlay={timeline.togglePlay}
+          onSetStepSize={timeline.setStepSize}
         />
       ) : (
         <TimelineBar
