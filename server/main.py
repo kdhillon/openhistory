@@ -1509,12 +1509,15 @@ _WD_API = "https://www.wikidata.org/w/api.php"
 @app.api_route("/wikidata-api", methods=["GET", "POST"])
 async def wikidata_proxy(request: Request):
     cookie_header = request.headers.get("cookie", "")
+    # Forward the real client IP so Wikidata AbuseFilter sees the user's IP, not Railway's datacenter IP.
+    client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")
     req_headers = {
         "Cookie": cookie_header,
         "User-Agent": "OpenHistory/1.0 (https://openhistory.app)",
         "Accept": "application/json",
+        "X-Forwarded-For": client_ip,
     }
-    print(f"[wd-proxy] {request.method} cookies_len={len(cookie_header)}", flush=True)
+    print(f"[wd-proxy] {request.method} cookies_len={len(cookie_header)} client_ip={client_ip}", flush=True)
 
     qs = urllib.parse.urlencode(dict(request.query_params))
     url = f"{_WD_API}?{qs}" if qs else _WD_API
