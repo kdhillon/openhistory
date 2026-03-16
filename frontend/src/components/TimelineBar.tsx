@@ -281,13 +281,6 @@ export function MobileTimelineBar({
             </span>
           )}
         </div>
-        <select
-          value={stepSize}
-          onChange={(e) => { onSetStepSize(Number(e.target.value)); e.currentTarget.blur(); }}
-          style={mStyles.stepSelect}
-        >
-          {stepOptions.map((s) => <option key={s} value={s}>{formatStepLabel(s)}</option>)}
-        </select>
         <div style={mStyles.controls}>
           <button style={mStyles.jumpBtn} onClick={jumpBack} title="Back 5 steps">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
