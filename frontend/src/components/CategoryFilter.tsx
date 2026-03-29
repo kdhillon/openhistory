@@ -170,6 +170,7 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
           </svg>
           Stories
         </button>
+        <button onClick={onOpenAbout} style={styles.dataBtn}>About</button>
         {/* Gear / settings */}
         <button
           ref={gearRef}

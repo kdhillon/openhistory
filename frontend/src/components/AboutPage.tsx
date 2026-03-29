@@ -37,17 +37,18 @@ export function AboutPage({ onBack }: Props) {
           <li><strong>Polities</strong> — kingdoms, empires, republics, colonies, viceroyalties, indigenous nations, peoples, and other political entities. They may have founding and dissolution dates and a capital, and can be assigned to a territory.</li>
         </ul>
 
-        <h3 style={styles.h3}>Territory Polygons — historical-basemaps</h3>
+        <h3 style={styles.h3}>Territory Boundaries — OpenHistoricalMap</h3>
         <p style={styles.p}>
-          Territory boundaries (the shaded regions on the map) come from the open-source{' '}
-          <a style={styles.a} href="https://github.com/aourednik/historical-basemaps" target="_blank" rel="noreferrer">historical-basemaps</a>{' '}
-          project by A. Ourednik (GPL-3.0). It provides 53 hand-curated GeoJSON polygon snapshots
-          spanning 100,000 BCE to 2010 CE. Territory polygons can be linked to a polity in our
-          database — when linked, the shaded region and the polity marker refer to the same entity.
+          Territory boundaries (the shaded regions on the map) come from{' '}
+          <a style={styles.a} href="https://www.openhistoricalmap.org" target="_blank" rel="noreferrer">OpenHistoricalMap</a>{' '}
+          (OHM), a community-driven project that maps historical boundaries with day-level precision (CC0).
+          Territory labels can be linked to a polity in our database — when linked, the label and the
+          polity marker refer to the same entity.
         </p>
 
         <p style={styles.p}>
-          Instead of snapshots, OpenHistory supports year-level editing for borders. See below for instructions on how to edit borders.
+          Anyone can contribute boundary edits directly on the OHM website, and they will appear here
+          automatically. See below for instructions on how to link territories to polities.
         </p>
 
         <hr style={styles.rule} />
@@ -123,7 +124,7 @@ export function AboutPage({ onBack }: Props) {
         <hr style={styles.rule} />
         <p style={styles.footer}>
           Event &amp; polity data © <a style={styles.a} href="https://www.wikidata.org" target="_blank" rel="noreferrer">Wikidata</a> contributors (CC BY-SA) ·{' '}
-          Territory polygons © <a style={styles.a} href="https://github.com/aourednik/historical-basemaps" target="_blank" rel="noreferrer">historical-basemaps</a> contributors (GPL-3.0) ·{' '}
+          Territory boundaries © <a style={styles.a} href="https://www.openhistoricalmap.org" target="_blank" rel="noreferrer">OpenHistoricalMap</a> contributors (CC0) ·{' '}
           Map © <a style={styles.a} href="https://openfreemap.org" target="_blank" rel="noreferrer">OpenFreeMap</a> ·{' '}
           Code © 2026 OpenHistory contributors (MIT) ·{' '}
           Created by <a style={styles.a} href="https://github.com/KDhillon" target="_blank" rel="noreferrer">Kyle Dhillon</a>
