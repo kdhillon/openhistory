@@ -35,6 +35,10 @@ interface Props {
   polityCount: number;
   showRecentEvents: boolean;
   onToggleRecentEvents: () => void;
+  showOhm: boolean;
+  onToggleOhm: () => void;
+  showOhmAdmin: boolean;
+  onToggleOhmAdmin: () => void;
 }
 
 function Spinner() {
@@ -124,7 +128,7 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
   );
 }
 
-export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onOpenStories, onEditTerritory, editorMode, territorySource, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents }: Props) {
+export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onOpenStories, onEditTerritory, editorMode, territorySource, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin }: Props) {
   const bordersColor = '#607D8B';
   const otherPolitiesColor = '#9C27B0';
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -201,6 +205,16 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
             <label style={styles.settingsCheckRow} title="When enabled, events that happened within the last step (e.g., one year, one month, one day) will be shown as semi-transparent on the map">
               <input type="checkbox" checked={showRecentEvents} onChange={onToggleRecentEvents} style={{ margin: 0 }} />
               <span style={styles.settingsCheckLabel}>Show recent events</span>
+            </label>
+            <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.08)', margin: '10px 0' }} />
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.35)', marginBottom: 8 }}>Territory layers</div>
+            <label style={styles.settingsCheckRow} title="Show territory border outlines and centroid labels from OpenHistoricalMap. Available at all zoom levels.">
+              <input type="checkbox" checked={showOhm} onChange={onToggleOhm} style={{ margin: 0 }} />
+              <span style={styles.settingsCheckLabel}>Show OHM outlines</span>
+            </label>
+            <label style={styles.settingsCheckRow} title="Show filled territory polygons from OHM admin tiles. Adds colored semi-transparent fills but some territories may be missing at low zoom levels.">
+              <input type="checkbox" checked={showOhmAdmin} onChange={onToggleOhmAdmin} style={{ margin: 0 }} />
+              <span style={styles.settingsCheckLabel}>Show OHM fills</span>
             </label>
             <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.08)', margin: '10px 0' }} />
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.35)', marginBottom: 8 }}>Data</div>

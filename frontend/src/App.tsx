@@ -121,6 +121,8 @@ export default function App() {
   const [showOtherPolities, setShowOtherPolities] = useState(true);
   const [showTerritoryLabels, setShowTerritoryLabels] = useState(false);
   const [showRecentEvents, setShowRecentEvents] = useState(false);
+  const [showOhm, setShowOhm] = useState(true);
+  const [showOhmAdmin, setShowOhmAdmin] = useState(true);
   const [zoomRequest, setZoomRequest] = useState<ZoomRequest | null>(null);
   const zoomIdRef = useRef(0);
   const [wikiAuth, setWikiAuth] = useState<string | null>(null);
@@ -378,8 +380,11 @@ export default function App() {
   const handleToggleOtherPolities = useCallback(() => setShowOtherPolities((v) => !v), []);
   const handleToggleTerritoryLabels = useCallback(() => setShowTerritoryLabels((v) => !v), []);
   const handleToggleRecentEvents = useCallback(() => setShowRecentEvents((v) => !v), []);
+  const handleToggleOhm = useCallback(() => setShowOhm((v) => !v), []);
+  const handleToggleOhmAdmin = useCallback(() => setShowOhmAdmin((v) => !v), []);
 
   const handleSelectFeature = useCallback((props: FeatureProperties, stackInfo: StackInfo) => {
+    console.log('[SELECT] handleSelectFeature called:', { title: props.title, id: props.id, featureType: props.featureType, wikipediaSummary: props.wikipediaSummary?.substring(0, 80), yearStart: props.yearStart, yearEnd: props.yearEnd });
     setSelectedFeature(props);
     setStack(stackInfo);
     if (props.yearStart !== null) {
@@ -397,6 +402,8 @@ export default function App() {
   }, [timeline]);
 
   const handleClosePanel = useCallback(() => {
+    console.log('[SELECT] handleClosePanel called');
+    console.trace('[SELECT] closePanel stack trace');
     setSelectedFeature(null);
   }, []);
 
@@ -579,6 +586,10 @@ export default function App() {
           polityCount={polityCount}
           showRecentEvents={showRecentEvents}
           onToggleRecentEvents={handleToggleRecentEvents}
+          showOhm={showOhm}
+          onToggleOhm={handleToggleOhm}
+          showOhmAdmin={showOhmAdmin}
+          onToggleOhmAdmin={handleToggleOhmAdmin}
         />
       )}
 
@@ -629,6 +640,8 @@ export default function App() {
           onUnlinkOhmTerritory={handleUnlinkOhmTerritory}
           onOhmMatchedPolityIds={setOhmMatchedPolityIds}
           showRecentEvents={showRecentEvents}
+          showOhm={showOhm}
+          showOhmAdmin={showOhmAdmin}
         />
       </div>
 

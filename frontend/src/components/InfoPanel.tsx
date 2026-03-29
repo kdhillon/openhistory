@@ -155,6 +155,7 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
   const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
+    console.log('[INFOPANEL] reset useEffect fired — feature?.title:', feature?.title, 'feature?.id:', (feature as any)?.id, 'wikipediaSummary:', feature?.wikipediaSummary?.substring(0, 80));
     setExpanded(true);
     setArticle(null);
     setLoading(false);
@@ -261,9 +262,11 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
           })
           .map((p) => p.imageinfo![0].thumburl ?? p.imageinfo![0].url ?? '')
           .filter(Boolean);
+        console.log('[INFOPANEL] article loaded — leadHtml length:', leadHtml.length, 'sections:', sections.length, 'images:', images.length);
         setArticle({ wikiTitle: pageTitle, apiBase, lang: selectedLang, images, leadHtml, sections });
       })
-      .catch(() => {
+      .catch((err) => {
+        console.log('[INFOPANEL] article fetch failed:', err);
         setArticle({ wikiTitle: pageTitle, apiBase, lang: selectedLang, images: [], leadHtml: '<p>Could not load article.</p>', sections: [] });
       })
       .finally(() => setLoading(false));
@@ -1010,7 +1013,12 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
               );
             })}
           </>
-        ) : null}
+        ) : (
+          (() => {
+            const summary = translatedContent?.summary || feature.wikipediaSummary || fetchedSummary;
+            return summary ? <p style={styles.summary}>{summary}</p> : null;
+          })()
+        )}
       </div>
 
       {/* Stories featuring this event */}

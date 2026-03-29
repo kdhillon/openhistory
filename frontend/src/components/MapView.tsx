@@ -207,6 +207,10 @@ interface Props {
   onOhmMatchedPolityIds?: (ids: Set<string>) => void;
   /** When true (default), events that ended within the last step linger as semi-transparent markers */
   showRecentEvents?: boolean;
+  /** Show OHM border outlines + centroid labels (land_ohm_lines / land_ohm_centroids) */
+  showOhm?: boolean;
+  /** Show OHM admin fill polygons (boundaries layer from ohm_admin tileset) */
+  showOhmAdmin?: boolean;
 }
 
 
@@ -258,7 +262,7 @@ interface HoveredLabel {
   y: number;
 }
 
-export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize, activeCategories, showBorders, showOtherPolities, showTerritoryLabels = false, onSelectFeature, zoomRequest, fitBoundsRequest, hiddenNations, suppressedPolityIds, polityIdsWithTerritory, onUnmatchedTerritoryClick, onUnlinkPolygon, majorEventFilter, onMapReady, editorMode, territorySource = 'hb', ohmLinks, onOhmTerritoryClick, onUnlinkOhmTerritory, onOhmMatchedPolityIds, showRecentEvents = false }: Props) {
+export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize, activeCategories, showBorders, showOtherPolities, showTerritoryLabels = false, onSelectFeature, zoomRequest, fitBoundsRequest, hiddenNations, suppressedPolityIds, polityIdsWithTerritory, onUnmatchedTerritoryClick, onUnlinkPolygon, majorEventFilter, onMapReady, editorMode, territorySource = 'hb', ohmLinks, onOhmTerritoryClick, onUnlinkOhmTerritory, onOhmMatchedPolityIds, showRecentEvents = false, showOhm = true, showOhmAdmin = false }: Props) {
   const translationMap = useTranslations();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
@@ -277,6 +281,10 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
   showBordersRef.current = showBorders;
   const territorySourceRef = useRef(territorySource);
   territorySourceRef.current = territorySource;
+  const showOhmRef = useRef(showOhm);
+  showOhmRef.current = showOhm;
+  const showOhmAdminRef = useRef(showOhmAdmin);
+  showOhmAdminRef.current = showOhmAdmin;
   const ohmLinksRef = useRef(ohmLinks ?? []);
   ohmLinksRef.current = ohmLinks ?? [];
   const onOhmTerritoryClickRef = useRef(onOhmTerritoryClick);
@@ -435,69 +443,113 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         },
       });
 
-      // ── OHM vector tile source + layers ──────────────────────────────────────
-      // Live administrative boundary tiles from Open Historical Map (CC0).
-      // Tile spec (verified from live tile inspection):
-      //   URL: https://vtiles.openhistoricalmap.org/maps/ohm_admin/{z}/{x}/{y}.pbf
-      //   Source layer: 'boundaries'
-      //   admin_level: integer (2 = sovereign state)
-      //   start_decdate / end_decdate: float (e.g. 1852.9194)
-      //   name_en: English name; name: primary-language name
-      //   NOTE: no 'wikidata' property in tiles — polity color matching uses name_en
-      const OHM_SOURCE_LAYER = 'boundaries';
-      const ohmInitialVis = territorySourceRef.current === 'ohm' ? 'visible' : 'none';
-      const ohmLabelInitialVis = ohmInitialVis === 'visible' && showTerritoryLabelsRef.current ? 'visible' : 'none';
+      // ── OHM vector tile sources + layers ─────────────────────────────────────
+      // Two OHM tile endpoints are used:
+      //   1. 'ohm' (general tileset) — has land_ohm_lines (border lines) and
+      //      land_ohm_centroids (label points) at ALL zoom levels including z0-5.
+      //   2. 'ohm_admin' — has fill polygons ('boundaries' layer) but the tile server
+      //      drops some features at low zoom due to geometry simplification thresholds.
+      // By combining both, territories like the Maratha Confederacy are visible at every
+      // zoom level: borders+labels from 'ohm', colored fills from 'ohm_admin' at z6+.
+      const OHM_FILLS_LAYER = 'boundaries';
+      const OHM_LINES_LAYER = 'land_ohm_lines';
+      const ohmInitialVis = showOhmRef.current ? 'visible' : 'none';
+      const ohmAdminInitialVis = showOhmAdminRef.current ? 'visible' : 'none';
       const initialYear = decodeDate(currentDateInt).year;
-      // Initial filter matches the temporal effect logic: require start_decdate, hide untimed features.
+      // Temporal + admin_level filter shared by all OHM layers.
       const OHM_ADMIN_FILTER = ['all',
-        ['match', ['get', 'admin_level'], [2, 3], true, false],
+        ['==', ['get', 'admin_level'], 2],
         ['has', 'start_decdate'],
         ['<=', ['get', 'start_decdate'], initialYear],
         ['any', ['!', ['has', 'end_decdate']], ['>=', ['get', 'end_decdate'], initialYear]],
       ] as maplibregl.FilterSpecification;
+      const OHM_ATTRIBUTION = '© <a href="https://www.openhistoricalmap.org" target="_blank">OpenHistoricalMap</a> contributors';
 
+      // Source 1: ohm_admin — fill polygons (for color matching, clicking)
       map.addSource('ohm-admin', {
         type: 'vector',
         tiles: ['https://vtiles.openhistoricalmap.org/maps/ohm_admin/{z}/{x}/{y}.pbf'],
         maxzoom: 14,
-        attribution: '© <a href="https://www.openhistoricalmap.org" target="_blank">OpenHistoricalMap</a> contributors',
+        attribution: OHM_ATTRIBUTION,
       });
+      // Source 2: ohm — border lines + centroid labels (available at all zoom levels)
+      map.addSource('ohm', {
+        type: 'vector',
+        tiles: ['https://vtiles.openhistoricalmap.org/maps/ohm/{z}/{x}/{y}.pbf'],
+        maxzoom: 14,
+        attribution: OHM_ATTRIBUTION,
+      });
+
+      // Fill polygons from ohm_admin (may be incomplete at low zoom — that's OK,
+      // the border lines and centroid labels from 'ohm' source fill the gap)
       map.addLayer({
         id: 'ohm-fills',
         type: 'fill',
         source: 'ohm-admin',
-        'source-layer': OHM_SOURCE_LAYER,
+        'source-layer': OHM_FILLS_LAYER,
         filter: OHM_ADMIN_FILTER,
-        layout: { visibility: ohmInitialVis },
+        layout: { visibility: ohmAdminInitialVis },
         paint: { 'fill-color': '#78909C', 'fill-opacity': 0.22 },
       });
+      // Border lines from ohm general tileset (complete at all zoom levels)
       map.addLayer({
         id: 'ohm-borders',
         type: 'line',
-        source: 'ohm-admin',
-        'source-layer': OHM_SOURCE_LAYER,
+        source: 'ohm',
+        'source-layer': OHM_LINES_LAYER,
         filter: OHM_ADMIN_FILTER,
         layout: { visibility: ohmInitialVis },
         paint: { 'line-color': '#78909C', 'line-width': 1.2, 'line-opacity': 0.6 },
       });
+      // Large country labels from place_points_centroids (type=country).
+      // Complete at all zoom levels — this is what the OHM website uses for major nations.
       map.addLayer({
         id: 'ohm-labels',
         type: 'symbol',
-        source: 'ohm-admin',
-        'source-layer': OHM_SOURCE_LAYER,
-        filter: OHM_ADMIN_FILTER,
+        source: 'ohm',
+        'source-layer': 'place_points_centroids',
+        filter: ['all',
+          ['==', ['get', 'type'], 'country'],
+          ['has', 'start_decdate'],
+          ['<=', ['get', 'start_decdate'], initialYear],
+          ['any', ['!', ['has', 'end_decdate']], ['>=', ['get', 'end_decdate'], initialYear]],
+        ] as maplibregl.FilterSpecification,
         layout: {
           'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']],
-          'text-size': 12,
+          'text-size': 14,
           'text-max-width': 10,
           'text-optional': true,
-          'text-font': ['Open Sans Italic', 'Arial Unicode MS Regular'],
-          visibility: ohmLabelInitialVis,
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          visibility: ohmInitialVis,
         },
         paint: {
           'text-color': '#9e9e9e',
           'text-halo-color': 'rgba(0,0,0,0.6)',
           'text-halo-width': 1.5,
+        },
+      });
+      // Smaller admin boundary labels from land_ohm_centroids (admin_level=2).
+      // Covers smaller territories not in place_points_centroids. Rendered at a
+      // smaller font to match the OHM website's visual hierarchy.
+      map.addLayer({
+        id: 'ohm-labels-small',
+        type: 'symbol',
+        source: 'ohm',
+        'source-layer': 'land_ohm_centroids',
+        minzoom: 3,
+        filter: OHM_ADMIN_FILTER,
+        layout: {
+          'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']],
+          'text-size': 12,
+          'text-max-width': 8,
+          'text-optional': true,
+          'text-font': ['Open Sans Semibold', 'Arial Unicode MS Regular'],
+          visibility: ohmInitialVis,
+        },
+        paint: {
+          'text-color': '#9e9e9e',
+          'text-halo-color': 'rgba(0,0,0,0.5)',
+          'text-halo-width': 1,
         },
       });
       // Hide HB territory layers if starting in OHM mode, or hide just labels if showTerritoryLabels is off
@@ -532,24 +584,34 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         paint: labelPaint,
       });
 
-      // Capital star: shown at the centre of every polity
+      // Capital star: shown at the centre of every polity.
+      // Uses _starMinZoom: mapped polities only show star when zoomed in (z7+),
+      // unmapped polities use _minZoom. Shows capital name as label when available.
       map.addLayer({
         id: 'stars-polity',
         type: 'symbol',
         source: 'features',
         filter: ['all',
           ['==', ['get', 'featureType'], 'polity'],
-          ['<=', ['coalesce', ['get', '_minZoom'], 2], ['zoom']],
+          ['<=', ['coalesce', ['get', '_starMinZoom'], ['get', '_minZoom'], 2], ['zoom']],
         ] as maplibregl.FilterSpecification,
         layout: {
           'icon-image': 'star',
           'icon-size': 0.9,
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
+          'text-field': ['coalesce', ['get', '_capitalLabel'], ''],
+          'text-size': 11,
+          'text-offset': [0, 1.2],
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+          'text-optional': true,
         },
         paint: {
           'icon-color': ['coalesce', ['get', '_color'], '#9E9E9E'],
           'icon-opacity': ['number', ['get', '_opacity'], 1.0],
+          'text-color': '#bdbdbd',
+          'text-halo-color': 'rgba(0,0,0,0.6)',
+          'text-halo-width': 1,
         },
       });
 
@@ -620,7 +682,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       // Apply initial modern border visibility from ref (in case toggle was hit before load)
       if (!showModernBordersRef.current) applyBorderVisibility(map, false);
 
-      for (const layer of ['circles-major', 'circles-minor', 'events-major', 'stars-polity', 'fills-territory', 'labels-territory', 'polity-centroid-labels', 'ohm-fills']) {
+      for (const layer of ['circles-major', 'circles-minor', 'events-major', 'stars-polity', 'fills-territory', 'labels-territory', 'polity-centroid-labels', 'ohm-fills', 'ohm-labels', 'ohm-labels-small']) {
         map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
       }
@@ -644,28 +706,26 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       // Hover state for OHM territory labels: show × unlink button on any colored label
       // (manual DB link OR auto-matched by polity name).
       const DATE_SUFFIX_RE_HOVER = /\s*\(\d{1,4}(?:\s*[-–]\s*(?:\d{1,4}|present))?\)\s*$/;
-      map.on('mouseenter', 'ohm-labels', (e) => {
+      const ohmLabelEnter = (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
         if (!e.features?.length) return;
         const feat = e.features[0];
         const rawName = (feat.properties?.name_en ?? feat.properties?.name ?? '') as string;
         const stripped = rawName.replace(DATE_SUFFIX_RE_HOVER, '').trim();
         if (!stripped) return;
-        // Check manual DB link first
         const hasManualLink = ohmLinksRef.current.some((l) => l.ohmName === stripped && l.polityId && !l.explicitlyUnlinked);
-        // Fall back to auto-match: any polity whose title matches the stripped name
-        const hasAutoMatch = !hasManualLink && geojsonRef.current.features.some((f) => {
-          const p = f.properties as FeatureProperties;
-          return p.featureType === 'polity' && p.title.toLowerCase() === stripped.toLowerCase();
-        });
-        if (!hasManualLink && !hasAutoMatch) return;
+        if (!hasManualLink) return;
         if (hideTimerRef.current) { clearTimeout(hideTimerRef.current); hideTimerRef.current = null; }
         const pos = ohmLabelPosCache.current[stripped] ?? { x: e.point.x, y: e.point.y };
         ohmLabelPosCache.current[stripped] = pos;
         setHoveredOhmLabel({ ohmName: stripped, x: pos.x, y: pos.y });
-      });
-      map.on('mouseleave', 'ohm-labels', () => {
+      };
+      const ohmLabelLeave = () => {
         hideTimerRef.current = setTimeout(() => setHoveredOhmLabel(null), 150);
-      });
+      };
+      for (const id of ['ohm-labels', 'ohm-labels-small']) {
+        map.on('mouseenter', id, ohmLabelEnter);
+        map.on('mouseleave', id, ohmLabelLeave);
+      }
 
       // Hover on centroid labels: show × unlink button for mapped (yellow) labels
       map.on('mouseenter', 'polity-centroid-labels', (e) => {
@@ -709,14 +769,13 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
     applyBorderVisibility(map, showModernBorders);
   }, [showModernBorders]);
 
-  // Toggle between HB (GeoJSON) and OHM (vector tile) territory layers, and show/hide territory labels
+  // Toggle territory layer visibility based on settings
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const apply = () => {
       const hbVis = territorySource !== 'ohm' ? 'visible' : 'none';
       const hbLabelVis = hbVis === 'visible' && showTerritoryLabels ? 'visible' : 'none';
-      const ohmVis = territorySource === 'ohm' ? 'visible' : 'none';
       for (const id of ['fills-territory', 'borders-territory']) {
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', hbVis);
       }
@@ -724,37 +783,49 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       // Polity centroid labels: visible when territory labels toggle is OFF (regardless of source)
       const centroidVis = !showTerritoryLabels ? 'visible' : 'none';
       if (map.getLayer('polity-centroid-labels')) map.setLayoutProperty('polity-centroid-labels', 'visibility', centroidVis);
-      const ohmLabelVis = ohmVis === 'visible' && showTerritoryLabels ? 'visible' : 'none';
-      for (const id of ['ohm-fills', 'ohm-borders']) {
+      // OHM outlines (border lines + centroid labels from 'ohm' tileset)
+      // Centroid labels are always visible when showOhm is on — they're part of the outline experience.
+      const ohmVis = showOhm ? 'visible' : 'none';
+      for (const id of ['ohm-borders', 'ohm-labels', 'ohm-labels-small']) {
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', ohmVis);
       }
-      if (map.getLayer('ohm-labels')) map.setLayoutProperty('ohm-labels', 'visibility', ohmLabelVis);
+      // OHM admin fills (fill polygons from 'ohm_admin' tileset)
+      const ohmAdminVis = showOhmAdmin ? 'visible' : 'none';
+      if (map.getLayer('ohm-fills')) map.setLayoutProperty('ohm-fills', 'visibility', ohmAdminVis);
     };
     if (map.isStyleLoaded()) apply();
     else map.once('load', apply);
-  }, [territorySource, showTerritoryLabels]);
+  }, [territorySource, showTerritoryLabels, showOhm, showOhmAdmin]);
 
   // Update OHM temporal filter on every year tick
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-    if (!map.getLayer('ohm-fills')) return;
+    if (!map.getLayer('ohm-fills') && !map.getLayer('ohm-borders')) return;
 
     const year = decodeDate(currentDateInt).year;
     // Temporal filter: start_decdate and end_decdate are floats (e.g. 1852.9194)
     // Require start_decdate to exist — features without it have no temporal metadata
     // and would otherwise appear at all times (wrong for a historical atlas).
     // Missing end_decdate = still active (no end date), so allow those through.
-    const temporalFilter = ['all',
-      ['match', ['get', 'admin_level'], [2, 3], true, false],
+    // Admin boundary layers (fills + borders) use admin_level filter
+    const adminTemporalFilter = ['all',
+      ['==', ['get', 'admin_level'], 2],
       ['has', 'start_decdate'],
       ['<=', ['get', 'start_decdate'], year],
       ['any', ['!', ['has', 'end_decdate']], ['>=', ['get', 'end_decdate'], year]],
     ] as maplibregl.FilterSpecification;
-
-    map.setFilter('ohm-fills', temporalFilter);
-    map.setFilter('ohm-borders', temporalFilter);
-    map.setFilter('ohm-labels', temporalFilter);
+    for (const id of ['ohm-fills', 'ohm-borders', 'ohm-labels-small']) {
+      if (map.getLayer(id)) map.setFilter(id, adminTemporalFilter);
+    }
+    // Country labels use place_points_centroids (type=country, no admin_level)
+    const labelTemporalFilter = ['all',
+      ['==', ['get', 'type'], 'country'],
+      ['has', 'start_decdate'],
+      ['<=', ['get', 'start_decdate'], year],
+      ['any', ['!', ['has', 'end_decdate']], ['>=', ['get', 'end_decdate'], year]],
+    ] as maplibregl.FilterSpecification;
+    if (map.getLayer('ohm-labels')) map.setFilter('ohm-labels', labelTemporalFilter);
   }, [currentDateInt]);
 
   // Auto-color OHM territories by matching rendered tile names against polity names.
@@ -769,7 +840,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
     if (!map) return;
 
     const rebuildColors = () => {
-      if (!map.getLayer('ohm-fills')) return;
+      if (!map.getLayer('ohm-fills') && !map.getLayer('ohm-labels')) return;
 
       // Build lowercase polity-name → color/id lookup from loaded polities (always fresh via ref)
       // Note: avoid `new Map()` — `Map` is shadowed by the maplibre-gl import.
@@ -791,7 +862,14 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       // This is safe to swallow — sourcedata/moveend will retry automatically.
       let rendered: maplibregl.MapGeoJSONFeature[];
       try {
-        rendered = map.queryRenderedFeatures({ layers: ['ohm-fills'] });
+        // Query both label layers for name matching and color assignment.
+        // ohm-fills is intentionally excluded — its polygons would generate unwanted
+        // centroid labels via polity-centroid-src. The label layers provide all names needed.
+        const queryLayers: string[] = [];
+        if (map.getLayer('ohm-labels')) queryLayers.push('ohm-labels');
+        if (map.getLayer('ohm-labels-small')) queryLayers.push('ohm-labels-small');
+        if (queryLayers.length === 0) { return; }
+        rendered = map.queryRenderedFeatures({ layers: queryLayers });
       } catch {
         return;
       }
@@ -865,10 +943,15 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         ? (['match', nameExpr, ...textPairs, nameExpr] as unknown as maplibregl.ExpressionSpecification)
         : nameExpr;
 
-      map.setPaintProperty('ohm-fills', 'fill-color', fillColor);
-      map.setPaintProperty('ohm-borders', 'line-color', fillColor);
-      map.setPaintProperty('ohm-labels', 'text-color', labelColor);
-      map.setLayoutProperty('ohm-labels', 'text-field', labelText);
+      if (map.getLayer('ohm-fills')) map.setPaintProperty('ohm-fills', 'fill-color', fillColor);
+      // ohm-borders uses land_ohm_lines which has no name_en — keep uniform gray.
+      // The fill polygons provide per-territory coloring.
+      for (const id of ['ohm-labels', 'ohm-labels-small']) {
+        if (map.getLayer(id)) {
+          map.setPaintProperty(id, 'text-color', labelColor);
+          map.setLayoutProperty(id, 'text-field', labelText);
+        }
+      }
 
       // Build centroid labels from OHM rendered features
       const centroidSrc = map.getSource('polity-centroid-src') as GeoJSONSource | undefined;
@@ -930,7 +1013,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
     // Rebuild when OHM tiles finish loading. 'sourcedata' does not fire when
     // setPaintProperty is called, so there is no infinite loop.
     const onSourceData = (e: maplibregl.MapSourceDataEvent) => {
-      if (e.sourceId === 'ohm-admin' && e.isSourceLoaded) rebuildColors();
+      if ((e.sourceId === 'ohm-admin' || e.sourceId === 'ohm') && e.isSourceLoaded) rebuildColors();
     };
     // Also rebuild after panning/zooming to catch any new visible features.
     map.on('sourcedata', onSourceData);
@@ -966,7 +1049,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
     // Single map-level handler queries all clickable layers at once.
     // Layer-specific handlers would fire multiple times per click for stacked
     // war events (circles-major + icons-war both hit), corrupting the stack index.
-    const CLICK_LAYERS = ['events-major', 'circles-major', 'circles-minor', 'stars-polity', 'fills-territory', 'labels-territory', 'polity-centroid-labels', 'ohm-fills'];
+    const CLICK_LAYERS = ['events-major', 'circles-major', 'circles-minor', 'stars-polity', 'fills-territory', 'labels-territory', 'polity-centroid-labels', 'ohm-fills', 'ohm-labels', 'ohm-labels-small'];
 
     const onClick = (e: maplibregl.MapMouseEvent) => {
       if (editorModeRef.current) return;
@@ -1061,6 +1144,36 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         } else {
           // Unmatched territory — open mapping modal
           onOhmTerritoryClickRef.current?.(chosenName, chosen.properties?.wikidata as string | null);
+        }
+        return;
+      }
+
+      // OHM centroid label click — mapped (yellow) labels open InfoPanel, unmapped (gray) open mapping modal
+      if (top.layer.id === 'ohm-labels' || top.layer.id === 'ohm-labels-small') {
+        const DATE_SUFFIX = /\s*\(\d{1,4}(?:\s*[-–]\s*(?:\d{1,4}|present))?\)\s*$/;
+        const rawName = (top.properties?.name_en ?? top.properties?.name ?? '') as string;
+        const stripped = rawName.replace(DATE_SUFFIX, '').trim();
+        if (!stripped) return;
+        // Check manual DB link first
+        const link = ohmLinksRef.current.find((l) => l.ohmName === stripped && l.polityId && !l.explicitlyUnlinked);
+        console.log('[OHM-CLICK] layer:', top.layer.id, 'rawName:', rawName, 'stripped:', stripped, 'link:', link);
+        if (link) {
+          // Mapped via manual link — open InfoPanel for the linked polity
+          const polityFeature = geojsonRef.current.features.find((p) => (p.properties as FeatureProperties).id === link.polityId);
+          console.log('[OHM-CLICK] polityFeature found:', !!polityFeature, 'id:', link.polityId);
+          if (polityFeature) {
+            const raw = { ...polityFeature.properties } as Record<string, unknown>;
+            for (const key of ['categories', 'partOfResolved', 'wikidataClasses'] as const) {
+              if (typeof raw[key] === 'string') {
+                try { raw[key] = JSON.parse(raw[key] as string); } catch { /* leave as-is */ }
+              }
+            }
+            console.log('[OHM-CLICK] calling onSelect with:', { title: raw.title, id: raw.id, wikipediaSummary: raw.wikipediaSummary?.toString().substring(0, 80), featureType: raw.featureType, yearStart: raw.yearStart, yearEnd: raw.yearEnd });
+            onSelectRef.current(raw as unknown as FeatureProperties, { index: 0, total: 1 });
+          }
+        } else {
+          // Unmapped (gray) — open OHM mapping modal
+          onOhmTerritoryClickRef.current?.(stripped, null);
         }
         return;
       }
@@ -1215,13 +1328,20 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         const sitelinkZoom = sl === null ? 2 : sl >= 25 ? 1 : sl >= 10 ? 2 : sl >= 3 ? 4 : 6;
         const typeOffset   = POLITY_ZOOM_OFFSET[p.polityType ?? ''] ?? 3;
         const baseZoom     = sitelinkZoom + typeOffset;
-        const isUnlinkedPrincipality = p.polityType === 'principality' && !hasTerritory.has(p.id);
-        const _minZoom = isUnlinkedPrincipality ? Math.max(baseZoom, UNLINKED_PRINCIPALITY_MIN_ZOOM) : baseZoom;
+        const isMapped = hasTerritory.has(p.id) || centroidIds.has(p.id);
+        const isUnlinkedPrincipality = p.polityType === 'principality' && !isMapped;
+        // Unmapped polities (stars) are pushed to higher zoom so they don't clutter the map.
+        // Principalities get an even higher threshold.
+        const unmappedMin = isUnlinkedPrincipality ? UNLINKED_PRINCIPALITY_MIN_ZOOM : 7;
+        const _minZoom = !isMapped ? Math.max(baseZoom, unmappedMin) : baseZoom;
 
         const translatedTitle = (translationMap && p.wikidataQid) ? translationMap[p.wikidataQid] : undefined;
         const titleProps = translatedTitle ? { title: translatedTitle } : {};
         const _hasTerritory = hasTerritory.has(p.id) || centroidIds.has(p.id);
-        return [{ ...f, properties: { ...f.properties, ...titleProps, _opacity: 1.0, _labelOpacity: 1.0, _color, _minZoom, _hasTerritory } }];
+        // Mapped polities: star only at high zoom, with capital name label
+        const _starMinZoom = isMapped ? 7 : _minZoom;
+        const _capitalLabel = isMapped && p.capitalName ? p.capitalName : null;
+        return [{ ...f, properties: { ...f.properties, ...titleProps, _opacity: 1.0, _labelOpacity: 1.0, _color, _minZoom, _hasTerritory, _starMinZoom, _capitalLabel } }];
       }
 
       const catOk = p.categories.some((c) => activeCategories.has(c));
@@ -1277,7 +1397,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         // Sitelinks count drives both zoom threshold and pin size.
         // Higher sitelinks = more globally significant = visible earlier + bigger pin.
         const sl = p.sitelinksCount ?? null;
-        extraProps._minZoom = sl === null ? 2 : sl >= 25 ? 1 : sl >= 10 ? 2 : sl >= 3 ? 4 : 6;
+        extraProps._minZoom = sl === null ? 4 : sl >= 80 ? 1 : sl >= 40 ? 2 : sl >= 20 ? 3 : sl >= 10 ? 4 : sl >= 3 ? 5 : 6;
         extraProps._radius  = sl === null ? 7 : sl >= 25 ? 12 : sl >= 10 ? 9 : sl >= 3 ? 7 : 5;
         extraProps._icon    = (p.primaryCategory in CATEGORY_SVGS) ? catIconName(p.primaryCategory as Category) : 'marker';
       }
