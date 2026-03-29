@@ -435,7 +435,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         paint: {
           'text-color': [
             'case',
-            ['!=', ['get', 'polityId'], null], '#f5c842',
+            ['!=', ['get', 'polityId'], null], '#eeeeee',
             '#9e9e9e',
           ],
           'text-halo-color': 'rgba(0,0,0,0.6)',
@@ -664,7 +664,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         paint: {
           'text-color': [
             'case',
-            ['==', ['get', 'mapped'], true], '#f5c842',  // mapped → yellow
+            ['==', ['get', 'mapped'], true], '#eeeeee',  // mapped → white
             '#9e9e9e',                                      // unmapped → gray
           ],
           'text-halo-color': 'rgba(0,0,0,0.7)',
@@ -727,7 +727,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         map.on('mouseleave', id, ohmLabelLeave);
       }
 
-      // Hover on centroid labels: show × unlink button for mapped (yellow) labels
+      // Hover on centroid labels: show × unlink button for mapped (white) labels
       map.on('mouseenter', 'polity-centroid-labels', (e) => {
         if (!e.features?.length) return;
         const feat = e.features[0];
@@ -918,7 +918,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         const color = suppressedByBase.has(base) ? undefined : (linkColorByBase[base] ?? polityColorByName[base]);
         if (color) {
           fillPairs.push(fullName, color);
-          labelPairs.push(fullName, '#f5c842');
+          labelPairs.push(fullName, '#eeeeee');
           // Track which polity this territory is matched to (for star suppression)
           const polityId = linkPolityIdByBase[base] ?? polityIdByName[base];
           if (polityId) matchedPolityIds.add(polityId);
@@ -1148,7 +1148,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         return;
       }
 
-      // OHM centroid label click — mapped (yellow) labels open InfoPanel, unmapped (gray) open mapping modal
+      // OHM centroid label click — mapped (white) labels open InfoPanel, unmapped (gray) open mapping modal
       if (top.layer.id === 'ohm-labels' || top.layer.id === 'ohm-labels-small') {
         const DATE_SUFFIX = /\s*\(\d{1,4}(?:\s*[-–]\s*(?:\d{1,4}|present))?\)\s*$/;
         const rawName = (top.properties?.name_en ?? top.properties?.name ?? '') as string;
@@ -1451,7 +1451,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         labelSource.setData({ type: 'FeatureCollection', features: buildLabelPoints(visibleTerritories) });
       }
 
-      // Build centroid labels for ALL territories — mapped (yellow) and unmapped (gray).
+      // Build centroid labels for ALL territories — mapped (white) and unmapped (gray).
       // One label per territory group: mapped group by polityId, unmapped group by hbName.
       const centroidSrc = map.getSource('polity-centroid-src') as GeoJSONSource | undefined;
       if (centroidSrc) {
@@ -1568,7 +1568,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
             top: hoveredLabel.y - 10,
             zIndex: 20,
             background: 'rgba(30,30,30,0.82)',
-            color: '#f5c842',
+            color: '#eeeeee',
             border: '1px solid rgba(245,200,66,0.5)',
             borderRadius: '50%',
             width: 18,
@@ -1606,7 +1606,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
             top: hoveredOhmLabel.y - 10,
             zIndex: 20,
             background: 'rgba(30,30,30,0.82)',
-            color: '#f5c842',
+            color: '#eeeeee',
             border: '1px solid rgba(245,200,66,0.5)',
             borderRadius: '50%',
             width: 18,
