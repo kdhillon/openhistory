@@ -1,11 +1,19 @@
-// Always call Wikidata directly from the browser.
-// Railway's server IP range is globally blocked on Wikimedia (open proxy block),
-// so proxying through the backend breaks edits. Direct CORS requests work fine.
-// MediaWiki CORS: include origin= param so Wikidata returns Access-Control-Allow-* headers.
-const WD_API = 'https://www.wikidata.org/w/api.php';
+// Wikidata API routing:
+// - Dev: requests are proxied through the Vite dev server (/wikidata-api → wikidata.org/w/api.php).
+//   This is same-origin from the browser's perspective, so no CORS restrictions apply.
+//   Cookie domain is rewritten to localhost by the Vite proxy (see vite.config.ts).
+// - Prod: direct browser→Wikidata. Wikidata's $wgCrossSiteAJAXdomains only allows Wikimedia-owned
+//   origins for credentialed (authenticated) CORS — third-party origins like openhistory.app are
+//   rejected. This means login/edit in prod requires Wikimedia OAuth 2.0 (not yet implemented).
+//   Non-credentialed reads use origin=* and work fine.
+const isDev = import.meta.env.DEV;
+const WD_API = isDev ? '/wikidata-api' : 'https://www.wikidata.org/w/api.php';
 const WD_ORIGIN = typeof window !== 'undefined' ? window.location.origin : 'https://openhistory.app';
 
 function wd(p: Record<string, string>) {
+  // Dev (proxied): no origin param — same-origin request, Wikidata never sees an Origin header.
+  // Prod (direct): origin=* for anonymous reads; WD_ORIGIN for credentialed calls (broken without OAuth).
+  if (isDev) return new URLSearchParams({ format: 'json', ...p }).toString();
   return new URLSearchParams({ format: 'json', origin: WD_ORIGIN, ...p }).toString();
 }
 

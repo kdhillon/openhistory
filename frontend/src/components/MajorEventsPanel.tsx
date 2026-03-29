@@ -26,7 +26,7 @@ interface Props {
 }
 
 export function MajorEventsPanel({ geojson, currentDateInt, stepSize, selectedQid, onSelectQid, onFitBounds }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const majorEvents = useMemo<MajorEvent[]>(() => {
     const counts = new Map<string, MajorEvent>();

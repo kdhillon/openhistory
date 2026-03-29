@@ -119,6 +119,8 @@ export default function App() {
   );
   const [showBorders, setShowBorders] = useState(true);
   const [showOtherPolities, setShowOtherPolities] = useState(true);
+  const [showTerritoryLabels, setShowTerritoryLabels] = useState(false);
+  const [showRecentEvents, setShowRecentEvents] = useState(false);
   const [zoomRequest, setZoomRequest] = useState<ZoomRequest | null>(null);
   const zoomIdRef = useRef(0);
   const [wikiAuth, setWikiAuth] = useState<string | null>(null);
@@ -222,9 +224,7 @@ export default function App() {
 
   // Polity IDs that have a matched, time-visible territory — their capital dot is redundant
   const polityIdsWithTerritory = useMemo(() => {
-    if (territorySource === 'ohm') {
-      return ohmMatchedPolityIds;
-    }
+    // Always compute from HB territory data (centroid labels use HB data regardless of territorySource)
     const ids = new Set<string>();
     for (const f of patchedTerritories.features) {
       const p = f.properties as { polityId: string | null; yearStart: number; yearEnd: number | null };
@@ -232,6 +232,10 @@ export default function App() {
       if (p.yearStart > currentYear) continue;
       if (p.yearEnd !== null && currentYear > p.yearEnd) continue;
       ids.add(p.polityId);
+    }
+    // Also include OHM matched polities
+    if (territorySource === 'ohm') {
+      for (const id of ohmMatchedPolityIds) ids.add(id);
     }
     return ids;
   }, [territorySource, ohmMatchedPolityIds, patchedTerritories, currentYear]);
@@ -372,6 +376,8 @@ export default function App() {
 
   const handleToggleBorders = useCallback(() => setShowBorders((v) => !v), []);
   const handleToggleOtherPolities = useCallback(() => setShowOtherPolities((v) => !v), []);
+  const handleToggleTerritoryLabels = useCallback(() => setShowTerritoryLabels((v) => !v), []);
+  const handleToggleRecentEvents = useCallback(() => setShowRecentEvents((v) => !v), []);
 
   const handleSelectFeature = useCallback((props: FeatureProperties, stackInfo: StackInfo) => {
     setSelectedFeature(props);
@@ -542,6 +548,8 @@ export default function App() {
           onSetStepSize={timeline.setStepSize}
           playbackSpeed={timeline.playbackSpeed}
           onSetSpeed={timeline.setPlaybackSpeed}
+          showRecentEvents={showRecentEvents}
+          onToggleRecentEvents={handleToggleRecentEvents}
         />
       ) : (
         <CategoryFilter
@@ -551,6 +559,8 @@ export default function App() {
           onToggleBorders={handleToggleBorders}
           showOtherPolities={showOtherPolities}
           onToggleOtherPolities={handleToggleOtherPolities}
+          showTerritoryLabels={showTerritoryLabels}
+          onToggleTerritoryLabels={handleToggleTerritoryLabels}
           onOpenAbout={() => navigate('/about')}
           onOpenData={() => navigate('/data')}
           onOpenStories={() => setStoryBrowserOpen(true)}
@@ -567,6 +577,8 @@ export default function App() {
           seedLoading={seedLoading}
           locationCount={locationCount}
           polityCount={polityCount}
+          showRecentEvents={showRecentEvents}
+          onToggleRecentEvents={handleToggleRecentEvents}
         />
       )}
 
@@ -599,6 +611,7 @@ export default function App() {
           activeCategories={activeCategories}
           showBorders={showBorders}
           showOtherPolities={showOtherPolities}
+          showTerritoryLabels={showTerritoryLabels}
           onSelectFeature={handleSelectFeature}
           zoomRequest={zoomRequest}
           fitBoundsRequest={fitBoundsRequest}
@@ -615,6 +628,7 @@ export default function App() {
           onOhmTerritoryClick={(ohmName, ohmWikidataQid) => setOhmMappingTarget({ ohmName, ohmWikidataQid })}
           onUnlinkOhmTerritory={handleUnlinkOhmTerritory}
           onOhmMatchedPolityIds={setOhmMatchedPolityIds}
+          showRecentEvents={showRecentEvents}
         />
       </div>
 

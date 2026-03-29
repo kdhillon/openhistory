@@ -14,12 +14,14 @@ interface Props {
   onAuth: (username: string | null) => void;
   onSuccess: (updates: Partial<FeatureProperties>) => void;
   onClose: () => void;
+  leadText?: string; // Wikipedia lead snippet for AI date extraction
 }
 
 type Phase = 'login' | 'edit' | 'submitting' | 'success' | 'error';
 
-export function WikiEditForm({ feature, field, wikiAuth, onAuth, onSuccess, onClose }: Props) {
+export function WikiEditForm({ feature, field, wikiAuth, onAuth, onSuccess, onClose, leadText }: Props) {
   const [phase, setPhase] = useState<Phase>(wikiAuth ? 'edit' : 'login');
+  const [extracting, setExtracting] = useState(false);
 
   // Login fields
   const [loginUser, setLoginUser] = useState('');
@@ -52,6 +54,49 @@ export function WikiEditForm({ feature, field, wikiAuth, onAuth, onSuccess, onCl
   useEffect(() => {
     if (wikiAuth && phase === 'login') setPhase('edit');
   }, [wikiAuth, phase]);
+
+  // AI extraction — runs once on mount when logged in and lead text is available
+  useEffect(() => {
+    if (!wikiAuth || !leadText) return;
+    if (field === 'date') {
+      setExtracting(true);
+      fetch('/api/ai/extract-dates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: leadText }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.startYear != null) {
+            setStartYear(String(Math.abs(data.startYear)));
+            if (data.startYear < 0) setStartBce(true);
+          }
+          if (data.startMonth != null) setStartMonth(String(data.startMonth));
+          if (data.startDay != null) setStartDay(String(data.startDay));
+          if (data.endYear != null) {
+            setEndYear(String(Math.abs(data.endYear)));
+            if (data.endYear < 0) setEndBce(true);
+          }
+          if (data.endMonth != null) setEndMonth(String(data.endMonth));
+          if (data.endDay != null) setEndDay(String(data.endDay));
+        })
+        .catch(() => {})
+        .finally(() => setExtracting(false));
+    } else if (field === 'location') {
+      setExtracting(true);
+      fetch('/api/ai/extract-location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: leadText }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.location) handleLocationSearch(data.location);
+        })
+        .catch(() => {})
+        .finally(() => setExtracting(false));
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogin = async () => {
     setLoginError('');
@@ -280,6 +325,9 @@ export function WikiEditForm({ feature, field, wikiAuth, onAuth, onSuccess, onCl
 
       {field === 'date' ? (
         <>
+          {extracting && (
+            <p style={s.hint}>Analyzing Wikipedia article…</p>
+          )}
           {/* Start date */}
           <div style={s.fieldGroup}>
             <span style={s.groupLabel}>Start date</span>
@@ -318,6 +366,9 @@ export function WikiEditForm({ feature, field, wikiAuth, onAuth, onSuccess, onCl
         </>
       ) : (
         <>
+          {extracting && (
+            <p style={s.hint}>Analyzing Wikipedia article…</p>
+          )}
           {/* Location search */}
           <div style={s.fieldGroup}>
             <span style={s.groupLabel}>Search Wikidata for location</span>

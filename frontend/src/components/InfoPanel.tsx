@@ -94,6 +94,11 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
 
   const [storyIndex, setStoryIndex] = useState<StoryIndexEntry[]>([]);
 
+  // Collapse photos when the edit form opens
+  useEffect(() => {
+    if (editField) setShowImages(false);
+  }, [editField]);
+
   // Load story index once
   useEffect(() => {
     fetch('/data/stories/index.json')
@@ -537,47 +542,45 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
         </div>
       </div>
 
-      {/* Image toggle row — shown once article loaded and has images */}
-      {article && article.images.length > 0 && (
-        <button onClick={() => setShowImages((v) => !v)} style={styles.imageToggle}>
-          <span>Photos ({article.images.length})</span>
-          <span style={{ fontSize: 10, opacity: 0.6 }}>{showImages ? '▾' : '▸'}</span>
-        </button>
-      )}
-
       {/* Image carousel */}
-      {showImages && (
-        article && article.images.length > 0
+      {article && article.images.length > 0
+        ? (
+          <>
+            {showImages && (
+              <div style={{ position: 'relative', flexShrink: 0, background: '#000', cursor: 'pointer' }} onClick={() => setImageExpanded((v) => !v)}>
+                <img
+                  src={article.images[imageIndex]}
+                  alt={`${feature.title} ${imageIndex + 1}`}
+                  style={{
+                    width: '100%',
+                    height: imageExpanded ? 'auto' : 200,
+                    maxHeight: imageExpanded ? '50vh' : 200,
+                    objectFit: imageExpanded ? 'contain' : 'cover',
+                    display: 'block',
+                  }}
+                />
+                {article.images.length > 1 && (
+                  <>
+                    <button style={{ ...styles.imgArrow, left: 8 }} onClick={(e) => { e.stopPropagation(); setImageIndex((i) => (i - 1 + article.images.length) % article.images.length); }}>‹</button>
+                    <button style={{ ...styles.imgArrow, right: 8 }} onClick={(e) => { e.stopPropagation(); setImageIndex((i) => (i + 1) % article.images.length); }}>›</button>
+                    <div style={styles.imgCounter}>{imageIndex + 1} / {article.images.length}</div>
+                  </>
+                )}
+              </div>
+            )}
+            <button onClick={() => setShowImages((v) => !v)} style={styles.imageToggle}>
+              <span style={{ fontSize: 9, opacity: 0.4 }}>{showImages ? '▲' : '▼'}</span>
+            </button>
+          </>
+        )
+        : loading
           ? (
-            <div style={{ position: 'relative', flexShrink: 0, background: '#000', cursor: 'pointer' }} onClick={() => setImageExpanded((v) => !v)}>
-              <img
-                src={article.images[imageIndex]}
-                alt={`${feature.title} ${imageIndex + 1}`}
-                style={{
-                  width: '100%',
-                  height: imageExpanded ? 'auto' : 200,
-                  maxHeight: imageExpanded ? '50vh' : 200,
-                  objectFit: imageExpanded ? 'contain' : 'cover',
-                  display: 'block',
-                }}
-              />
-              {article.images.length > 1 && (
-                <>
-                  <button style={{ ...styles.imgArrow, left: 8 }} onClick={(e) => { e.stopPropagation(); setImageIndex((i) => (i - 1 + article.images.length) % article.images.length); }}>‹</button>
-                  <button style={{ ...styles.imgArrow, right: 8 }} onClick={(e) => { e.stopPropagation(); setImageIndex((i) => (i + 1) % article.images.length); }}>›</button>
-                  <div style={styles.imgCounter}>{imageIndex + 1} / {article.images.length}</div>
-                </>
-              )}
+            <div style={styles.imageLoader}>
+              <div style={styles.spinner} />
             </div>
           )
-          : loading
-            ? (
-              <div style={styles.imageLoader}>
-                <div style={styles.spinner} />
-              </div>
-            )
-            : null
-      )}
+          : null
+      }
 
       {/* Title + date on same row */}
       <div style={styles.titleRow}>
@@ -887,6 +890,11 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
           field={editField}
           wikiAuth={wikiAuth}
           onAuth={onAuth}
+          leadText={
+            wikiAuth && (editField === 'date' || editField === 'location') && article?.leadHtml
+              ? article.leadHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500)
+              : undefined
+          }
           onSuccess={(updates) => {
             onFeatureUpdated(updates);
             setEditField(null);
@@ -1194,19 +1202,14 @@ const styles: Record<string, React.CSSProperties> = {
   imageToggle: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     width: '100%',
-    padding: '6px 0',
+    padding: '4px 0',
     background: 'none',
     border: 'none',
-    borderTop: '1px solid rgba(0,0,0,0.07)',
     borderBottom: '1px solid rgba(0,0,0,0.07)',
-    color: '#555',
-    fontSize: 12,
-    fontWeight: 600,
     cursor: 'pointer',
     fontFamily: 'inherit',
-    marginBottom: 2,
   },
   imageLoader: {
     width: '100%',

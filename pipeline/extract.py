@@ -353,6 +353,22 @@ WIKIDATA_TO_CATEGORY: dict[str, Optional[str]] = {
     "Q21198342": None,           # manga series
     "Q15296520": None,           # manga magazine
     "Q867242":   None,           # comics anthology
+    # Comics / creative works — not historical events
+    "Q1004":     None,           # comics
+    "Q14406742": None,           # comic book series
+    "Q838795":   None,           # comic strip
+    "Q1760610":  None,           # comics magazine
+    "Q725377":   None,           # comic book / graphic album
+    "Q115378877":None,           # comics story arc
+    "Q2831984":  None,           # Tintin album
+    "Q3297186":  None,           # comics limited series
+    "Q1114461":  None,           # comics character / comics feature
+    "Q117467246":None,           # animated series (non-TV)
+    # Fictional entities — not historical events
+    "Q95074":    None,           # fictional human
+    "Q15632617": None,           # fictional human (alt class)
+    "Q2088357":  None,           # fictional character
+    "Q14897293": None,           # fictional entity
 
     # Generic fallbacks — exclude
     "Q13418847": None,           # historical event (generic)

@@ -14,6 +14,8 @@ interface Props {
   onToggleBorders: () => void;
   showOtherPolities: boolean;
   onToggleOtherPolities: () => void;
+  showTerritoryLabels: boolean;
+  onToggleTerritoryLabels: () => void;
   onOpenData: () => void;
   onOpenAbout: () => void;
   onOpenStories: () => void;
@@ -31,6 +33,8 @@ interface Props {
   seedLoading: boolean;
   locationCount: number;
   polityCount: number;
+  showRecentEvents: boolean;
+  onToggleRecentEvents: () => void;
 }
 
 function Spinner() {
@@ -120,7 +124,7 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
   );
 }
 
-export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, onOpenData, onOpenAbout, onOpenStories, onEditTerritory, editorMode, territorySource, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount }: Props) {
+export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onOpenStories, onEditTerritory, editorMode, territorySource, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents }: Props) {
   const bordersColor = '#607D8B';
   const otherPolitiesColor = '#9C27B0';
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -189,6 +193,15 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
                 ))}
               </select>
             </div>
+            <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.08)', margin: '10px 0' }} />
+            <label style={styles.settingsCheckRow}>
+              <input type="checkbox" checked={showTerritoryLabels} onChange={onToggleTerritoryLabels} style={{ margin: 0 }} />
+              <span style={styles.settingsCheckLabel}>Show territory labels</span>
+            </label>
+            <label style={styles.settingsCheckRow} title="When enabled, events that happened within the last step (e.g., one year, one month, one day) will be shown as semi-transparent on the map">
+              <input type="checkbox" checked={showRecentEvents} onChange={onToggleRecentEvents} style={{ margin: 0 }} />
+              <span style={styles.settingsCheckLabel}>Show recent events</span>
+            </label>
             <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.08)', margin: '10px 0' }} />
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.35)', marginBottom: 8 }}>Data</div>
             {/* Events */}
@@ -280,6 +293,8 @@ interface MobileTopBarProps {
   onSetStepSize: (s: number) => void;
   playbackSpeed: number;
   onSetSpeed: (s: number) => void;
+  showRecentEvents: boolean;
+  onToggleRecentEvents: () => void;
 }
 
 export function MobileTopBar({
@@ -289,6 +304,7 @@ export function MobileTopBar({
   onOpenAbout, onOpenStories, selectedLang, onLangChange,
   stepSize, stepOptions, onSetStepSize,
   playbackSpeed, onSetSpeed,
+  showRecentEvents, onToggleRecentEvents,
 }: MobileTopBarProps) {
   const bordersColor = '#607D8B';
   const otherPolitiesColor = '#9C27B0';
@@ -390,6 +406,11 @@ export function MobileTopBar({
                 </select>
               </div>
             </div>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }} title="When enabled, events that happened within the last step (e.g., one year, one month, one day) will be shown as semi-transparent on the map">
+              <input type="checkbox" checked={showRecentEvents} onChange={onToggleRecentEvents} style={{ margin: 0 }} />
+              <span style={mb.settingLabel}>Show recent events</span>
+            </label>
           </div>
         </>
       )}
@@ -642,6 +663,16 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 10,
+  },
+  settingsCheckRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    cursor: 'pointer',
+  },
+  settingsCheckLabel: {
+    fontSize: 13,
+    color: '#202122',
   },
   settingsLabel: {
     fontSize: 13,

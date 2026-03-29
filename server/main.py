@@ -1547,3 +1547,102 @@ async def wikidata_proxy(request: Request):
         cleaned = re.sub(r';\s*[Dd]omain=[^;]+', '', v)
         resp.headers.append("Set-Cookie", cleaned)
     return resp
+
+
+# ── AI date extraction ────────────────────────────────────────────────────────
+
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+
+@app.post("/api/ai/extract-dates")
+async def extract_dates(request: Request):
+    """Extract start/end dates from a Wikipedia lead snippet using Claude Haiku."""
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(503, "AI extraction not configured")
+
+    body = await request.json()
+    text = (body.get("text") or "").strip()[:500]
+    if not text:
+        raise HTTPException(400, "No text provided")
+
+    import anthropic
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    prompt = (
+        "Extract the start and end dates of the historical event described in the text below. "
+        "Return ONLY a JSON object (no explanation) with these integer-or-null fields: "
+        "startYear, startMonth, startDay, endYear, endMonth, endDay. "
+        "Use negative integers for BCE years. Use null for unknown/absent values.\n\n"
+        f"Text: {text}"
+    )
+
+    try:
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=120,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = msg.content[0].text.strip()
+        # Pull the first {...} block from the response
+        m = re.search(r'\{[^}]+\}', raw, re.DOTALL)
+        if not m:
+            raise ValueError("No JSON object in response")
+        data = json.loads(m.group())
+    except Exception as e:
+        print(f"[extract-dates] failed: {e}", flush=True)
+        raise HTTPException(500, "Date extraction failed")
+
+    def _int_or_none(v):
+        try:
+            return int(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "startYear":  _int_or_none(data.get("startYear")),
+        "startMonth": _int_or_none(data.get("startMonth")),
+        "startDay":   _int_or_none(data.get("startDay")),
+        "endYear":    _int_or_none(data.get("endYear")),
+        "endMonth":   _int_or_none(data.get("endMonth")),
+        "endDay":     _int_or_none(data.get("endDay")),
+    }
+
+
+@app.post("/api/ai/extract-location")
+async def extract_location(request: Request):
+    """Extract the primary location of a historical event from a Wikipedia lead snippet."""
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(503, "AI extraction not configured")
+
+    body = await request.json()
+    text = (body.get("text") or "").strip()[:500]
+    if not text:
+        raise HTTPException(400, "No text provided")
+
+    import anthropic
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    prompt = (
+        "Extract the primary location where the historical event described below took place. "
+        "Return ONLY a JSON object (no explanation) with one field: "
+        "\"location\" — a concise place name suitable for a Wikidata search (e.g. \"Rome\", \"Battle of Waterloo\", \"Ottoman Empire\"). "
+        "Use null if no location is discernible.\n\n"
+        f"Text: {text}"
+    )
+
+    try:
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=60,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = msg.content[0].text.strip()
+        m = re.search(r'\{[^}]+\}', raw, re.DOTALL)
+        if not m:
+            raise ValueError("No JSON object in response")
+        data = json.loads(m.group())
+    except Exception as e:
+        print(f"[extract-location] failed: {e}", flush=True)
+        raise HTTPException(500, "Location extraction failed")
+
+    location = data.get("location")
+    return {"location": str(location) if location else None}
