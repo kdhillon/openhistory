@@ -384,7 +384,6 @@ export default function App() {
   const handleToggleOhmAdmin = useCallback(() => setShowOhmAdmin((v) => !v), []);
 
   const handleSelectFeature = useCallback((props: FeatureProperties, stackInfo: StackInfo) => {
-    console.log('[SELECT] handleSelectFeature called:', { title: props.title, id: props.id, featureType: props.featureType, wikipediaSummary: props.wikipediaSummary?.substring(0, 80), yearStart: props.yearStart, yearEnd: props.yearEnd });
     setSelectedFeature(props);
     setStack(stackInfo);
     if (props.yearStart !== null) {
@@ -402,8 +401,6 @@ export default function App() {
   }, [timeline]);
 
   const handleClosePanel = useCallback(() => {
-    console.log('[SELECT] handleClosePanel called');
-    console.trace('[SELECT] closePanel stack trace');
     setSelectedFeature(null);
   }, []);
 

@@ -155,7 +155,6 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
   const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
-    console.log('[INFOPANEL] reset useEffect fired — feature?.title:', feature?.title, 'feature?.id:', (feature as any)?.id, 'wikipediaSummary:', feature?.wikipediaSummary?.substring(0, 80));
     setExpanded(true);
     setArticle(null);
     setLoading(false);
@@ -205,7 +204,7 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
     if (!feature || feature.wikipediaSummary || !feature.wikipediaUrl) return;
     const match = feature.wikipediaUrl.match(/\/wiki\/([^#?]+)/);
     if (!match) return;
-    const title = match[1];
+    const title = decodeURIComponent(match[1]);
     fetch(`${wikiApi('en')}?${wikiParams({ action: 'query', titles: title, prop: 'extracts', exintro: '1', explaintext: '1', exsentences: '3' })}`)
       .then((r) => r.json())
       .then((data) => {
@@ -228,7 +227,7 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
       const match = feature.wikipediaUrl.match(/\/wiki\/([^#?]+)/);
       if (!match) return;
       apiBase = wikiApi('en');
-      pageTitle = match[1];
+      pageTitle = decodeURIComponent(match[1]);
     } else {
       // Wait for translatedContent to resolve the sitelink title
       if (!translatedContent?.wikiTitle) return;
@@ -262,11 +261,9 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
           })
           .map((p) => p.imageinfo![0].thumburl ?? p.imageinfo![0].url ?? '')
           .filter(Boolean);
-        console.log('[INFOPANEL] article loaded — leadHtml length:', leadHtml.length, 'sections:', sections.length, 'images:', images.length);
         setArticle({ wikiTitle: pageTitle, apiBase, lang: selectedLang, images, leadHtml, sections });
       })
-      .catch((err) => {
-        console.log('[INFOPANEL] article fetch failed:', err);
+      .catch(() => {
         setArticle({ wikiTitle: pageTitle, apiBase, lang: selectedLang, images: [], leadHtml: '<p>Could not load article.</p>', sections: [] });
       })
       .finally(() => setLoading(false));
@@ -370,10 +367,10 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
   return (
     <div style={{
       ...styles.panel,
-      top: isMobile ? 56 : 114,
+      top: isMobile ? 56 : 66,
       width: expanded ? expandedWidth : 360,
-      height: expanded ? 'calc(100vh - 136px)' : 'auto',
-      maxHeight: isMobile ? 'calc(100vh - 160px)' : 'calc(100vh - 220px)',
+      height: expanded ? 'calc(100vh - 100px)' : 'auto',
+      maxHeight: isMobile ? 'calc(100vh - 120px)' : 'calc(100vh - 140px)',
       overflow: (expanded || isMobile) ? 'hidden' : 'visible',
       transition: dragRef.current ? 'none' : 'width 0.25s ease',
     }}>

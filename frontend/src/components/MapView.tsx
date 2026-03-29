@@ -1156,11 +1156,9 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         if (!stripped) return;
         // Check manual DB link first
         const link = ohmLinksRef.current.find((l) => l.ohmName === stripped && l.polityId && !l.explicitlyUnlinked);
-        console.log('[OHM-CLICK] layer:', top.layer.id, 'rawName:', rawName, 'stripped:', stripped, 'link:', link);
         if (link) {
           // Mapped via manual link — open InfoPanel for the linked polity
           const polityFeature = geojsonRef.current.features.find((p) => (p.properties as FeatureProperties).id === link.polityId);
-          console.log('[OHM-CLICK] polityFeature found:', !!polityFeature, 'id:', link.polityId);
           if (polityFeature) {
             const raw = { ...polityFeature.properties } as Record<string, unknown>;
             for (const key of ['categories', 'partOfResolved', 'wikidataClasses'] as const) {
@@ -1168,7 +1166,6 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
                 try { raw[key] = JSON.parse(raw[key] as string); } catch { /* leave as-is */ }
               }
             }
-            console.log('[OHM-CLICK] calling onSelect with:', { title: raw.title, id: raw.id, wikipediaSummary: raw.wikipediaSummary?.toString().substring(0, 80), featureType: raw.featureType, yearStart: raw.yearStart, yearEnd: raw.yearEnd });
             onSelectRef.current(raw as unknown as FeatureProperties, { index: 0, total: 1 });
           }
         } else {
