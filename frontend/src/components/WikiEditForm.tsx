@@ -13,7 +13,7 @@ interface Props {
   field: 'date' | 'location' | 'capital' | 'sovereign';
   wikiAuth: string | null;
   onAuth: (username: string | null) => void;
-  onSuccess: (updates: Partial<FeatureProperties>) => void;
+  onSuccess: (updates: Partial<FeatureProperties> & { _coords?: [number, number] }) => void;
   onClose: () => void;
   leadText?: string; // Wikipedia lead snippet for AI date extraction
 }
@@ -150,12 +150,23 @@ export function WikiEditForm({ feature, field, wikiAuth, onAuth, onSuccess, onCl
       } else {
         if (!selectedLocation) throw new Error('Please select a location from the search results.');
         await submitLocationEdit(qid, selectedLocation.id, csrf);
-        // Persist to our DB — include the Wikidata QID so we get the right coordinates
-        patchFeature(feature.id, {
-          location_name: selectedLocation.label,
-          location_wikidata_qid: selectedLocation.id,
-        }).catch((e) => console.warn('[API] location patch failed:', e));
-        onSuccess({ locationName: selectedLocation.label });
+        // Persist to our DB and use the response coords to update the map immediately
+        const updates: Partial<FeatureProperties> & { _coords?: [number, number] } = {
+          locationName: selectedLocation.label,
+          locationWikidataQid: selectedLocation.id,
+        };
+        try {
+          const patched = await patchFeature(feature.id, {
+            location_name: selectedLocation.label,
+            location_wikidata_qid: selectedLocation.id,
+          });
+          const geom = patched.geometry as { type: string; coordinates: [number, number] } | null;
+          if (geom?.coordinates) {
+            updates._coords = geom.coordinates;
+            updates.locationLevel = (patched.properties as Record<string, unknown>).locationLevel as string;
+          }
+        } catch (e) { console.warn('[API] location patch failed:', e); }
+        onSuccess(updates);
       }
 
       setPhase('success');
