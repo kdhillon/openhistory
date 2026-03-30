@@ -543,7 +543,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           'text-size': 12,
           'text-max-width': 8,
           'text-optional': true,
-          'text-font': ['Open Sans Semibold', 'Arial Unicode MS Regular'],
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
           visibility: ohmInitialVis,
         },
         paint: {
@@ -659,7 +659,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           'text-size': 12,
           'text-allow-overlap': true,
           'text-ignore-placement': true,
-          'text-font': ['Open Sans Semibold', 'Arial Unicode MS Regular'],
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
         },
         paint: {
           'text-color': [
