@@ -130,13 +130,13 @@ export async function getAccessToken(): Promise<string | null> {
   return token;
 }
 
-/** Check if user is logged in by querying Wikidata with the stored token. */
+/** Check if user is logged in by querying Wikidata via our backend proxy. */
 export async function checkOAuthLogin(): Promise<string | null> {
   const token = await getAccessToken();
   if (!token) return null;
   try {
     const res = await fetch(
-      `https://www.wikidata.org/w/api.php?${new URLSearchParams({
+      `${API_BASE}/wikidata-proxy?${new URLSearchParams({
         action: 'query', meta: 'userinfo', format: 'json',
       })}`,
       { headers: { Authorization: `Bearer ${token}` } },

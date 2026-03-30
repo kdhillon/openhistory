@@ -1506,18 +1506,23 @@ async def suppress_ohm_link(request: Request):
 _WD_API = "https://www.wikidata.org/w/api.php"
 
 
-@app.api_route("/wikidata-api", methods=["GET", "POST"])
+@app.api_route("/api/wikidata-proxy", methods=["GET", "POST"])
 async def wikidata_proxy(request: Request):
-    cookie_header = request.headers.get("cookie", "")
-    # Forward the real client IP so Wikidata AbuseFilter sees the user's IP, not Railway's datacenter IP.
+    """Proxy authenticated Wikidata API calls.
+
+    The frontend sends the OAuth Bearer token in the Authorization header.
+    We forward it to Wikidata server-to-server (no CORS issues, and the
+    request is attributed to the authenticated user via OAuth).
+    """
+    auth_header = request.headers.get("authorization", "")
     client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")
     req_headers = {
-        "Cookie": cookie_header,
         "User-Agent": "OpenHistory/1.0 (https://openhistory.app)",
         "Accept": "application/json",
         "X-Forwarded-For": client_ip,
     }
-    print(f"[wd-proxy] {request.method} cookies_len={len(cookie_header)} client_ip={client_ip}", flush=True)
+    if auth_header:
+        req_headers["Authorization"] = auth_header
 
     qs = urllib.parse.urlencode(dict(request.query_params))
     url = f"{_WD_API}?{qs}" if qs else _WD_API
@@ -1529,24 +1534,16 @@ async def wikidata_proxy(request: Request):
     else:
         wd_req = urllib.request.Request(url, headers=req_headers)
 
-    import concurrent.futures
     loop = __import__("asyncio").get_event_loop()
     def _fetch():
-        with urllib.request.urlopen(wd_req, timeout=15) as r:
-            return r.read(), r.status, list(r.headers.items())
+        try:
+            with urllib.request.urlopen(wd_req, timeout=15) as r:
+                return r.read(), r.status
+        except urllib.error.HTTPError as e:
+            return e.read(), e.code
 
-    content, status, resp_headers = await loop.run_in_executor(None, _fetch)
-
-    content_type = next((v for k, v in resp_headers if k.lower() == "content-type"), "application/json")
-    resp = FastAPIResponse(content=content, status_code=status, media_type=content_type)
-
-    # Forward Set-Cookie headers, stripping wikidata.org domain so cookies apply to current domain
-    set_cookies = [(k, v) for k, v in resp_headers if k.lower() == "set-cookie"]
-    print(f"[wd-proxy] response status={status} set-cookie-count={len(set_cookies)}", flush=True)
-    for k, v in set_cookies:
-        cleaned = re.sub(r';\s*[Dd]omain=[^;]+', '', v)
-        resp.headers.append("Set-Cookie", cleaned)
-    return resp
+    content, status = await loop.run_in_executor(None, _fetch)
+    return FastAPIResponse(content=content, status_code=status, media_type="application/json")
 
 
 # ── AI date extraction ────────────────────────────────────────────────────────

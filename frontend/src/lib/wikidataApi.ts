@@ -1,24 +1,25 @@
-// Wikidata API — all calls go directly to Wikidata from the browser.
-// Authenticated calls use OAuth 2.0 Bearer tokens (see wikidataAuth.ts).
-// Anonymous reads use origin=* for CORS.
+// Wikidata API — anonymous reads go directly to Wikidata with origin=*.
+// Authenticated calls are proxied through our backend to avoid CORS issues
+// (Wikidata only returns CORS headers for Wikimedia-owned origins).
 import { getAccessToken, clearOAuthTokens } from './wikidataAuth';
 
 const WD = 'https://www.wikidata.org/w/api.php';
+const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
 function wdAnon(p: Record<string, string>) {
   return new URLSearchParams({ format: 'json', origin: '*', ...p }).toString();
 }
 
-/** Fetch with OAuth Bearer token for authenticated Wikidata calls. */
+/** Proxy authenticated Wikidata calls through our backend to avoid CORS. */
 async function wdAuth(params: Record<string, string>, method: 'GET' | 'POST' = 'GET', body?: URLSearchParams): Promise<Response> {
   const token = await getAccessToken();
   if (!token) throw new Error('Not logged in to Wikimedia');
   const qs = new URLSearchParams({ format: 'json', ...params }).toString();
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   if (method === 'POST') {
-    return fetch(`${WD}?${qs}`, { method: 'POST', headers, body });
+    return fetch(`${API_BASE}/wikidata-proxy?${qs}`, { method: 'POST', headers, body });
   }
-  return fetch(`${WD}?${qs}`, { headers });
+  return fetch(`${API_BASE}/wikidata-proxy?${qs}`, { headers });
 }
 
 // ── Auth ────────────────────────────────────────────────────────────────────
@@ -27,7 +28,7 @@ export async function checkLogin(): Promise<string | null> {
   const token = await getAccessToken();
   if (!token) return null;
   try {
-    const res = await fetch(`${WD}?${new URLSearchParams({ action: 'query', meta: 'userinfo', format: 'json' })}`, {
+    const res = await fetch(`${API_BASE}/wikidata-proxy?${new URLSearchParams({ action: 'query', meta: 'userinfo', format: 'json' })}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
