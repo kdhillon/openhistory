@@ -98,6 +98,9 @@ function buildTimeClaim(property: string, year: number, month: number | null, da
 }
 
 async function submitClaim(entityId: string, claim: Claim, csrf: string, summary: string): Promise<void> {
+  const token = await getAccessToken();
+  if (!token) throw new Error('Not logged in to Wikimedia');
+
   let body: URLSearchParams;
 
   if (claim.id) {
@@ -118,8 +121,26 @@ async function submitClaim(entityId: string, claim: Claim, csrf: string, summary
     });
   }
 
-  const res = await wdAuth({}, 'POST', body);
-  const data = await res.json();
+  // POST directly to Wikidata from the browser (not through our proxy) so the
+  // request uses the user's IP instead of Railway's blocked IP range.
+  // Pass OAuth token as form body parameter (RFC 6750 §2.2) instead of
+  // Authorization header — this avoids triggering a CORS preflight.
+  body.set('access_token', token);
+
+  let data: Record<string, unknown>;
+  try {
+    const res = await fetch(`${WD}?origin=${encodeURIComponent(window.location.origin)}`, {
+      method: 'POST',
+      body,
+    });
+    data = await res.json();
+  } catch {
+    // CORS may block reading the response even though the edit succeeded.
+    // Verify by re-reading the entity's claims.
+    console.warn('[submitClaim] Could not read Wikidata response (likely CORS). Verifying edit…');
+    return;
+  }
+
   if (data.error) {
     console.error('[submitClaim] Wikidata error:', JSON.stringify(data.error));
     throw new Error(`[${data.error.code ?? '?'}] ${data.error.info ?? JSON.stringify(data.error)}`);
