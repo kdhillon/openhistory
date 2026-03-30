@@ -48,7 +48,7 @@ app.add_middleware(
     ],
     allow_credentials=True,
     allow_methods=["GET", "PATCH", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Write-Secret"],
+    allow_headers=["Content-Type", "X-Write-Secret", "Authorization"],
 )
 
 # ── DB helpers ─────────────────────────────────────────────────────────────────
