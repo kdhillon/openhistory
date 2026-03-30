@@ -836,9 +836,9 @@ def get_hidden_features():
     try:
         cur = conn.cursor()
         cur.execute("SELECT id FROM polities WHERE manually_hidden = TRUE")
-        polity_ids = [str(r[0]) for r in cur.fetchall()]
+        polity_ids = [str(r["id"]) for r in cur.fetchall()]
         cur.execute("SELECT id FROM events WHERE manually_hidden = TRUE")
-        event_ids = [str(r[0]) for r in cur.fetchall()]
+        event_ids = [str(r["id"]) for r in cur.fetchall()]
         return {"ids": polity_ids + event_ids}
     finally:
         conn.close()
