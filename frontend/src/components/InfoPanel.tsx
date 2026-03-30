@@ -611,7 +611,7 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
       </div>
 
       {/* Meta — location only */}
-      {feature.locationName && feature.locationName !== feature.title && (() => {
+      {feature.locationName && feature.locationName !== feature.title && feature.locationName !== 'Unknown' && (() => {
         const locFeature = geojson?.features.find((f) => {
           const p = f.properties as FeatureProperties;
           // Prefer polity match by wikidata QID (most accurate for political entities)
@@ -640,6 +640,16 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
           </div>
         );
       })()}
+
+      {/* Location unknown — events only */}
+      {feature.featureType === 'event' && (!feature.locationName || feature.locationName === 'Unknown') && (
+        <div style={styles.meta}>
+          <span style={{ ...styles.metaLocation, color: '#b0b0b0' }}>Location unknown</span>
+          <button style={{ ...styles.pencilBtn, marginLeft: 4 }} onClick={() => setEditField(f => f === 'location' ? null : 'location')} title="Correct this location on Wikipedia">
+            <PencilIcon />
+          </button>
+        </div>
+      )}
 
       {/* Capital — polities only */}
       {isPolity && (() => {

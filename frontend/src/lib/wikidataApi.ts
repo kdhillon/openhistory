@@ -2,26 +2,68 @@
 // - Dev: requests are proxied through the Vite dev server (/wikidata-api → wikidata.org/w/api.php).
 //   This is same-origin from the browser's perspective, so no CORS restrictions apply.
 //   Cookie domain is rewritten to localhost by the Vite proxy (see vite.config.ts).
-// - Prod: direct browser→Wikidata. Wikidata's $wgCrossSiteAJAXdomains only allows Wikimedia-owned
-//   origins for credentialed (authenticated) CORS — third-party origins like openhistory.app are
-//   rejected. This means login/edit in prod requires Wikimedia OAuth 2.0 (not yet implemented).
-//   Non-credentialed reads use origin=* and work fine.
+// - Prod: credentialed requests (login/edit) are proxied through our backend (/api/wikidata-proxy)
+//   because Wikidata only allows Wikimedia-owned origins for credentialed CORS.
+//   Non-credentialed reads go directly to Wikidata with origin=* (fast, no proxy needed).
 const isDev = import.meta.env.DEV;
-const WD_API = isDev ? '/wikidata-api' : 'https://www.wikidata.org/w/api.php';
-const WD_ORIGIN = typeof window !== 'undefined' ? window.location.origin : 'https://openhistory.app';
+const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
+const WD_API = isDev ? '/wikidata-api' : `${API_BASE}/wikidata-proxy`;
+// Direct Wikidata URL for anonymous reads (faster, no proxy overhead)
+const WD_DIRECT = 'https://www.wikidata.org/w/api.php';
 
 function wd(p: Record<string, string>) {
-  // Dev (proxied): no origin param — same-origin request, Wikidata never sees an Origin header.
-  // Prod (direct): origin=* for anonymous reads; WD_ORIGIN for credentialed calls (broken without OAuth).
-  if (isDev) return new URLSearchParams({ format: 'json', ...p }).toString();
-  return new URLSearchParams({ format: 'json', origin: WD_ORIGIN, ...p }).toString();
+  return new URLSearchParams({ format: 'json', ...p }).toString();
+}
+
+// Anonymous reads go directly to Wikidata (no CORS issue with origin=*)
+function wdAnon(p: Record<string, string>) {
+  return new URLSearchParams({ format: 'json', origin: '*', ...p }).toString();
+}
+
+// ── Cookie relay for prod proxy ──────────────────────────────────────────────
+// In prod, Wikidata session cookies can't be stored by the browser (wrong domain).
+// We store them in localStorage and shuttle them via custom headers.
+const WD_COOKIE_KEY = 'wd-cookies';
+
+function getWdCookies(): string {
+  return localStorage.getItem(WD_COOKIE_KEY) ?? '';
+}
+
+function mergeWdCookies(newCookies: string) {
+  // Merge new cookies with existing ones (newer values overwrite)
+  const existing = new Map<string, string>();
+  for (const part of getWdCookies().split('; ').filter(Boolean)) {
+    const [name] = part.split('=', 1);
+    existing.set(name, part);
+  }
+  for (const part of newCookies.split('; ').filter(Boolean)) {
+    const [name] = part.split('=', 1);
+    existing.set(name, part);
+  }
+  localStorage.setItem(WD_COOKIE_KEY, [...existing.values()].join('; '));
+}
+
+/** Fetch wrapper that handles cookie relay for the prod proxy. */
+async function wdFetch(url: string, init?: RequestInit): Promise<Response> {
+  if (isDev) {
+    // Dev: Vite proxy handles cookies natively
+    return fetch(url, { ...init, credentials: 'include' });
+  }
+  // Prod: attach stored cookies, capture new ones from response
+  const headers = new Headers(init?.headers);
+  const cookies = getWdCookies();
+  if (cookies) headers.set('X-WD-Cookies', cookies);
+  const res = await fetch(url, { ...init, headers });
+  const setCookies = res.headers.get('X-WD-Set-Cookie');
+  if (setCookies) mergeWdCookies(setCookies);
+  return res;
 }
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 
 export async function checkLogin(): Promise<string | null> {
   try {
-    const res = await fetch(`${WD_API}?${wd({ action: 'query', meta: 'userinfo' })}`, { credentials: 'include' });
+    const res = await wdFetch(`${WD_API}?${wd({ action: 'query', meta: 'userinfo' })}`);
     const data = await res.json();
     const u = data.query?.userinfo;
     return (u && !('anon' in u)) ? u.name as string : null;
@@ -37,9 +79,8 @@ export interface LoginResult {
 
 export async function login(username: string, password: string): Promise<LoginResult> {
   // Step 1: login token
-  const tokenRes = await fetch(
+  const tokenRes = await wdFetch(
     `${WD_API}?${wd({ action: 'query', meta: 'tokens', type: 'login' })}`,
-    { credentials: 'include' },
   );
   const tokenData = await tokenRes.json();
   const logintoken = tokenData.query?.tokens?.logintoken as string;
@@ -50,7 +91,7 @@ export async function login(username: string, password: string): Promise<LoginRe
     logintoken, username, password,
     loginreturnurl: window.location.origin,
   });
-  const res = await fetch(`${WD_API}?origin=${encodeURIComponent(WD_ORIGIN)}`, { method: 'POST', body, credentials: 'include' });
+  const res = await wdFetch(`${WD_API}`, { method: 'POST', body });
   const data = await res.json();
   if (data.clientlogin?.status === 'PASS') return { ok: true };
   // UI status = additional verification step required (e.g. email code)
@@ -73,7 +114,7 @@ export async function loginContinue(logintoken: string, code: string, requestId 
     logintoken,
     [fieldName]: code,
   });
-  const res = await fetch(`${WD_API}?origin=${encodeURIComponent(WD_ORIGIN)}`, { method: 'POST', body, credentials: 'include' });
+  const res = await wdFetch(`${WD_API}`, { method: 'POST', body });
   const data = await res.json();
   if (data.clientlogin?.status === 'PASS') return { ok: true };
   if (data.clientlogin?.status === 'UI') {
@@ -83,18 +124,19 @@ export async function loginContinue(logintoken: string, code: string, requestId 
 }
 
 export async function logout(): Promise<void> {
-  const tokenRes = await fetch(`${WD_API}?${wd({ action: 'query', meta: 'tokens' })}`, { credentials: 'include' });
+  const tokenRes = await wdFetch(`${WD_API}?${wd({ action: 'query', meta: 'tokens' })}`);
   const tokenData = await tokenRes.json();
   const token = tokenData.query?.tokens?.csrftoken as string;
   const body = new URLSearchParams({ action: 'logout', format: 'json', token });
-  await fetch(`${WD_API}?origin=${encodeURIComponent(WD_ORIGIN)}`, { method: 'POST', body, credentials: 'include' });
+  await wdFetch(`${WD_API}`, { method: 'POST', body });
+  localStorage.removeItem(WD_COOKIE_KEY);
 }
 
 // ── Entity lookup ────────────────────────────────────────────────────────────
 
 export async function getQid(wikipediaTitle: string): Promise<string | null> {
   try {
-    const res = await fetch(`${WD_API}?${wd({ action: 'wbgetentities', sites: 'enwiki', titles: wikipediaTitle, props: 'info' })}`);
+    const res = await fetch(`${WD_DIRECT}?${wdAnon({ action: 'wbgetentities', sites: 'enwiki', titles: wikipediaTitle, props: 'info' })}`);
     const data = await res.json();
     const entries = Object.values(data.entities ?? {}) as Array<{ id?: string }>;
     const hit = entries.find(e => e.id && !e.id.startsWith('-'));
@@ -105,7 +147,7 @@ export async function getQid(wikipediaTitle: string): Promise<string | null> {
 // ── CSRF ─────────────────────────────────────────────────────────────────────
 
 export async function getCsrf(): Promise<string> {
-  const res = await fetch(`${WD_API}?${wd({ action: 'query', meta: 'tokens' })}`, { credentials: 'include' });
+  const res = await wdFetch(`${WD_API}?${wd({ action: 'query', meta: 'tokens' })}`);
   const data = await res.json();
   const token = data.query.tokens.csrftoken as string;
   console.log('[getCsrf] token (last 4):', token?.slice(-4));
@@ -122,7 +164,7 @@ export interface Claim {
 }
 
 export async function getExistingClaims(entityId: string, property: string): Promise<Claim[]> {
-  const res = await fetch(`${WD_API}?${wd({ action: 'wbgetclaims', entity: entityId, property })}`);
+  const res = await fetch(`${WD_DIRECT}?${wdAnon({ action: 'wbgetclaims', entity: entityId, property })}`);
   const data = await res.json();
   return (data.claims?.[property] ?? []) as Claim[];
 }
@@ -170,7 +212,7 @@ async function submitClaim(entityId: string, claim: Claim, csrf: string, summary
     });
   }
 
-  const res = await fetch(`${WD_API}?origin=${encodeURIComponent(WD_ORIGIN)}`, { method: 'POST', body, credentials: 'include' });
+  const res = await wdFetch(`${WD_API}`, { method: 'POST', body });
   const data = await res.json();
   if (data.error) {
     console.error('[submitClaim] Wikidata error:', JSON.stringify(data.error));
@@ -225,7 +267,7 @@ export async function searchEntities(query: string): Promise<EntityResult[]> {
 
 async function _searchWikidata(query: string): Promise<EntityResult[]> {
   try {
-    const res = await fetch(`${WD_API}?${wd({ action: 'wbsearchentities', search: query, language: 'en', limit: '8', type: 'item' })}`);
+    const res = await fetch(`${WD_DIRECT}?${wdAnon({ action: 'wbsearchentities', search: query, language: 'en', limit: '8', type: 'item' })}`);
     const data = await res.json();
     return (data.search ?? []).map((r: { id: string; label?: string; description?: string }) => ({
       id: r.id, label: r.label ?? r.id, description: r.description ?? '',
@@ -245,7 +287,7 @@ async function _searchViaWikipedia(query: string): Promise<EntityResult[]> {
     if (!titles.length) return [];
 
     // 2. Resolve article titles → Wikidata QIDs via our proxy
-    const wdRes = await fetch(`${WD_API}?${wd({
+    const wdRes = await fetch(`${WD_DIRECT}?${wdAnon({
       action: 'wbgetentities', sites: 'enwiki', titles: titles.join('|'),
       props: 'info|labels|descriptions', languages: 'en',
     })}`);

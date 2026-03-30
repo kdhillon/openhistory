@@ -48,7 +48,8 @@ app.add_middleware(
     ],
     allow_credentials=True,
     allow_methods=["GET", "PATCH", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Write-Secret"],
+    allow_headers=["Content-Type", "X-Write-Secret", "X-WD-Cookies"],
+    expose_headers=["X-WD-Set-Cookie"],
 )
 
 # ── DB helpers ─────────────────────────────────────────────────────────────────
@@ -1646,3 +1647,58 @@ async def extract_location(request: Request):
 
     location = data.get("location")
     return {"location": str(location) if location else None}
+
+
+# ── Wikidata proxy ────────────────────────────────────────────────────────────
+# In production the frontend can't call Wikidata directly for credentialed
+# requests (login/edit) because Wikidata only allows Wikimedia-owned origins.
+# This proxy forwards requests server-side, bypassing CORS.  Wikidata session
+# cookies are shuttled via X-WD-Cookies / X-WD-Set-Cookie headers so the
+# backend stays stateless.
+
+WD_TARGET = "https://www.wikidata.org/w/api.php"
+
+@app.api_route("/api/wikidata-proxy", methods=["GET", "POST"])
+async def wikidata_proxy(request: Request):
+    qs = str(request.url.query)
+    target = f"{WD_TARGET}?{qs}" if qs else WD_TARGET
+
+    # Cookies from browser (stored in localStorage, sent via custom header)
+    wd_cookies = request.headers.get("X-WD-Cookies", "")
+
+    headers = {"Cookie": wd_cookies} if wd_cookies else {}
+
+    if request.method == "POST":
+        body = await request.body()
+        content_type = request.headers.get("Content-Type", "application/x-www-form-urlencoded")
+        headers["Content-Type"] = content_type
+        req = urllib.request.Request(target, data=body, headers=headers, method="POST")
+    else:
+        req = urllib.request.Request(target, headers=headers, method="GET")
+
+    req.add_header("User-Agent", "OpenHistory/1.0 (https://openhistory.app)")
+
+    try:
+        with urllib.request.urlopen(req) as resp:
+            resp_body = resp.read()
+            resp_headers = resp.info()
+
+            # Collect Set-Cookie headers from Wikidata
+            set_cookies = resp_headers.get_all("Set-Cookie") or []
+            # Strip domain/path so frontend can store raw cookie values
+            cookie_strs = []
+            for sc in set_cookies:
+                # Keep only the name=value part
+                cookie_strs.append(sc.split(";")[0])
+
+            response = FastAPIResponse(
+                content=resp_body,
+                media_type=resp_headers.get("Content-Type", "application/json"),
+            )
+            if cookie_strs:
+                response.headers["X-WD-Set-Cookie"] = "; ".join(cookie_strs)
+            return response
+    except urllib.error.HTTPError as e:
+        resp_body = e.read()
+        return FastAPIResponse(content=resp_body, status_code=e.code,
+                               media_type="application/json")

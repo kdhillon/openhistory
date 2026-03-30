@@ -22,6 +22,7 @@ interface Props {
   onEditTerritory: () => void;
   editorMode: boolean;
   territorySource: 'hb' | 'ohm';
+  getOhmEditUrl?: () => string;
   selectedLang: string;
   onLangChange: (lang: string) => void;
   // Data stats (from DataOverlay)
@@ -128,7 +129,7 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
   );
 }
 
-export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onOpenStories, onEditTerritory, editorMode, territorySource, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin }: Props) {
+export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onOpenStories, onEditTerritory, editorMode, territorySource, getOhmEditUrl, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin }: Props) {
   const bordersColor = '#607D8B';
   const otherPolitiesColor = '#9C27B0';
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -158,7 +159,7 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
         <div style={styles.wordmark}>OpenHistory</div>
         <div style={{ flex: 1 }} />
         {territorySource === 'ohm' ? (
-          <a href="https://www.openhistoricalmap.org" target="_blank" rel="noreferrer" style={{ ...styles.dataBtn, textDecoration: 'none' }}>Edit Borders ✎</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); window.open(getOhmEditUrl?.() ?? 'https://www.openhistoricalmap.org', '_blank'); }} style={{ ...styles.dataBtn, textDecoration: 'none' }}>Edit Borders ✎</a>
         ) : (
           <button onClick={onEditTerritory} style={{ ...styles.dataBtn, ...(editorMode ? styles.dataBtnActive : {}) }}>Edit Borders ✎</button>
         )}
@@ -199,10 +200,6 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
               </select>
             </div>
             <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.08)', margin: '10px 0' }} />
-            <label style={styles.settingsCheckRow}>
-              <input type="checkbox" checked={showTerritoryLabels} onChange={onToggleTerritoryLabels} style={{ margin: 0 }} />
-              <span style={styles.settingsCheckLabel}>Show territory labels</span>
-            </label>
             <label style={styles.settingsCheckRow} title="When enabled, events that happened within the last step (e.g., one year, one month, one day) will be shown as semi-transparent on the map">
               <input type="checkbox" checked={showRecentEvents} onChange={onToggleRecentEvents} style={{ margin: 0 }} />
               <span style={styles.settingsCheckLabel}>Show recent events</span>

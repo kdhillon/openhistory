@@ -569,6 +569,14 @@ export default function App() {
           onOpenData={() => navigate('/data')}
           onOpenStories={() => setStoryBrowserOpen(true)}
           onEditTerritory={() => setEditorMode((v) => !v)}
+          getOhmEditUrl={() => {
+            const zoom = localStorage.getItem('oh-map-zoom') ?? '5';
+            const lat = localStorage.getItem('oh-map-lat') ?? '30';
+            const lng = localStorage.getItem('oh-map-lng') ?? '0';
+            const { year, month, day } = decodeDate(timeline.currentDateInt);
+            const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            return `https://www.openhistoricalmap.org/#map=${Math.round(Number(zoom))}/${Number(lat).toFixed(3)}/${Number(lng).toFixed(3)}&layers=O&date=${date}&daterange=1-01-01,${date}`;
+          }}
           editorMode={editorMode}
           territorySource={territorySource}
           selectedLang={selectedLang}
