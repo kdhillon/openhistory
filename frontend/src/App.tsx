@@ -516,18 +516,24 @@ export default function App() {
     });
   }, []);
 
-  // OAuth callback — exchange code for token and redirect back
-  if (currentPath === '/oauth/callback') {
+  // OAuth callback — exchange code for token and redirect back (ref prevents re-firing on re-render)
+  const oauthProcessedRef = useRef(false);
+  useEffect(() => {
+    if (currentPath !== '/oauth/callback' || oauthProcessedRef.current) return;
+    oauthProcessedRef.current = true;
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     if (code) {
       handleOAuthCallback(code).then((ok) => {
         if (ok) checkLogin().then((u) => setWikiAuth(u));
         navigate(getReturnPath());
-      });
+      }).catch(() => navigate(getReturnPath()));
     } else {
       navigate('/');
     }
+  }, [currentPath, navigate]);
+
+  if (currentPath === '/oauth/callback') {
     return <div style={{ padding: 40, color: '#666' }}>Completing sign-in...</div>;
   }
 
