@@ -330,6 +330,23 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       center: savedCenter,
       zoom: savedZoom,
       attributionControl: false,
+      // Replace unavailable font variants with Regular to suppress 404s
+      transformStyle: (_prev, next) => {
+        if (!next?.layers) return next;
+        for (const layer of next.layers) {
+          const tf = (layer as { layout?: { 'text-font'?: string[] } }).layout?.['text-font'];
+          if (Array.isArray(tf)) {
+            for (let i = 0; i < tf.length; i++) {
+              tf[i] = tf[i]
+                .replace('Open Sans Semibold', 'Open Sans Regular')
+                .replace('Open Sans Bold', 'Open Sans Regular')
+                .replace('Open Sans Italic', 'Open Sans Regular')
+                .replace('Arial Unicode MS Bold', 'Arial Unicode MS Regular');
+            }
+          }
+        }
+        return next;
+      },
     });
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
@@ -367,7 +384,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
 
       const labelLayout = {
         'text-field': ['get', 'title'],
-        'text-size': ['case', ['==', ['get', 'primaryCategory'], 'war'], 22, 14],
+        'text-size': ['case', ['==', ['get', 'primaryCategory'], 'war'], 19, 12],
         'text-offset': [0, 1.2],
         'text-anchor': 'top',
         'text-max-width': 12,
@@ -519,7 +536,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           'text-size': 14,
           'text-max-width': 10,
           'text-optional': true,
-          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
           visibility: ohmInitialVis,
         },
         paint: {
