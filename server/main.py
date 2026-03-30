@@ -284,7 +284,7 @@ def _ensure_location_exists(cur, qid: str) -> str:
     sitelinks = entity.get("sitelinks", {})
 
     name = labels.get("en", {}).get("value") or qid
-    wiki_title = sitelinks.get("enwiki", {}).get("title")
+    wiki_title = sitelinks.get("enwiki", {}).get("title") or name
 
     # Classify type from P31 instance-of QIDs
     _CITY_P31   = {"Q515", "Q1549591", "Q532", "Q3957", "Q7930989", "Q2514025", "Q486972"}
