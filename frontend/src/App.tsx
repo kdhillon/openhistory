@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { Map as MaplibreMap } from 'maplibre-gl';
 import { checkLogin, fetchEntityTranslations } from './lib/wikidataApi';
+import { handleOAuthCallback, getReturnPath } from './lib/wikidataAuth';
 import { TranslationContext } from './lib/TranslationContext';
 import { fetchOverrides, fetchPolityOverrides, fetchHiddenNations, addHiddenNation, removeHiddenNation, removeTerritoryMappingsByPolity, unlinkPolygon, unlinkOhmLink, suppressOhmLink, fetchManualPolities, fetchHiddenFeatures, setFeatureHidden } from './lib/api';
 import { MapView } from './components/MapView';
@@ -514,6 +515,21 @@ export default function App() {
       return next;
     });
   }, []);
+
+  // OAuth callback — exchange code for token and redirect back
+  if (currentPath === '/oauth/callback') {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (code) {
+      handleOAuthCallback(code).then((ok) => {
+        if (ok) checkLogin().then((u) => setWikiAuth(u));
+        navigate(getReturnPath());
+      });
+    } else {
+      navigate('/');
+    }
+    return <div style={{ padding: 40, color: '#666' }}>Completing sign-in...</div>;
+  }
 
   if (currentPath === '/about') {
     return <AboutPage onBack={() => navigate('/')} />;

@@ -48,8 +48,7 @@ app.add_middleware(
     ],
     allow_credentials=True,
     allow_methods=["GET", "PATCH", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Write-Secret", "X-WD-Cookies"],
-    expose_headers=["X-WD-Set-Cookie"],
+    allow_headers=["Content-Type", "X-Write-Secret"],
 )
 
 # ── DB helpers ─────────────────────────────────────────────────────────────────
@@ -1649,56 +1648,73 @@ async def extract_location(request: Request):
     return {"location": str(location) if location else None}
 
 
-# ── Wikidata proxy ────────────────────────────────────────────────────────────
-# In production the frontend can't call Wikidata directly for credentialed
-# requests (login/edit) because Wikidata only allows Wikimedia-owned origins.
-# This proxy forwards requests server-side, bypassing CORS.  Wikidata session
-# cookies are shuttled via X-WD-Cookies / X-WD-Set-Cookie headers so the
-# backend stays stateless.
+# ── Wikimedia OAuth 2.0 ───────────────────────────────────────────────────────
+# Confidential client: browser redirects user to Wikimedia for authorization,
+# then our backend exchanges the auth code for tokens (keeping the client secret
+# server-side).  The access token is returned to the browser, which uses it
+# directly against the Wikidata API with Bearer auth (no CORS issue, no IP block).
 
-WD_TARGET = "https://www.wikidata.org/w/api.php"
+WM_CLIENT_ID = os.environ.get("WIKIMEDIA_CLIENT_ID", "c1ffa900869cdd4bb56638a48d41761a")
+WM_CLIENT_SECRET = os.environ.get("WIKIMEDIA_CLIENT_SECRET", "")
+WM_AUTH_URL = "https://meta.wikimedia.org/w/rest.php/oauth2/authorize"
+WM_TOKEN_URL = "https://meta.wikimedia.org/w/rest.php/oauth2/access_token"
 
-@app.api_route("/api/wikidata-proxy", methods=["GET", "POST"])
-async def wikidata_proxy(request: Request):
-    qs = str(request.url.query)
-    target = f"{WD_TARGET}?{qs}" if qs else WD_TARGET
+@app.get("/api/oauth/callback")
+async def oauth_callback(request: Request):
+    """Exchange authorization code for access token (confidential client)."""
+    code = request.query_params.get("code")
+    redirect_uri = request.query_params.get("redirect_uri", "")
+    if not code:
+        raise HTTPException(400, "Missing code parameter")
+    if not WM_CLIENT_SECRET:
+        raise HTTPException(500, "WIKIMEDIA_CLIENT_SECRET not configured")
 
-    # Cookies from browser (stored in localStorage, sent via custom header)
-    wd_cookies = request.headers.get("X-WD-Cookies", "")
+    body = urllib.parse.urlencode({
+        "grant_type": "authorization_code",
+        "code": code,
+        "client_id": WM_CLIENT_ID,
+        "client_secret": WM_CLIENT_SECRET,
+        "redirect_uri": redirect_uri,
+    }).encode()
 
-    headers = {"Cookie": wd_cookies} if wd_cookies else {}
-
-    if request.method == "POST":
-        body = await request.body()
-        content_type = request.headers.get("Content-Type", "application/x-www-form-urlencoded")
-        headers["Content-Type"] = content_type
-        req = urllib.request.Request(target, data=body, headers=headers, method="POST")
-    else:
-        req = urllib.request.Request(target, headers=headers, method="GET")
-
+    req = urllib.request.Request(WM_TOKEN_URL, data=body, method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
     req.add_header("User-Agent", "OpenHistory/1.0 (https://openhistory.app)")
 
     try:
         with urllib.request.urlopen(req) as resp:
-            resp_body = resp.read()
-            resp_headers = resp.info()
-
-            # Collect Set-Cookie headers from Wikidata
-            set_cookies = resp_headers.get_all("Set-Cookie") or []
-            # Strip domain/path so frontend can store raw cookie values
-            cookie_strs = []
-            for sc in set_cookies:
-                # Keep only the name=value part
-                cookie_strs.append(sc.split(";")[0])
-
-            response = FastAPIResponse(
-                content=resp_body,
-                media_type=resp_headers.get("Content-Type", "application/json"),
-            )
-            if cookie_strs:
-                response.headers["X-WD-Set-Cookie"] = "; ".join(cookie_strs)
-            return response
+            return json.loads(resp.read())
     except urllib.error.HTTPError as e:
-        resp_body = e.read()
-        return FastAPIResponse(content=resp_body, status_code=e.code,
-                               media_type="application/json")
+        detail = e.read().decode()
+        print(f"[oauth] token exchange failed: {e.code} {detail}", flush=True)
+        raise HTTPException(e.code, detail)
+
+
+@app.post("/api/oauth/refresh")
+async def oauth_refresh(request: Request):
+    """Refresh an expired access token."""
+    data = await request.json()
+    refresh_token = data.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(400, "Missing refresh_token")
+    if not WM_CLIENT_SECRET:
+        raise HTTPException(500, "WIKIMEDIA_CLIENT_SECRET not configured")
+
+    body = urllib.parse.urlencode({
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": WM_CLIENT_ID,
+        "client_secret": WM_CLIENT_SECRET,
+    }).encode()
+
+    req = urllib.request.Request(WM_TOKEN_URL, data=body, method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    req.add_header("User-Agent", "OpenHistory/1.0 (https://openhistory.app)")
+
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode()
+        print(f"[oauth] refresh failed: {e.code} {detail}", flush=True)
+        raise HTTPException(e.code, detail)
