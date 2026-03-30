@@ -60,9 +60,10 @@ export async function startOAuthLogin() {
 /** Handle the OAuth callback — exchange code for tokens via backend. */
 export async function handleOAuthCallback(code: string): Promise<boolean> {
   const redirectUri = `${window.location.origin}/oauth/callback`;
+  const codeVerifier = sessionStorage.getItem(VERIFIER_KEY) ?? '';
 
   const res = await fetch(
-    `${API_BASE}/oauth/callback?${new URLSearchParams({ code, redirect_uri: redirectUri })}`,
+    `${API_BASE}/oauth/callback?${new URLSearchParams({ code, redirect_uri: redirectUri, code_verifier: codeVerifier })}`,
   );
 
   if (!res.ok) {

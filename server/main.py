@@ -1664,18 +1664,22 @@ async def oauth_callback(request: Request):
     """Exchange authorization code for access token (confidential client)."""
     code = request.query_params.get("code")
     redirect_uri = request.query_params.get("redirect_uri", "")
+    code_verifier = request.query_params.get("code_verifier", "")
     if not code:
         raise HTTPException(400, "Missing code parameter")
     if not WM_CLIENT_SECRET:
         raise HTTPException(500, "WIKIMEDIA_CLIENT_SECRET not configured")
 
-    body = urllib.parse.urlencode({
+    params = {
         "grant_type": "authorization_code",
         "code": code,
         "client_id": WM_CLIENT_ID,
         "client_secret": WM_CLIENT_SECRET,
         "redirect_uri": redirect_uri,
-    }).encode()
+    }
+    if code_verifier:
+        params["code_verifier"] = code_verifier
+    body = urllib.parse.urlencode(params).encode()
 
     req = urllib.request.Request(WM_TOKEN_URL, data=body, method="POST")
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
