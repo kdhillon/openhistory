@@ -33,7 +33,7 @@ This project is under active development. The core map, data pipeline, and deplo
 - **Mobile layout** — compact single-row top bar and two-row timeline bottom bar for screens < 640px
 - **OHM territories** — OpenHistoricalMap boundaries via Overpass API, day-level precision, linked to polities via Wikidata QIDs
 - **Stories** — guided narrative mode: beat-by-beat story playback synchronized to the timeline
-- **Data loaded** — 21,695 events · 6,419 locations · 9,873 polities (incl. ancient empires) · coverage: 601 BCE–2025
+- **Data loaded** — 21,695 events · 6,426 locations · 9,875 polities (incl. ancient empires) · coverage: 601 BCE–2025
 
 ### To Do
 - **Data coverage** — expand beyond current 601 BCE–2025 coverage; fill gaps in ancient and medieval periods

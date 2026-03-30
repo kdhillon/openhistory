@@ -10,6 +10,7 @@ Endpoints:
     PATCH /api/polities/{polity_id}     — save a user correction to a polity record
 """
 
+import anthropic
 import json
 import os
 import re
@@ -1561,7 +1562,6 @@ async def extract_dates(request: Request):
     if not text:
         raise HTTPException(400, "No text provided")
 
-    import anthropic
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
     prompt = (
@@ -1615,7 +1615,6 @@ async def extract_location(request: Request):
     if not text:
         raise HTTPException(400, "No text provided")
 
-    import anthropic
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
     prompt = (
