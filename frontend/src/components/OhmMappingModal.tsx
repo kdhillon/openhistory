@@ -10,10 +10,20 @@ const WRITE_SECRET = import.meta.env.VITE_WRITE_SECRET ?? '';
 interface Props {
   ohmName: string;
   ohmWikidataQid: string | null;
+  yearStart?: number | null;
+  yearEnd?: number | null;
   polities: FeatureProperties[];
   onClose: () => void;
   onPolityImported?: (feature: GeoJSON.Feature) => void;
   onSaved?: () => void;
+}
+
+function overlapsRange(p: FeatureProperties, intervalStart: number | null | undefined, intervalEnd: number | null | undefined): boolean {
+  if (intervalStart == null) return true;  // no range info → don't filter
+  const ps = p.yearStart ?? -9999;
+  const pe = p.yearEnd ?? 9999;
+  const ie = intervalEnd ?? 9999;
+  return !(ps > ie || pe < intervalStart);
 }
 
 function btnStyle(bg: string, disabled = false): React.CSSProperties {
@@ -26,7 +36,7 @@ function btnStyle(bg: string, disabled = false): React.CSSProperties {
   };
 }
 
-export function OhmMappingModal({ ohmName, ohmWikidataQid, polities, onClose, onPolityImported, onSaved }: Props) {
+export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, polities, onClose, onPolityImported, onSaved }: Props) {
   const [query, setQuery]               = useState(ohmName);
   const [selectedId, setSelectedId]     = useState<string | null>(null);
   const [status, setStatus]             = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -42,8 +52,19 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, polities, onClose, on
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
-    return (q ? polities.filter((p) => p.title.toLowerCase().includes(q)) : polities).slice(0, 40);
-  }, [query, polities]);
+    const matches = q
+      ? polities.filter((p) => p.title.toLowerCase().includes(q))
+      : polities;
+    const overlaps = matches
+      .filter((p) => overlapsRange(p, yearStart, yearEnd))
+      .sort((a, b) => {
+        const lifeA = (a.yearStart != null && a.yearEnd != null) ? a.yearEnd - a.yearStart : Infinity;
+        const lifeB = (b.yearStart != null && b.yearEnd != null) ? b.yearEnd - b.yearStart : Infinity;
+        return lifeA - lifeB;
+      });
+    const outside = matches.filter((p) => !overlapsRange(p, yearStart, yearEnd));
+    return [...overlaps, ...outside].slice(0, 40);
+  }, [query, polities, yearStart, yearEnd]);
 
   const existingQids = useMemo(() => new Set(polities.map((p) => p.wikidataQid).filter(Boolean)), [polities]);
 
@@ -126,6 +147,11 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, polities, onClose, on
         <div>
           <div style={{ fontSize: 13, color: '#8899bb', marginBottom: 3 }}>Assign OHM territory</div>
           <div style={{ fontSize: 17, fontWeight: 600 }}>{ohmName}</div>
+          {(yearStart != null) && (
+            <div style={{ fontSize: 12, color: '#8899bb', marginTop: 3 }}>
+              {yearStart}–{yearEnd ?? '∞'}
+            </div>
+          )}
           {ohmWikidataQid && (
             <div style={{ fontSize: 11, color: '#556', marginTop: 3 }}>{ohmWikidataQid}</div>
           )}
@@ -156,7 +182,9 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, polities, onClose, on
                 {filtered.length === 0 && (
                   <div style={{ padding: '10px 12px', color: '#556', fontSize: 13 }}>No local matches</div>
                 )}
-                {filtered.map((p) => (
+                {filtered.map((p) => {
+                  const dimmed = !overlapsRange(p, yearStart, yearEnd);
+                  return (
                   <div
                     key={p.id}
                     onClick={() => setSelectedId(p.id)}
@@ -165,6 +193,7 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, polities, onClose, on
                       padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #1e2a3e',
                       background: p.id === selectedId ? '#2a3a5a' : 'transparent',
                       display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                      opacity: dimmed ? 0.4 : 1,
                     }}
                   >
                     <a
@@ -181,7 +210,8 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, polities, onClose, on
                       {p.polityType ? ` · ${p.polityType}` : ''}
                     </span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Wikipedia / Wikidata results */}

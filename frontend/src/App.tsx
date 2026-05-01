@@ -135,7 +135,7 @@ export default function App() {
   // Unmatched territory the user clicked — shows the mapping assignment modal
   const [mappingTarget, setMappingTarget] = useState<{ hbName: string; polygonId: string; yearStart: number; yearEnd: number | null } | null>(null);
   // OHM territory the user clicked — shows the OHM polity assignment modal
-  const [ohmMappingTarget, setOhmMappingTarget] = useState<{ ohmName: string; ohmWikidataQid: string | null } | null>(null);
+  const [ohmMappingTarget, setOhmMappingTarget] = useState<{ ohmName: string; ohmWikidataQid: string | null; yearStart: number | null; yearEnd: number | null } | null>(null);
   // QID of the major event chip selected in the bottom bar (null = no filter)
   const [majorEventFilter, setMajorEventFilter] = useState<string | null>(null);
   // OHM label placement mode: user is placing a polity label on the map
@@ -699,7 +699,7 @@ export default function App() {
           editorMode={editorMode}
           territorySource={territorySource}
           ohmLinks={ohmLinks}
-          onOhmTerritoryClick={(ohmName, ohmWikidataQid) => setOhmMappingTarget({ ohmName, ohmWikidataQid })}
+          onOhmTerritoryClick={(ohmName, ohmWikidataQid, yearStart, yearEnd) => setOhmMappingTarget({ ohmName, ohmWikidataQid, yearStart, yearEnd })}
           onUnlinkOhmTerritory={handleUnlinkOhmTerritory}
           onOhmMatchedPolityIds={setOhmMatchedPolityIds}
           showRecentEvents={showRecentEvents}
@@ -831,6 +831,8 @@ export default function App() {
         <OhmMappingModal
           ohmName={ohmMappingTarget.ohmName}
           ohmWikidataQid={ohmMappingTarget.ohmWikidataQid}
+          yearStart={ohmMappingTarget.yearStart}
+          yearEnd={ohmMappingTarget.yearEnd}
           polities={polityFeatures}
           onClose={() => setOhmMappingTarget(null)}
           onPolityImported={(feature) => {

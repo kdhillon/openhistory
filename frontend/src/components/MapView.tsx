@@ -14,6 +14,15 @@ import { encodeDate, eventDateRange, STEP_YEAR, decodeDate } from '../hooks/useT
 // ---------------------------------------------------------------------------
 const MAX_LABEL_PARTS = 3;
 
+/** Parse an OHM ISO-ish date string (e.g. "1789", "1813-10-24", "-0509") into a year integer. */
+function parseOhmYear(value: unknown): number | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const m = value.trim().match(/^(-)?(\d{1,4})/);
+  if (!m) return null;
+  const y = parseInt(m[2], 10);
+  return m[1] === '-' ? -y : y;
+}
+
 function ringArea(ring: number[][]): number {
   let a = 0;
   for (let i = 0; i < ring.length - 1; i++) {
@@ -200,7 +209,7 @@ interface Props {
   /** OHM polity color links — used to color matched territories in OHM mode */
   ohmLinks?: OhmLink[];
   /** Called when user clicks an OHM territory that has no polity assigned */
-  onOhmTerritoryClick?: (ohmName: string, ohmWikidataQid: string | null) => void;
+  onOhmTerritoryClick?: (ohmName: string, ohmWikidataQid: string | null, yearStart: number | null, yearEnd: number | null) => void;
   /** Called when user clicks × to unlink an OHM territory from its polity */
   onUnlinkOhmTerritory?: (ohmName: string) => void;
   /** Called after rebuildColors with the set of polity IDs that are matched to a visible OHM territory */
@@ -1195,7 +1204,12 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           onSelectRef.current(raw as unknown as FeatureProperties, { index: idx, total: allEntries.length });
         } else {
           // Unmatched territory — open mapping modal
-          onOhmTerritoryClickRef.current?.(chosenName, chosen.properties?.wikidata as string | null);
+          onOhmTerritoryClickRef.current?.(
+            chosenName,
+            chosen.properties?.wikidata as string | null,
+            parseOhmYear(chosen.properties?.start_date),
+            parseOhmYear(chosen.properties?.end_date),
+          );
         }
         return;
       }
@@ -1237,7 +1251,12 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
             onSelectRef.current(raw as unknown as FeatureProperties, { index: 0, total: 1 });
           } else {
             // Unmapped (gray) — open OHM mapping modal
-            onOhmTerritoryClickRef.current?.(stripped, null);
+            onOhmTerritoryClickRef.current?.(
+              stripped,
+              null,
+              parseOhmYear(top.properties?.start_date),
+              parseOhmYear(top.properties?.end_date),
+            );
           }
         }
         return;
@@ -1265,7 +1284,12 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           }
         } else {
           // Unmatched — open OHM mapping modal
-          onOhmTerritoryClickRef.current?.(name, null);
+          onOhmTerritoryClickRef.current?.(
+            name,
+            null,
+            parseOhmYear(top.properties?.start_date),
+            parseOhmYear(top.properties?.end_date),
+          );
         }
         return;
       }
