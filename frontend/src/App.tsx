@@ -20,6 +20,7 @@ import { UnlocatedPolitiesPanel } from './components/UnlocatedPolitiesPanel';
 import { StoryPanel } from './components/StoryPanel';
 import { StoryBrowserModal } from './components/StoryBrowserModal';
 import { OhmLabelConfirmModal } from './components/OhmLabelConfirmModal';
+import { extractOhmTokenFromHash, getOhmToken, clearOhmToken, createOhmLabel } from './lib/ohmApi';
 import { useTimeline, encodeDate, decodeDate, STEP_YEAR, STEP_DAY } from './hooks/useTimeline';
 import { useStory } from './hooks/useStory';
 import { useEventSource } from './hooks/useEventSource';
@@ -139,6 +140,8 @@ export default function App() {
   const [majorEventFilter, setMajorEventFilter] = useState<string | null>(null);
   // OHM label placement mode: user is placing a polity label on the map
   const [ohmPlacement, setOhmPlacement] = useState<{ feature: FeatureProperties; latlng?: { lat: number; lng: number } } | null>(null);
+  const [ohmSaving, setOhmSaving] = useState(false);
+  const [ohmError, setOhmError] = useState<string | null>(null);
   const [fitBoundsRequest, setFitBoundsRequest] = useState<{ bbox: [number,number,number,number]; id: number } | null>(null);
   const fitBoundsIdRef = useRef(0);
   // Mappings saved in this session: polygonId → { polityId, polityName }
@@ -538,6 +541,23 @@ export default function App() {
     }
   }, [currentPath, navigate]);
 
+  // Extract OHM OAuth token from hash fragment (after OHM OAuth redirect)
+  useEffect(() => {
+    const token = extractOhmTokenFromHash();
+    if (token) {
+      console.log('[OHM] OAuth token saved');
+      // Resume pending placement if we were mid-flow
+      const pending = sessionStorage.getItem('ohm_pending_placement');
+      if (pending) {
+        sessionStorage.removeItem('ohm_pending_placement');
+        try {
+          const { feature, latlng } = JSON.parse(pending);
+          setOhmPlacement({ feature, latlng });
+        } catch { /* ignore corrupt data */ }
+      }
+    }
+  }, []);
+
   if (currentPath === '/oauth/callback') {
     return <div style={{ padding: 40, color: '#666' }}>Completing sign-in...</div>;
   }
@@ -880,21 +900,58 @@ export default function App() {
           feature={ohmPlacement.feature}
           lat={ohmPlacement.latlng.lat}
           lng={ohmPlacement.latlng.lng}
-          onConfirm={() => {
-            // TODO: OAuth flow + API call to create OHM node
-            console.log('[OHM] Would create label:', {
-              name: ohmPlacement.feature.title,
-              lat: ohmPlacement.latlng!.lat,
-              lng: ohmPlacement.latlng!.lng,
-              startDate: ohmPlacement.feature.yearStart,
-              endDate: ohmPlacement.feature.yearEnd,
-              wikidataQid: ohmPlacement.feature.wikidataQid,
-            });
-            setOhmPlacement(null);
+          onConfirm={async () => {
+            const token = getOhmToken();
+            if (!token) {
+              // No token — redirect to OHM OAuth
+              const apiBase = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
+              try {
+                const res = await fetch(`${apiBase}/ohm/auth-url`);
+                const { url } = await res.json();
+                // Save placement state so we can resume after OAuth
+                sessionStorage.setItem('ohm_pending_placement', JSON.stringify({
+                  feature: ohmPlacement.feature,
+                  latlng: ohmPlacement.latlng,
+                }));
+                window.location.href = url;
+              } catch (e) {
+                setOhmError('Failed to start OHM authentication');
+              }
+              return;
+            }
+
+            setOhmSaving(true);
+            setOhmError(null);
+            try {
+              const result = await createOhmLabel({
+                token,
+                name: ohmPlacement.feature.title,
+                lat: ohmPlacement.latlng!.lat,
+                lon: ohmPlacement.latlng!.lng,
+                startDate: String(ohmPlacement.feature.yearStart ?? ''),
+                endDate: ohmPlacement.feature.yearEnd != null ? String(ohmPlacement.feature.yearEnd) : null,
+                wikidataQid: ohmPlacement.feature.wikidataQid,
+                wikipediaTitle: ohmPlacement.feature.wikipediaTitle,
+              });
+              console.log('[OHM] Created label:', result);
+              alert(`Label created on OHM!\nNode: ${result.nodeId}\nhttps://www.openhistoricalmap.org/node/${result.nodeId}`);
+              setOhmPlacement(null);
+            } catch (e: any) {
+              console.error('[OHM] Create failed:', e);
+              if (e.message?.includes('401') || e.message?.includes('403')) {
+                // Token expired — clear and retry auth
+                clearOhmToken();
+                setOhmError('OHM session expired. Click Save again to re-authenticate.');
+              } else {
+                setOhmError(e.message || 'Failed to create label');
+              }
+            } finally {
+              setOhmSaving(false);
+            }
           }}
-          onCancel={() => setOhmPlacement(null)}
-          saving={false}
-          error={null}
+          onCancel={() => { setOhmPlacement(null); setOhmError(null); }}
+          saving={ohmSaving}
+          error={ohmError}
         />
       )}
 
