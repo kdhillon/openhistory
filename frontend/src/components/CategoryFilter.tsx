@@ -156,6 +156,7 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
 
 export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onOpenStories, onEditTerritory, editorMode, territorySource, getOhmEditUrl, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin }: Props) {
   const bordersColor = '#607D8B';
+  const ohmPolygonsColor = '#4CAF50';
   const otherPolitiesColor = '#9C27B0';
   const [settingsOpen, setSettingsOpen] = useState(false);
   const gearRef = useRef<HTMLButtonElement>(null);
@@ -284,10 +285,24 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
             borderColor: showBorders ? `${bordersColor}88` : 'rgba(0,0,0,0.15)',
             color: showBorders ? '#202122' : '#9a9a9a',
           }}
-          title={showBorders ? 'Hide territory borders' : 'Show territory borders'}
+          title="land_ohm_lines from OpenHistoricalMap, admin levels 1-2"
         >
           <span style={{ ...styles.dot, background: bordersColor, opacity: showBorders ? 1 : 0.4 }} />
           Borders
+        </button>
+        {/* Polygons toggle */}
+        <button
+          onClick={onToggleOhmAdmin}
+          style={{
+            ...styles.chip,
+            background: showOhmAdmin ? `${ohmPolygonsColor}22` : 'transparent',
+            borderColor: showOhmAdmin ? `${ohmPolygonsColor}88` : 'rgba(0,0,0,0.15)',
+            color: showOhmAdmin ? '#202122' : '#9a9a9a',
+          }}
+          title="ohm_admin boundaries from OpenHistoricalMap, admin level 2"
+        >
+          <span style={{ ...styles.dot, background: ohmPolygonsColor, opacity: showOhmAdmin ? 1 : 0.4 }} />
+          Polygons
         </button>
         {/* Other Polities toggle */}
         <button
@@ -298,7 +313,7 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
             borderColor: showOtherPolities ? `${otherPolitiesColor}88` : 'rgba(0,0,0,0.15)',
             color: showOtherPolities ? '#202122' : '#9a9a9a',
           }}
-          title={showOtherPolities ? 'Hide unlinked polities' : 'Show unlinked polities'}
+          title="Wikidata polities that have not been mapped to OHM labels"
         >
           <span style={{ ...styles.dot, background: otherPolitiesColor, opacity: showOtherPolities ? 1 : 0.4 }} />
           Other Polities
@@ -321,6 +336,8 @@ interface MobileTopBarProps {
   onToggleBorders: () => void;
   showOtherPolities: boolean;
   onToggleOtherPolities: () => void;
+  showOhmAdmin: boolean;
+  onToggleOhmAdmin: () => void;
   onOpenAbout: () => void;
   onOpenStories: () => void;
   selectedLang: string;
@@ -338,12 +355,14 @@ export function MobileTopBar({
   activeCategories, onToggle,
   showBorders, onToggleBorders,
   showOtherPolities, onToggleOtherPolities,
+  showOhmAdmin, onToggleOhmAdmin,
   onOpenAbout, onOpenStories, selectedLang, onLangChange,
   stepSize, stepOptions, onSetStepSize,
   playbackSpeed, onSetSpeed,
   showRecentEvents, onToggleRecentEvents,
 }: MobileTopBarProps) {
   const bordersColor = '#607D8B';
+  const ohmPolygonsColor = '#4CAF50';
   const otherPolitiesColor = '#9C27B0';
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -394,6 +413,12 @@ export function MobileTopBar({
                   style={{ ...mb.chip, background: showBorders ? `${bordersColor}22` : 'transparent', borderColor: showBorders ? `${bordersColor}88` : 'rgba(0,0,0,0.15)', color: showBorders ? '#202122' : '#9a9a9a' }}
                 >
                   <span style={{ ...mb.dot, background: bordersColor, opacity: showBorders ? 1 : 0.4 }} />Borders
+                </button>
+                <button
+                  onClick={onToggleOhmAdmin}
+                  style={{ ...mb.chip, background: showOhmAdmin ? `${ohmPolygonsColor}22` : 'transparent', borderColor: showOhmAdmin ? `${ohmPolygonsColor}88` : 'rgba(0,0,0,0.15)', color: showOhmAdmin ? '#202122' : '#9a9a9a' }}
+                >
+                  <span style={{ ...mb.dot, background: ohmPolygonsColor, opacity: showOhmAdmin ? 1 : 0.4 }} />Polygons
                 </button>
                 <button
                   onClick={onToggleOtherPolities}

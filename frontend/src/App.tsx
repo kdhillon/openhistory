@@ -565,6 +565,8 @@ export default function App() {
           onToggleBorders={handleToggleBorders}
           showOtherPolities={showOtherPolities}
           onToggleOtherPolities={handleToggleOtherPolities}
+          showOhmAdmin={showOhmAdmin}
+          onToggleOhmAdmin={handleToggleOhmAdmin}
           onOpenAbout={() => navigate('/about')}
           onOpenStories={() => setStoryBrowserOpen(true)}
           selectedLang={selectedLang}

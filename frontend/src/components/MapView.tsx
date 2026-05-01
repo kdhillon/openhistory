@@ -475,7 +475,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       const initialYear = decodeDate(currentDateInt).year;
       // Temporal + admin_level filter shared by all OHM layers.
       const OHM_ADMIN_FILTER = ['all',
-        ['==', ['get', 'admin_level'], 2],
+        ['<=', ['get', 'admin_level'], 3],
         ['has', 'start_decdate'],
         ['<=', ['get', 'start_decdate'], initialYear],
         ['any', ['!', ['has', 'end_decdate']], ['>=', ['get', 'end_decdate'], initialYear]],
@@ -497,8 +497,33 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         attribution: OHM_ATTRIBUTION,
       });
 
-      // Fill polygons from ohm_admin (may be incomplete at low zoom — that's OK,
-      // the border lines and centroid labels from 'ohm' source fill the gap)
+      // OHM border lines from 'ohm' tileset (level 1 + 2) — drawn first (below polygons)
+      const ohmTemporalOnly = ['all',
+        ['has', 'start_decdate'],
+        ['<=', ['get', 'start_decdate'], initialYear],
+        ['any', ['!', ['has', 'end_decdate']], ['>=', ['get', 'end_decdate'], initialYear]],
+      ] as maplibregl.FilterSpecification;
+      // Level 1
+      map.addLayer({
+        id: 'ohm-borders-1',
+        type: 'line',
+        source: 'ohm',
+        'source-layer': OHM_LINES_LAYER,
+        filter: ['all', ['==', ['get', 'admin_level'], 1], ...ohmTemporalOnly.slice(1)] as maplibregl.FilterSpecification,
+        layout: { visibility: ohmInitialVis },
+        paint: { 'line-color': '#90A4AE', 'line-width': 1.8, 'line-opacity': 1 },
+      });
+      // Level 2
+      map.addLayer({
+        id: 'ohm-borders',
+        type: 'line',
+        source: 'ohm',
+        'source-layer': OHM_LINES_LAYER,
+        filter: ['all', ['==', ['get', 'admin_level'], 2], ...ohmTemporalOnly.slice(1)] as maplibregl.FilterSpecification,
+        layout: { visibility: ohmInitialVis },
+        paint: { 'line-color': '#90A4AE', 'line-width': 1.8, 'line-opacity': 1 },
+      });
+      // Fill polygons from ohm_admin — drawn on top of border lines
       map.addLayer({
         id: 'ohm-fills',
         type: 'fill',
@@ -508,15 +533,15 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         layout: { visibility: ohmAdminInitialVis },
         paint: { 'fill-color': '#78909C', 'fill-opacity': 0.22 },
       });
-      // Border lines from ohm general tileset (complete at all zoom levels)
+      // Thin polygon outline from ohm_admin (on top of fills)
       map.addLayer({
-        id: 'ohm-borders',
+        id: 'ohm-polygon-borders',
         type: 'line',
-        source: 'ohm',
-        'source-layer': OHM_LINES_LAYER,
+        source: 'ohm-admin',
+        'source-layer': OHM_FILLS_LAYER,
         filter: OHM_ADMIN_FILTER,
-        layout: { visibility: ohmInitialVis },
-        paint: { 'line-color': '#78909C', 'line-width': 1.2, 'line-opacity': 0.6 },
+        layout: { visibility: ohmAdminInitialVis },
+        paint: { 'line-color': '#90A4AE', 'line-width': 1.5, 'line-opacity': 1 },
       });
       // Large country labels from place_points_centroids (type=country).
       // Complete at all zoom levels — this is what the OHM website uses for major nations.
@@ -800,15 +825,16 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       // Polity centroid labels: visible when territory labels toggle is OFF (regardless of source)
       const centroidVis = !showTerritoryLabels ? 'visible' : 'none';
       if (map.getLayer('polity-centroid-labels')) map.setLayoutProperty('polity-centroid-labels', 'visibility', centroidVis);
-      // OHM outlines (border lines + centroid labels from 'ohm' tileset)
-      // showBorders acts as a master toggle — when off, all OHM layers are hidden.
-      const ohmVis = showBorders && showOhm ? 'visible' : 'none';
-      for (const id of ['ohm-borders', 'ohm-labels', 'ohm-labels-small']) {
-        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', ohmVis);
+      // OHM border lines (from 'ohm' tileset) — controlled by showBorders
+      const ohmBorderVis = showBorders ? 'visible' : 'none';
+      for (const id of ['ohm-borders', 'ohm-borders-1', 'ohm-labels', 'ohm-labels-small']) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', ohmBorderVis);
       }
-      // OHM admin fills (fill polygons from 'ohm_admin' tileset)
-      const ohmAdminVis = showBorders && showOhmAdmin ? 'visible' : 'none';
-      if (map.getLayer('ohm-fills')) map.setLayoutProperty('ohm-fills', 'visibility', ohmAdminVis);
+      // OHM polygon fills + outlines (from 'ohm_admin' tileset) — controlled by showOhmAdmin
+      const ohmAdminVis = showOhmAdmin ? 'visible' : 'none';
+      for (const id of ['ohm-fills', 'ohm-polygon-borders']) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', ohmAdminVis);
+      }
     };
     if (map.isStyleLoaded()) apply();
     else map.once('load', apply);
@@ -825,15 +851,24 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
     // Require start_decdate to exist — features without it have no temporal metadata
     // and would otherwise appear at all times (wrong for a historical atlas).
     // Missing end_decdate = still active (no end date), so allow those through.
-    // Admin boundary layers (fills + borders) use admin_level filter
+    // Admin boundary layers (fills + labels) use admin_level filter
     const adminTemporalFilter = ['all',
       ['==', ['get', 'admin_level'], 2],
       ['has', 'start_decdate'],
       ['<=', ['get', 'start_decdate'], year],
       ['any', ['!', ['has', 'end_decdate']], ['>=', ['get', 'end_decdate'], year]],
     ] as maplibregl.FilterSpecification;
-    for (const id of ['ohm-fills', 'ohm-borders', 'ohm-labels-small']) {
+    for (const id of ['ohm-fills', 'ohm-polygon-borders', 'ohm-labels-small']) {
       if (map.getLayer(id)) map.setFilter(id, adminTemporalFilter);
+    }
+    // OHM border lines (per-level filters)
+    for (const [id, level] of [['ohm-borders', 2], ['ohm-borders-1', 1]] as const) {
+      if (map.getLayer(id)) map.setFilter(id, ['all',
+        ['==', ['get', 'admin_level'], level],
+        ['has', 'start_decdate'],
+        ['<=', ['get', 'start_decdate'], year],
+        ['any', ['!', ['has', 'end_decdate']], ['>=', ['get', 'end_decdate'], year]],
+      ] as maplibregl.FilterSpecification);
     }
     // Country labels use place_points_centroids (type=country, no admin_level)
     const labelTemporalFilter = ['all',
@@ -1186,8 +1221,24 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
             onSelectRef.current(raw as unknown as FeatureProperties, { index: 0, total: 1 });
           }
         } else {
-          // Unmapped (gray) — open OHM mapping modal
-          onOhmTerritoryClickRef.current?.(stripped, null);
+          // No manual link — try auto-match by polity name
+          const isSuppressed = ohmLinksRef.current.some((l) => l.ohmName === stripped && l.explicitlyUnlinked);
+          const polityFeature = !isSuppressed && geojsonRef.current.features.find(
+            (p) => (p.properties as FeatureProperties).featureType === 'polity'
+              && (p.properties as FeatureProperties).title?.toLowerCase() === stripped.toLowerCase(),
+          );
+          if (polityFeature) {
+            const raw = { ...polityFeature.properties } as Record<string, unknown>;
+            for (const key of ['categories', 'partOfResolved', 'wikidataClasses'] as const) {
+              if (typeof raw[key] === 'string') {
+                try { raw[key] = JSON.parse(raw[key] as string); } catch { /* leave as-is */ }
+              }
+            }
+            onSelectRef.current(raw as unknown as FeatureProperties, { index: 0, total: 1 });
+          } else {
+            // Unmapped (gray) — open OHM mapping modal
+            onOhmTerritoryClickRef.current?.(stripped, null);
+          }
         }
         return;
       }
