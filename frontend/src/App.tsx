@@ -19,6 +19,7 @@ import { UnlocatedEventsPanel } from './components/UnlocatedEventsPanel';
 import { UnlocatedPolitiesPanel } from './components/UnlocatedPolitiesPanel';
 import { StoryPanel } from './components/StoryPanel';
 import { StoryBrowserModal } from './components/StoryBrowserModal';
+import { OhmLabelConfirmModal } from './components/OhmLabelConfirmModal';
 import { useTimeline, encodeDate, decodeDate, STEP_YEAR, STEP_DAY } from './hooks/useTimeline';
 import { useStory } from './hooks/useStory';
 import { useEventSource } from './hooks/useEventSource';
@@ -136,6 +137,8 @@ export default function App() {
   const [ohmMappingTarget, setOhmMappingTarget] = useState<{ ohmName: string; ohmWikidataQid: string | null } | null>(null);
   // QID of the major event chip selected in the bottom bar (null = no filter)
   const [majorEventFilter, setMajorEventFilter] = useState<string | null>(null);
+  // OHM label placement mode: user is placing a polity label on the map
+  const [ohmPlacement, setOhmPlacement] = useState<{ feature: FeatureProperties; latlng?: { lat: number; lng: number } } | null>(null);
   const [fitBoundsRequest, setFitBoundsRequest] = useState<{ bbox: [number,number,number,number]; id: number } | null>(null);
   const fitBoundsIdRef = useRef(0);
   // Mappings saved in this session: polygonId → { polityId, polityName }
@@ -355,6 +358,7 @@ export default function App() {
       if (e.key !== 'Escape') return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (ohmPlacement) { setOhmPlacement(null); return; }
       if (mappingTarget) { setMappingTarget(null); return; }
       if (ohmMappingTarget) { setOhmMappingTarget(null); return; }
       if (showWelcome) { setShowWelcome(false); return; }
@@ -362,7 +366,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [mappingTarget, ohmMappingTarget, showWelcome]);
+  }, [ohmPlacement, mappingTarget, ohmMappingTarget, showWelcome]);
 
   const navigate = useCallback((to: string) => {
     window.history.pushState({}, '', to);
@@ -728,6 +732,16 @@ export default function App() {
           selectedLang={selectedLang}
           onStartStory={handleStartStory}
           isMobile={isMobile}
+          isOhmMapped={
+            selectedFeature?.featureType === 'polity'
+              ? ohmMatchedPolityIds.has(selectedFeature.id)
+                || ohmLinks.some((l) => l.polityId === selectedFeature.id && !l.explicitlyUnlinked)
+              : false
+          }
+          onAddToOhm={(feature) => {
+            setOhmPlacement({ feature });
+            setSelectedFeature(null);  // close info panel to enter placement mode
+          }}
         />
       )}
 
@@ -811,6 +825,78 @@ export default function App() {
         />
       )}
       {showWelcome && <WelcomeModal onClose={() => setShowWelcome(false)} />}
+
+      {/* OHM label placement mode — transparent overlay captures map click */}
+      {ohmPlacement && !ohmPlacement.latlng && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1500,
+            cursor: 'crosshair',
+          }}
+          onClick={(e) => {
+            if (!mapInstance) return;
+            const rect = mapInstance.getCanvas().getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const lngLat = mapInstance.unproject([x, y]);
+            setOhmPlacement((prev) => prev ? { ...prev, latlng: { lat: lngLat.lat, lng: lngLat.lng } } : null);
+          }}
+        >
+          {/* Floating label following cursor */}
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              display: 'flex',
+              justifyContent: 'center',
+              paddingTop: 60,
+              pointerEvents: 'none',
+            }}
+          >
+            <div style={{
+              background: 'rgba(0,0,0,0.8)',
+              color: '#fff',
+              padding: '8px 16px',
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: 600,
+            }}>
+              Click map to place: {ohmPlacement.feature.title}
+              <span style={{ marginLeft: 12, fontSize: 12, color: '#aaa', fontWeight: 400 }}>
+                (Esc to cancel)
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OHM label confirmation modal */}
+      {ohmPlacement?.latlng && (
+        <OhmLabelConfirmModal
+          feature={ohmPlacement.feature}
+          lat={ohmPlacement.latlng.lat}
+          lng={ohmPlacement.latlng.lng}
+          onConfirm={() => {
+            // TODO: OAuth flow + API call to create OHM node
+            console.log('[OHM] Would create label:', {
+              name: ohmPlacement.feature.title,
+              lat: ohmPlacement.latlng!.lat,
+              lng: ohmPlacement.latlng!.lng,
+              startDate: ohmPlacement.feature.yearStart,
+              endDate: ohmPlacement.feature.yearEnd,
+              wikidataQid: ohmPlacement.feature.wikidataQid,
+            });
+            setOhmPlacement(null);
+          }}
+          onCancel={() => setOhmPlacement(null)}
+          saving={false}
+          error={null}
+        />
+      )}
 
 {editorMode && mapInstance && (
         <TerritoryEditor

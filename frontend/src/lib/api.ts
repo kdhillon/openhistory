@@ -279,6 +279,25 @@ export async function createTerritory(
   return data.id;
 }
 
+export interface OhmSearchMatch {
+  type: string;
+  id: number;
+  name: string | null;
+  nameEn: string | null;
+  adminLevel: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  wikidata: string | null;
+  wikipedia: string | null;
+}
+
+export async function searchOhm(name: string): Promise<OhmSearchMatch[]> {
+  const res = await fetch(`${API_BASE}/ohm/search?${new URLSearchParams({ name })}`);
+  if (!res.ok) return [];
+  const data = await res.json() as { matches: OhmSearchMatch[] };
+  return data.matches ?? [];
+}
+
 export async function importPolityFromWikidata(qid: string): Promise<GeoJSON.Feature> {
   const res = await fetch(`${API_BASE}/polities/import-from-wikidata`, {
     method: 'POST',

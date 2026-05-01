@@ -1887,6 +1887,73 @@ def _xml_escape(s: str) -> str:
              .replace(">", "&gt;").replace('"', "&quot;").replace("'", "&apos;"))
 
 
+@app.get("/api/ohm/search")
+async def ohm_search(name: str):
+    """
+    Search OpenHistoricalMap for existing entities matching a name.
+
+    Queries the Overpass API for relations with boundary=administrative
+    where name, name:en, or official_name matches (case-insensitive).
+    Returns matching elements with their tags.
+    """
+    if not name or len(name.strip()) < 2:
+        raise HTTPException(400, "name must be at least 2 characters")
+
+    escaped = name.strip().replace('"', '\\"')
+    query = f"""[out:json][timeout:15];
+(
+  relation["boundary"="administrative"]["name"~"{escaped}",i];
+  relation["boundary"="administrative"]["name:en"~"{escaped}",i];
+  relation["boundary"="administrative"]["official_name"~"{escaped}",i];
+  relation["boundary"="administrative"]["official_name:en"~"{escaped}",i];
+  node["place"="country"]["name"~"{escaped}",i];
+  node["place"="country"]["name:en"~"{escaped}",i];
+);
+out tags;"""
+
+    loop = __import__("asyncio").get_event_loop()
+
+    def _fetch():
+        data = urllib.parse.urlencode({"data": query}).encode()
+        req = urllib.request.Request(
+            "https://overpass-api.openhistoricalmap.org/api/interpreter",
+            data=data,
+            headers={"User-Agent": "OpenHistory/1.0 (https://openhistory.app)"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return json.loads(resp.read())
+
+    try:
+        result = await loop.run_in_executor(None, _fetch)
+    except Exception as e:
+        print(f"[ohm-search] Overpass query failed: {e}", flush=True)
+        raise HTTPException(502, f"OHM search failed: {e}")
+
+    # Deduplicate by element id and format results
+    seen = set()
+    matches = []
+    for el in result.get("elements", []):
+        key = f"{el['type']}/{el['id']}"
+        if key in seen:
+            continue
+        seen.add(key)
+        tags = el.get("tags", {})
+        matches.append({
+            "type": el["type"],
+            "id": el["id"],
+            "name": tags.get("name"),
+            "nameEn": tags.get("name:en"),
+            "adminLevel": tags.get("admin_level"),
+            "startDate": tags.get("start_date"),
+            "endDate": tags.get("end_date"),
+            "wikidata": tags.get("wikidata"),
+            "wikipedia": tags.get("wikipedia"),
+        })
+
+    return {"query": name, "count": len(matches), "matches": matches}
+
+
 @app.post("/api/oauth/refresh")
 async def oauth_refresh(request: Request):
     """Refresh an expired access token."""

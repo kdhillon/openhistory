@@ -7,7 +7,7 @@ import { displayYear, encodeDate, STEP_DAY, STEP_MONTH, STEP_YEAR } from '../hoo
 import { WikiEditForm } from './WikiEditForm';
 import { fetchArticleInLanguage } from '../lib/wikidataApi';
 import { LANG_CODE_TO_NAME } from '../lib/languages';
-import { patchFeature, patchPolity } from '../lib/api';
+import { patchFeature, patchPolity, searchOhm } from '../lib/api';
 import { EVENT_CATEGORIES, POLITY_CATEGORIES } from '../theme/categories';
 
 interface WikiSection {
@@ -40,6 +40,10 @@ interface Props {
   selectedLang?: string;
   onStartStory?: (slug: string) => void;
   isMobile?: boolean;
+  /** Whether this polity is already mapped to an OHM territory (via ohmLinks or auto-match). */
+  isOhmMapped?: boolean;
+  /** Enter placement mode: user clicks map to place a label for this polity. */
+  onAddToOhm?: (feature: FeatureProperties) => void;
 }
 
 function wikiApi(lang: string) {
@@ -72,7 +76,7 @@ function PencilIcon() {
   );
 }
 
-export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated, hiddenNations, onToggleHiddenNation, onHideFeature, selectedLang = 'en', onStartStory, isMobile }: Props) {
+export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated, hiddenNations, onToggleHiddenNation, onHideFeature, selectedLang = 'en', onStartStory, isMobile, isOhmMapped, onAddToOhm }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [expandedWidth, setExpandedWidth] = useState(468);
   const [editField, setEditField] = useState<'date' | 'location' | 'capital' | 'sovereign' | null>(null);
@@ -892,6 +896,41 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
           </>
         );
       })()}
+
+      {/* Add to OHM — unmapped polities only */}
+      {isPolity && !isOhmMapped && onAddToOhm && (
+        <div style={{ padding: '4px 16px 8px' }}>
+          <button
+            onClick={async () => {
+              // Search OHM first, log results
+              const name = feature.title;
+              console.log(`[OHM] Searching for "${name}"...`);
+              const matches = await searchOhm(name);
+              if (matches.length > 0) {
+                console.log(`[OHM] Found ${matches.length} match(es):`, matches);
+              } else {
+                console.log(`[OHM] No matches found for "${name}"`);
+              }
+              onAddToOhm(feature);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'none',
+              border: '1px solid #3366cc',
+              borderRadius: 6,
+              padding: '5px 12px',
+              fontSize: 12,
+              color: '#3366cc',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            <span style={{ fontSize: 14 }}>+</span> Add to OHM
+          </button>
+        </div>
+      )}
 
       {/* Inline correction form */}
       {editField && feature.wikipediaTitle && (
