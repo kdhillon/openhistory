@@ -11,17 +11,17 @@ ALTER TABLE events
   ADD COLUMN IF NOT EXISTS wikidata_qid TEXT UNIQUE,
   ADD COLUMN IF NOT EXISTS slug         TEXT UNIQUE;
 
-ALTER TABLE cities
+ALTER TABLE locations
   ADD COLUMN IF NOT EXISTS wikidata_qid TEXT UNIQUE,
   ADD COLUMN IF NOT EXISTS slug         TEXT UNIQUE;
 
 -- Index slug lookups (resolving entity links in frontend navigation)
 CREATE INDEX IF NOT EXISTS events_slug_idx ON events (slug);
-CREATE INDEX IF NOT EXISTS cities_slug_idx ON cities (slug);
+CREATE INDEX IF NOT EXISTS locations_slug_idx ON locations (slug);
 
 -- Back-fill slug for existing seed data rows (wikipedia_title → slug)
 UPDATE events SET slug = REPLACE(wikipedia_title, ' ', '_') WHERE slug IS NULL;
-UPDATE cities SET slug = REPLACE(wikipedia_title, ' ', '_') WHERE slug IS NULL;
+UPDATE locations SET slug = REPLACE(wikipedia_title, ' ', '_') WHERE slug IS NULL;
 
 -- Rename category: natural_disaster → disaster (expanded category set)
 UPDATE events

@@ -16,14 +16,14 @@ ALTER TABLE events
   ADD COLUMN IF NOT EXISTS data_version   INTEGER NOT NULL DEFAULT 2,
   ADD COLUMN IF NOT EXISTS pipeline_run   TEXT;
 
-ALTER TABLE cities
+ALTER TABLE locations
   ADD COLUMN IF NOT EXISTS data_version   INTEGER NOT NULL DEFAULT 2,
   ADD COLUMN IF NOT EXISTS pipeline_run   TEXT;
 
 -- Mark all pre-existing records as version 1 (created before this migration)
 -- so they can be identified as candidates for re-enrichment.
 UPDATE events SET data_version = 1 WHERE data_version = 2;
-UPDATE cities SET data_version = 1 WHERE data_version = 2;
+UPDATE locations SET data_version = 1 WHERE data_version = 2;
 
 CREATE INDEX IF NOT EXISTS events_data_version_idx ON events (data_version);
-CREATE INDEX IF NOT EXISTS cities_data_version_idx ON cities (data_version);
+CREATE INDEX IF NOT EXISTS locations_data_version_idx ON locations (data_version);
