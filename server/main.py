@@ -1690,6 +1690,203 @@ async def oauth_callback(request: Request):
         raise HTTPException(e.code, detail)
 
 
+# ── OpenHistoricalMap OAuth 2.0 ──────────────────────────────────────────────
+# Allows users to contribute place=country nodes to OHM directly from our UX.
+
+OHM_CLIENT_ID = os.environ.get("OHM_CLIENT_ID", "")
+OHM_CLIENT_SECRET = os.environ.get("OHM_CLIENT_SECRET", "")
+OHM_AUTH_URL = "https://www.openhistoricalmap.org/oauth2/authorize"
+OHM_TOKEN_URL = "https://www.openhistoricalmap.org/oauth2/token"
+OHM_API_BASE = "https://www.openhistoricalmap.org/api/0.6"
+
+
+@app.get("/api/ohm/auth-url")
+def ohm_auth_url():
+    """Return the OHM OAuth2 authorization URL for the frontend to redirect to."""
+    if not OHM_CLIENT_ID:
+        raise HTTPException(500, "OHM_CLIENT_ID not configured")
+    params = urllib.parse.urlencode({
+        "client_id": OHM_CLIENT_ID,
+        "redirect_uri": "https://api.openhistory.app/api/ohm/callback",
+        "response_type": "code",
+        "scope": "write_api read_prefs",
+    })
+    return {"url": f"{OHM_AUTH_URL}?{params}"}
+
+
+@app.get("/api/ohm/callback")
+async def ohm_oauth_callback(request: Request):
+    """Exchange OHM authorization code for access token, then redirect to frontend."""
+    code = request.query_params.get("code")
+    if not code:
+        raise HTTPException(400, "Missing code parameter")
+    if not OHM_CLIENT_SECRET:
+        raise HTTPException(500, "OHM_CLIENT_SECRET not configured")
+
+    body = urllib.parse.urlencode({
+        "grant_type": "authorization_code",
+        "code": code,
+        "client_id": OHM_CLIENT_ID,
+        "client_secret": OHM_CLIENT_SECRET,
+        "redirect_uri": "https://api.openhistory.app/api/ohm/callback",
+    }).encode()
+
+    req = urllib.request.Request(OHM_TOKEN_URL, data=body, method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    req.add_header("User-Agent", "OpenHistory/1.0 (https://openhistory.app)")
+
+    loop = __import__("asyncio").get_event_loop()
+    def _fetch():
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read()), resp.status
+        except urllib.error.HTTPError as e:
+            return {"error": e.read().decode()}, e.code
+
+    data, status = await loop.run_in_executor(None, _fetch)
+    if status >= 400:
+        print(f"[ohm-oauth] token exchange failed: {status} {data}", flush=True)
+        raise HTTPException(status, data.get("error", "Token exchange failed"))
+
+    # Redirect to frontend with the token in a fragment (keeps it out of server logs)
+    token = data.get("access_token", "")
+    from starlette.responses import RedirectResponse
+    return RedirectResponse(
+        url=f"https://openhistory.app/#ohm_token={token}",
+        status_code=302,
+    )
+
+
+@app.post("/api/ohm/create-label")
+async def ohm_create_label(request: Request):
+    """
+    Create a place=country node on OpenHistoricalMap.
+
+    Body: {
+        "accessToken": "<OHM OAuth2 token>",
+        "name": "Safavid Iran",
+        "nameLocal": "دولت صفوی",  // optional
+        "nameLocalLang": "fa",       // optional
+        "lat": 32.6546,
+        "lon": 51.6680,
+        "startDate": "1501",
+        "endDate": "1736",
+        "wikidataQid": "Q170596",   // optional
+        "wikipediaTitle": "Safavid Iran"  // optional
+    }
+
+    Creates a changeset, creates the node, closes the changeset.
+    Returns: { "nodeId": 12345, "changesetId": 67890 }
+    """
+    body = await request.json()
+    token = body.get("accessToken")
+    if not token:
+        raise HTTPException(401, "accessToken required")
+
+    name = body.get("name")
+    lat = body.get("lat")
+    lon = body.get("lon")
+    start_date = body.get("startDate")
+    end_date = body.get("endDate")
+    if not all([name, lat, lon, start_date]):
+        raise HTTPException(400, "name, lat, lon, startDate required")
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "text/xml",
+        "User-Agent": "OpenHistory/1.0 (https://openhistory.app)",
+    }
+
+    loop = __import__("asyncio").get_event_loop()
+
+    # Step 1: Create changeset
+    changeset_xml = (
+        '<osm><changeset>'
+        '<tag k="comment" v="Add historical territory label via OpenHistory"/>'
+        '<tag k="created_by" v="OpenHistory/1.0"/>'
+        '</changeset></osm>'
+    )
+
+    def _create_changeset():
+        req = urllib.request.Request(
+            f"{OHM_API_BASE}/changeset/create",
+            data=changeset_xml.encode(),
+            headers=headers,
+            method="PUT",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.read().decode().strip()
+
+    try:
+        changeset_id = await loop.run_in_executor(None, _create_changeset)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode()
+        print(f"[ohm] changeset create failed: {e.code} {detail}", flush=True)
+        raise HTTPException(e.code, f"Failed to create changeset: {detail}")
+
+    # Step 2: Create node
+    tags = [
+        '<tag k="place" v="country"/>',
+        f'<tag k="name" v="{_xml_escape(name)}"/>',
+        f'<tag k="name:en" v="{_xml_escape(name)}"/>',
+        f'<tag k="start_date" v="{_xml_escape(str(start_date))}"/>',
+    ]
+    if end_date:
+        tags.append(f'<tag k="end_date" v="{_xml_escape(str(end_date))}"/>')
+    if body.get("nameLocal") and body.get("nameLocalLang"):
+        tags.append(f'<tag k="name:{_xml_escape(body["nameLocalLang"])}" v="{_xml_escape(body["nameLocal"])}"/>')
+    if body.get("wikidataQid"):
+        tags.append(f'<tag k="wikidata" v="{_xml_escape(body["wikidataQid"])}"/>')
+    if body.get("wikipediaTitle"):
+        tags.append(f'<tag k="wikipedia" v="en:{_xml_escape(body["wikipediaTitle"])}"/>')
+
+    node_xml = (
+        f'<osm><node changeset="{changeset_id}" lat="{lat}" lon="{lon}">'
+        + "".join(tags)
+        + '</node></osm>'
+    )
+
+    def _create_node():
+        req = urllib.request.Request(
+            f"{OHM_API_BASE}/node/create",
+            data=node_xml.encode(),
+            headers=headers,
+            method="PUT",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.read().decode().strip()
+
+    try:
+        node_id = await loop.run_in_executor(None, _create_node)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode()
+        print(f"[ohm] node create failed: {e.code} {detail}", flush=True)
+        raise HTTPException(e.code, f"Failed to create node: {detail}")
+
+    # Step 3: Close changeset
+    def _close_changeset():
+        req = urllib.request.Request(
+            f"{OHM_API_BASE}/changeset/{changeset_id}/close",
+            headers=headers,
+            method="PUT",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.status
+
+    try:
+        await loop.run_in_executor(None, _close_changeset)
+    except urllib.error.HTTPError:
+        pass  # Non-critical — changeset auto-closes after 1h
+
+    return {"nodeId": int(node_id), "changesetId": int(changeset_id)}
+
+
+def _xml_escape(s: str) -> str:
+    """Escape XML special characters."""
+    return (s.replace("&", "&amp;").replace("<", "&lt;")
+             .replace(">", "&gt;").replace('"', "&quot;").replace("'", "&apos;"))
+
+
 @app.post("/api/oauth/refresh")
 async def oauth_refresh(request: Request):
     """Refresh an expired access token."""

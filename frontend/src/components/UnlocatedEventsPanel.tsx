@@ -111,11 +111,11 @@ export function UnlocatedEventsPanel({ eventFeatures, currentDateInt, stepSize, 
       }
     }
 
-    // Sort by yearStart descending within each group
-    const byStart = (a: FeatureProperties, b: FeatureProperties) =>
-      (b.yearStart ?? 0) - (a.yearStart ?? 0);
-    active.sort(byStart);
-    recent.sort(byStart);
+    // Sort by sitelinks count (importance) descending within each group
+    const byImportance = (a: FeatureProperties, b: FeatureProperties) =>
+      (b.sitelinksCount ?? 0) - (a.sitelinksCount ?? 0);
+    active.sort(byImportance);
+    recent.sort(byImportance);
 
     return { active, recent };
   }, [eventFeatures, currentDateInt, stepSize]);
@@ -147,7 +147,7 @@ export function UnlocatedEventsPanel({ eventFeatures, currentDateInt, stepSize, 
         onClick={() => setCollapsed((v) => !v)}
       >
         <span style={{ fontSize: 13, fontWeight: 600, color: '#54595d', flex: 1 }}>
-          {collapsed ? (total > 0 ? `Unlocated (${total})` : 'Unlocated') : 'Unlocated Events'}
+          {collapsed ? (total > 0 ? `Unlocated Events (${total})` : 'Unlocated Events') : 'Unlocated Events'}
         </span>
         <span style={{ fontSize: 18, color: '#9a9a9a', lineHeight: 1 }}>
           {collapsed ? '▴' : '▾'}

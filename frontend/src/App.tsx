@@ -16,6 +16,7 @@ import { AboutPage } from './components/AboutPage';
 import { WelcomeModal, shouldShowWelcome } from './components/WelcomeModal';
 import { MajorEventsPanel } from './components/MajorEventsPanel';
 import { UnlocatedEventsPanel } from './components/UnlocatedEventsPanel';
+import { UnlocatedPolitiesPanel } from './components/UnlocatedPolitiesPanel';
 import { StoryPanel } from './components/StoryPanel';
 import { StoryBrowserModal } from './components/StoryBrowserModal';
 import { useTimeline, encodeDate, decodeDate, STEP_YEAR, STEP_DAY } from './hooks/useTimeline';
@@ -628,6 +629,14 @@ export default function App() {
             eventFeatures={eventFeatures}
             currentDateInt={timeline.currentDateInt}
             stepSize={timeline.stepSize}
+            onSelectFeature={(props) => {
+              setSelectedFeature(props);
+              setStack({ index: 0, total: 1 });
+            }}
+          />
+          <UnlocatedPolitiesPanel
+            geojson={geojson}
+            currentDateInt={timeline.currentDateInt}
             onSelectFeature={(props) => {
               setSelectedFeature(props);
               setStack({ index: 0, total: 1 });
