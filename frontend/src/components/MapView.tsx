@@ -801,18 +801,18 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       const centroidVis = !showTerritoryLabels ? 'visible' : 'none';
       if (map.getLayer('polity-centroid-labels')) map.setLayoutProperty('polity-centroid-labels', 'visibility', centroidVis);
       // OHM outlines (border lines + centroid labels from 'ohm' tileset)
-      // Centroid labels are always visible when showOhm is on — they're part of the outline experience.
-      const ohmVis = showOhm ? 'visible' : 'none';
+      // showBorders acts as a master toggle — when off, all OHM layers are hidden.
+      const ohmVis = showBorders && showOhm ? 'visible' : 'none';
       for (const id of ['ohm-borders', 'ohm-labels', 'ohm-labels-small']) {
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', ohmVis);
       }
       // OHM admin fills (fill polygons from 'ohm_admin' tileset)
-      const ohmAdminVis = showOhmAdmin ? 'visible' : 'none';
+      const ohmAdminVis = showBorders && showOhmAdmin ? 'visible' : 'none';
       if (map.getLayer('ohm-fills')) map.setLayoutProperty('ohm-fills', 'visibility', ohmAdminVis);
     };
     if (map.isStyleLoaded()) apply();
     else map.once('load', apply);
-  }, [territorySource, showTerritoryLabels, showOhm, showOhmAdmin]);
+  }, [territorySource, showBorders, showTerritoryLabels, showOhm, showOhmAdmin]);
 
   // Update OHM temporal filter on every year tick
   useEffect(() => {

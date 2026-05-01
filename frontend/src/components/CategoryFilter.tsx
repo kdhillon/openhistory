@@ -5,6 +5,21 @@ import { WIKIPEDIA_LANGUAGES } from '../lib/languages';
 import type { WindowInfo } from '../hooks/useEventSource';
 import { MOBILE_TIMELINE_BAR_HEIGHT, SPEED_OPTIONS, formatStepLabel } from './TimelineBar';
 
+// Categories grouped under a single chip (primary → extras)
+const CATEGORY_GROUPS: Partial<Record<Category, Category[]>> = {
+  culture: ['sport'],
+  exploration: ['science'],
+};
+
+// Tooltip text for grouped chips
+const CATEGORY_TOOLTIPS: Partial<Record<Category, string>> = {
+  culture: 'Culture & Sport',
+  exploration: 'Exploration & Science',
+};
+
+// Categories hidden from the chip bar (shown via their group parent)
+const HIDDEN_CATEGORIES = new Set<Category>(['sport', 'science']);
+
 export const MOBILE_TOP_BAR_HEIGHT = 48;
 
 interface Props {
@@ -105,23 +120,33 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
 }) {
   return (
     <>
-      {cats.map((cat) => {
-        const active = activeCategories.has(cat);
+      {cats.filter((c) => !HIDDEN_CATEGORIES.has(c)).map((cat) => {
+        const extras = CATEGORY_GROUPS[cat] ?? [];
+        const allCats = [cat, ...extras];
+        const active = allCats.every((c) => activeCategories.has(c));
         const color = CATEGORY_COLORS[cat];
+        const tooltip = CATEGORY_TOOLTIPS[cat];
+        const label = CATEGORY_LABELS[cat];
         return (
           <button
             key={cat}
-            onClick={() => onToggle(cat)}
+            onClick={() => {
+              // Toggle all grouped categories together
+              for (const c of allCats) {
+                if (active) { if (activeCategories.has(c)) onToggle(c); }
+                else { if (!activeCategories.has(c)) onToggle(c); }
+              }
+            }}
             style={{
               ...styles.chip,
               background: active ? `${color}22` : 'transparent',
               borderColor: active ? `${color}88` : 'rgba(0,0,0,0.15)',
               color: active ? '#202122' : '#9a9a9a',
             }}
-            title={active ? `Hide ${CATEGORY_LABELS[cat]}` : `Show ${CATEGORY_LABELS[cat]}`}
+            title={tooltip ? `${active ? 'Hide' : 'Show'} ${tooltip} Events` : `${active ? 'Hide' : 'Show'} ${label} Events`}
           >
             <span style={{ ...styles.dot, background: color, opacity: active ? 1 : 0.4 }} />
-            {CATEGORY_LABELS[cat]}
+            {label}
           </button>
         );
       })}

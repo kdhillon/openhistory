@@ -38,7 +38,7 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, polities, onClose, on
   const [importingQid, setImportingQid] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => { if (window.innerWidth >= 640) inputRef.current?.focus(); }, []);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
