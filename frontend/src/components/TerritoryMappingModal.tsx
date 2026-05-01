@@ -203,7 +203,7 @@ export function TerritoryMappingModal({ hbName, polygonId, yearStart, yearEnd, p
 
   const yearInputStyle: React.CSSProperties = {
     background: '#11172a', border: '1px solid #3a4560', borderRadius: 4,
-    color: '#e8eaf0', padding: '3px 7px', fontSize: 12, outline: 'none',
+    color: '#e8eaf0', padding: '3px 7px', fontSize: 16, outline: 'none',
     width: 72, fontFamily: 'inherit',
   };
 
@@ -269,7 +269,7 @@ export function TerritoryMappingModal({ hbName, polygonId, yearStart, yearEnd, p
                 placeholder="Search polities…"
                 style={{
                   background: '#11172a', border: '1px solid #3a4560', borderRadius: 6,
-                  color: '#e8eaf0', padding: '8px 10px', fontSize: 13, outline: 'none', width: '100%',
+                  color: '#e8eaf0', padding: '8px 10px', fontSize: 16, outline: 'none', width: '100%',
                   boxSizing: 'border-box',
                 }}
               />

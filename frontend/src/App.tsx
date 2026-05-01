@@ -108,7 +108,7 @@ export default function App() {
   const { territoryFeatures, refresh: refreshTerritories, isLoading: territoriesLoading, error: territoriesError } =
     useTerritoriesSource({ currentYear: debouncedYear, stepSize: timeline.stepSize, source: 'hb' });
 
-  const { links: ohmLinks, refresh: refreshOhmLinks } = useOhmLinks();
+  const { links: ohmLinks, refresh: refreshOhmLinks, isLoading: ohmLinksLoading } = useOhmLinks();
 
   // Map of id → patched feature for manual edits (applied on top of base features)
   const [overrideMap, setOverrideMap] = useState<Map<string, GeoJSON.Feature>>(new Map());
@@ -670,6 +670,23 @@ export default function App() {
           showOhm={showOhm}
           showOhmAdmin={showOhmAdmin}
         />
+        {(() => {
+          const items: string[] = [];
+          if (seedLoading) items.push('Polities');
+          if (eventsLoading) items.push('Events');
+          if (territoriesLoading) items.push('Territories');
+          if (ohmLinksLoading) items.push('OHM Links');
+          if (items.length === 0) return null;
+          return (
+            <div style={{
+              position: 'absolute', top: 0, left: 8, zIndex: 10,
+              background: 'rgba(0,0,0,0.7)', color: '#ccc', padding: '4px 10px',
+              borderRadius: 6, fontSize: 12, pointerEvents: 'none',
+            }}>
+              Loading: {items.join(', ')}
+            </div>
+          );
+        })()}
       </div>
 
       {story ? (

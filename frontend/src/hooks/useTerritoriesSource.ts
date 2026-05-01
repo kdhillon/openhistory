@@ -16,6 +16,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { STEP_YEAR, STEP_MONTH } from './useTimeline';
 
+const EMPTY_FEATURES: GeoJSON.Feature[] = [];
 const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
 interface WindowData {
@@ -164,7 +165,7 @@ export function useTerritoriesSource(opts: {
   }, [currentWindow, doFetch]);
 
   return {
-    territoryFeatures: currentWindow?.features ?? [],
+    territoryFeatures: currentWindow?.features ?? EMPTY_FEATURES,
     isLoading,
     error,
     refresh,

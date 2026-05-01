@@ -12,6 +12,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { STEP_YEAR, STEP_MONTH } from './useTimeline';
 
+const EMPTY_FEATURES: GeoJSON.Feature[] = [];
+
 const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
 export interface WindowInfo {
@@ -143,7 +145,7 @@ export function useEventSource(opts: {
   }, [currentYear, stepSize, currentWindow, doFetch, doPrefetch]);
 
   return {
-    eventFeatures: currentWindow?.features ?? [],
+    eventFeatures: currentWindow?.features ?? EMPTY_FEATURES,
     windowInfo: currentWindow
       ? { yearMin: currentWindow.yearMin, yearMax: currentWindow.yearMax, count: currentWindow.features.length }
       : null,
