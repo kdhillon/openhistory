@@ -15,8 +15,8 @@ interface Props {
   geojson: GeoJSON.FeatureCollection;
   currentDateInt: number;
   onSelectFeature: (props: FeatureProperties) => void;
-  /** Polity IDs that are matched to a visible OHM territory — exclude from "unlocated" */
-  ohmMatchedPolityIds?: Set<string>;
+  /** Polity IDs that have any visible territory (HB or OHM) — exclude from "unlocated". */
+  mappedPolityIds?: Set<string>;
 }
 
 function PolityRow({ props, onSelect }: { props: FeatureProperties; onSelect: () => void }) {
@@ -57,7 +57,7 @@ function PolityRow({ props, onSelect }: { props: FeatureProperties; onSelect: ()
   );
 }
 
-export function UnlocatedPolitiesPanel({ geojson, currentDateInt, onSelectFeature, ohmMatchedPolityIds }: Props) {
+export function UnlocatedPolitiesPanel({ geojson, currentDateInt, onSelectFeature, mappedPolityIds }: Props) {
   const [collapsed, setCollapsed] = useState(true);
 
   const currentYear = decodeDate(currentDateInt).year;
@@ -75,14 +75,14 @@ export function UnlocatedPolitiesPanel({ geojson, currentDateInt, onSelectFeatur
       if (p.yearEnd == null && !STILL_ACTIVE_TYPES.has(p.polityType ?? '')) continue;
       if (p.yearStart > currentYear) continue;
       if (p.yearEnd != null && currentYear > p.yearEnd) continue;
-      if (ohmMatchedPolityIds?.has(p.id)) continue;
+      if (mappedPolityIds?.has(p.id)) continue;
 
       result.push(p);
     }
 
     result.sort((a, b) => (b.sitelinksCount ?? 0) - (a.sitelinksCount ?? 0));
     return result;
-  }, [geojson, currentYear]);
+  }, [geojson, currentYear, mappedPolityIds]);
 
   return (
     <div style={{

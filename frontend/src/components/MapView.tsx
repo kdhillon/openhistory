@@ -1204,6 +1204,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           onSelectRef.current(raw as unknown as FeatureProperties, { index: idx, total: allEntries.length });
         } else {
           // Unmatched territory — open mapping modal
+          console.log('[OHM polygon click] properties:', chosen.properties);
           onOhmTerritoryClickRef.current?.(
             chosenName,
             chosen.properties?.wikidata as string | null,
@@ -1251,6 +1252,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
             onSelectRef.current(raw as unknown as FeatureProperties, { index: 0, total: 1 });
           } else {
             // Unmapped (gray) — open OHM mapping modal
+            console.log('[OHM label click] properties:', top.properties);
             onOhmTerritoryClickRef.current?.(
               stripped,
               null,

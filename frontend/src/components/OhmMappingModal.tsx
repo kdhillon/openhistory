@@ -3,6 +3,7 @@ import type { FeatureProperties } from '../types';
 import { importPolityFromWikidata } from '../lib/api';
 import { searchEntities } from '../lib/wikidataApi';
 import type { EntityResult } from '../lib/wikidataApi';
+import { stripPolityTypeWords } from '../lib/polityNames';
 
 const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 const WRITE_SECRET = import.meta.env.VITE_WRITE_SECRET ?? '';
@@ -37,7 +38,7 @@ function btnStyle(bg: string, disabled = false): React.CSSProperties {
 }
 
 export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, polities, onClose, onPolityImported, onSaved }: Props) {
-  const [query, setQuery]               = useState(ohmName);
+  const [query, setQuery]               = useState(() => stripPolityTypeWords(ohmName));
   const [selectedId, setSelectedId]     = useState<string | null>(null);
   const [status, setStatus]             = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMsg, setErrorMsg]         = useState<string | null>(null);

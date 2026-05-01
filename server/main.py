@@ -1793,8 +1793,9 @@ async def ohm_create_label(request: Request):
 
     headers = {
         "Authorization": f"Bearer {token}",
-        "Content-Type": "text/xml",
-        "User-Agent": "OpenHistory/1.0 (https://openhistory.app)",
+        "Content-Type": "text/xml; charset=utf-8",
+        "Accept": "text/plain, */*",
+        "User-Agent": "OpenHistory/1.0 (+https://openhistory.app; contact: kyle@openhistory.app)",
     }
 
     loop = __import__("asyncio").get_event_loop()

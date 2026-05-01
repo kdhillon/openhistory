@@ -4,6 +4,7 @@ import { assignPolygon, importPolityFromWikidata, deleteTerritoryRow, updateTerr
 import type { AssignResult } from '../lib/api';
 import { searchEntities } from '../lib/wikidataApi';
 import type { EntityResult } from '../lib/wikidataApi';
+import { stripPolityTypeWords } from '../lib/polityNames';
 
 interface Props {
   hbName: string;
@@ -103,7 +104,7 @@ export function TerritoryMappingModal({ hbName, polygonId, yearStart, yearEnd, p
   };
 
   // ── Polity assignment ──────────────────────────────────────────────────────
-  const [query, setQuery]               = useState(hbName);
+  const [query, setQuery]               = useState(() => stripPolityTypeWords(hbName));
   const [selectedId, setSelectedId]     = useState<string | null>(null);
   const [status, setStatus]             = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [assignResult, setAssignResult] = useState<AssignResult | null>(null);

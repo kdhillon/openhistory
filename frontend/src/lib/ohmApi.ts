@@ -1,12 +1,12 @@
 /**
- * Browser-side OpenHistoricalMap API client.
+ * OpenHistoricalMap API client.
  *
- * All calls go directly from the browser to openhistoricalmap.org/api/0.6
- * to bypass Cloudflare's bot protection (which blocks server-side requests).
- * The OAuth2 token is passed as a Bearer header.
+ * The actual API calls happen server-side because OHM does not send CORS
+ * headers for /api/0.6/. The browser holds the OAuth2 token (in localStorage)
+ * and forwards it to our backend, which proxies the request to OHM.
  */
 
-const OHM_API = 'https://www.openhistoricalmap.org/api/0.6';
+const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
 const OHM_TOKEN_KEY = 'ohm_access_token';
 
@@ -36,15 +36,6 @@ export function extractOhmTokenFromHash(): string | null {
   return null;
 }
 
-function xmlEscape(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
 interface CreateLabelParams {
   token: string;
   name: string;
@@ -62,79 +53,29 @@ interface CreateLabelResult {
 }
 
 /**
- * Create a place=country node on OHM via direct browser requests.
- *
- * Steps: create changeset → create node → close changeset.
- * All requests go directly to openhistoricalmap.org from the browser.
+ * Create a place=country node on OHM via our backend proxy.
+ * Backend uses the user's OAuth Bearer token to authenticate to OHM.
  */
 export async function createOhmLabel(params: CreateLabelParams): Promise<CreateLabelResult> {
   const { token, name, lat, lon, startDate, endDate, wikidataQid, wikipediaTitle } = params;
 
-  const headers: Record<string, string> = {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'text/xml',
-  };
-
-  // Step 1: Create changeset
-  const changesetXml =
-    '<osm><changeset>' +
-    '<tag k="comment" v="Add historical territory label via OpenHistory"/>' +
-    '<tag k="created_by" v="OpenHistory/1.0"/>' +
-    '</changeset></osm>';
-
-  const csRes = await fetch(`${OHM_API}/changeset/create`, {
-    method: 'PUT',
-    headers,
-    body: changesetXml,
+  const res = await fetch(`${API_BASE}/ohm/create-label`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      accessToken: token,
+      name,
+      lat,
+      lon,
+      startDate,
+      endDate,
+      wikidataQid,
+      wikipediaTitle,
+    }),
   });
-  if (!csRes.ok) {
-    const text = await csRes.text();
-    throw new Error(`Failed to create changeset (${csRes.status}): ${text.slice(0, 200)}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Create label failed (${res.status}): ${text.slice(0, 200)}`);
   }
-  const changesetId = parseInt(await csRes.text(), 10);
-
-  // Step 2: Create node
-  const tags = [
-    '<tag k="place" v="country"/>',
-    `<tag k="name" v="${xmlEscape(name)}"/>`,
-    `<tag k="name:en" v="${xmlEscape(name)}"/>`,
-    `<tag k="start_date" v="${xmlEscape(startDate)}"/>`,
-  ];
-  if (endDate) {
-    tags.push(`<tag k="end_date" v="${xmlEscape(endDate)}"/>`);
-  }
-  if (wikidataQid) {
-    tags.push(`<tag k="wikidata" v="${xmlEscape(wikidataQid)}"/>`);
-  }
-  if (wikipediaTitle) {
-    tags.push(`<tag k="wikipedia" v="en:${xmlEscape(wikipediaTitle)}"/>`);
-  }
-
-  const nodeXml =
-    `<osm><node changeset="${changesetId}" lat="${lat}" lon="${lon}">` +
-    tags.join('') +
-    '</node></osm>';
-
-  const nodeRes = await fetch(`${OHM_API}/node/create`, {
-    method: 'PUT',
-    headers,
-    body: nodeXml,
-  });
-  if (!nodeRes.ok) {
-    const text = await nodeRes.text();
-    throw new Error(`Failed to create node (${nodeRes.status}): ${text.slice(0, 200)}`);
-  }
-  const nodeId = parseInt(await nodeRes.text(), 10);
-
-  // Step 3: Close changeset (non-critical)
-  try {
-    await fetch(`${OHM_API}/changeset/${changesetId}/close`, {
-      method: 'PUT',
-      headers,
-    });
-  } catch {
-    // Auto-closes after 1h, not critical
-  }
-
-  return { nodeId, changesetId };
+  return res.json();
 }

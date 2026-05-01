@@ -665,7 +665,7 @@ export default function App() {
               setSelectedFeature(props);
               setStack({ index: 0, total: 1 });
             }}
-            ohmMatchedPolityIds={ohmMatchedPolityIds}
+            mappedPolityIds={polityIdsWithTerritory}
           />
           <MajorEventsPanel
             geojson={geojson}
