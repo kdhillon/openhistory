@@ -23,26 +23,25 @@ export function WelcomeModal({ onClose }: Props) {
             the story of humankind.
           </p>
 
+          <p style={styles.lead}>
+            Territory data comes from{' '}
+            <a href="https://www.openhistoricalmap.org" target="_blank" rel="noreferrer" style={styles.link}>
+              OpenHistoricalMap
+            </a>
+            . Event data comes from{' '}
+            <a href="https://www.wikidata.org" target="_blank" rel="noreferrer" style={styles.link}>
+              Wikidata
+            </a>
+            . A huge shoutout to all contributors of these projects!
+          </p>
+
           <div style={styles.section}>
             <div style={styles.sectionTitle}>Help improve territory labels</div>
             <p style={styles.text}>
-              Territory polygons show which polities controlled which land at a given time.
-              Unassigned territories show a <em style={{ color: '#888', fontStyle: 'italic' }}>grey italic label</em> — you can help by linking them to the correct polity,
-              turning them <em style={{ color: '#f5c518', fontStyle: 'italic', fontWeight: 700, WebkitTextStroke: '0.5px #333' }}>yellow and bold</em>.
+              Territory polygons show which polities controlled which territory at a given time.
+              Unassigned territories show a <span style={{ color: '#888' }}>gray label</span> — you can help by linking them to the correct polity,
+              turning them <span style={{ color: '#ffffff', fontWeight: 700, WebkitTextStroke: '0.5px #333' }}>white and bold</span>.
             </p>
-
-            <div style={styles.screenshotRow}>
-              <div style={styles.screenshotItem}>
-                <img src="/territory-unassigned.png" alt="Unassigned territory — grey italic label" style={styles.screenshot} />
-                <div style={styles.screenshotCaption}>Unassigned — <em>grey italic</em></div>
-              </div>
-              <div style={styles.screenshotArrow}>→</div>
-              <div style={styles.screenshotItem}>
-                <img src="/territory-assigned.png" alt="Assigned territory — yellow bold label" style={styles.screenshot} />
-                <div style={styles.screenshotCaption}>Assigned — <em style={{ color: '#c8a000', fontWeight: 700 }}>yellow bold</em></div>
-              </div>
-            </div>
-
           </div>
 
         </div>
@@ -108,6 +107,10 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#54595d',
     lineHeight: 1.6,
     margin: '0 0 16px',
+  },
+  link: {
+    color: '#3366cc',
+    textDecoration: 'none',
   },
   section: {
     marginBottom: 20,

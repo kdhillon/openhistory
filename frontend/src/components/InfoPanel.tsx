@@ -373,8 +373,10 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
       ...styles.panel,
       top: isMobile ? 56 : 66,
       width: expanded ? expandedWidth : 360,
-      height: expanded ? 'calc(100vh - 100px)' : 'auto',
-      maxHeight: isMobile ? 'calc(100vh - 120px)' : 'calc(100vh - 140px)',
+      // Extend down to the timeline bar (mobile timeline is 90px, desktop is 64px)
+      bottom: isMobile ? 90 : 64,
+      height: 'auto',
+      maxHeight: 'none',
       overflow: (expanded || isMobile) ? 'hidden' : 'visible',
       transition: dragRef.current ? 'none' : 'width 0.25s ease',
     }}>
@@ -1167,11 +1169,11 @@ const styles: Record<string, React.CSSProperties> = {
   panel: {
     position: 'fixed',
     top: 114,
-    right: 16,
+    right: 0,
     width: 360,
-    maxWidth: 'calc(100vw - 24px)',
+    maxWidth: '100vw',
     background: '#ffffff',
-    borderRadius: 12,
+    borderRadius: '12px 0 0 12px',
     border: '1px solid rgba(0,0,0,0.1)',
     boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
     zIndex: 90,

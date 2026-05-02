@@ -20,6 +20,8 @@ import { UnlocatedPolitiesPanel } from './components/UnlocatedPolitiesPanel';
 import { StoryPanel } from './components/StoryPanel';
 import { StoryBrowserModal } from './components/StoryBrowserModal';
 import { OhmLabelConfirmModal } from './components/OhmLabelConfirmModal';
+import { GlobalSearchPanel } from './components/GlobalSearchPanel';
+import type { SearchPolityResult, SearchEventResult } from './lib/api';
 import { extractOhmTokenFromHash, getOhmToken, clearOhmToken, createOhmLabel } from './lib/ohmApi';
 import { useTimeline, encodeDate, decodeDate, STEP_YEAR, STEP_DAY } from './hooks/useTimeline';
 import { useStory } from './hooks/useStory';
@@ -140,6 +142,10 @@ export default function App() {
   const [majorEventFilter, setMajorEventFilter] = useState<string | null>(null);
   // OHM label placement mode: user is placing a polity label on the map
   const [ohmPlacement, setOhmPlacement] = useState<{ feature: FeatureProperties; latlng?: { lat: number; lng: number } } | null>(null);
+  // Pending search selection: id of feature to select when geojson next contains it.
+  // Used when clicking a search result for an event outside the current window —
+  // we seek the timeline first, then this resolves once the new window arrives.
+  const [pendingSearchSelectId, setPendingSearchSelectId] = useState<string | null>(null);
   const [ohmSaving, setOhmSaving] = useState(false);
   const [ohmError, setOhmError] = useState<string | null>(null);
   const [fitBoundsRequest, setFitBoundsRequest] = useState<{ bbox: [number,number,number,number]; id: number } | null>(null);
@@ -261,6 +267,10 @@ export default function App() {
       : withOverrides;
     return { type: 'FeatureCollection', features };
   }, [staticFeatures, eventFeatures, overrideMap, hiddenFeatureIds]);
+
+  // Latest geojson available to imperative handlers without re-creating callbacks.
+  const geojsonRef = useRef<GeoJSON.FeatureCollection>(geojson);
+  geojsonRef.current = geojson;
 
   // Fetch polity name translations whenever language or polity data changes
   useEffect(() => {
@@ -448,26 +458,58 @@ export default function App() {
       const isVisible = featureStart <= effectiveNow && cur <= featureEnd + 3 * STEP_YEAR;
       if (!isVisible) timeline.seek(featureStart);
     }
-    if (feature.featureType === 'polity') {
-      setActivePolityCategories((prev) => {
-        const missing = feature.categories.filter((c) => !prev.has(c as Category));
-        if (missing.length === 0) return prev;
-        const next = new Set(prev);
-        missing.forEach((c) => next.add(c as Category));
-        return next;
-      });
-    } else {
-      setActiveCategories((prev) => {
-        const missing = feature.categories.filter((c) => !prev.has(c as Category));
-        if (missing.length === 0) return prev;
-        const next = new Set(prev);
-        missing.forEach((c) => next.add(c as Category));
-        return next;
-      });
-    }
+    setActiveCategories((prev) => {
+      const missing = feature.categories.filter((c) => !prev.has(c as Category));
+      if (missing.length === 0) return prev;
+      const next = new Set(prev);
+      missing.forEach((c) => next.add(c as Category));
+      return next;
+    });
     navigate('/');
     setZoomRequest({ feature, id: ++zoomIdRef.current, center });
   }, [timeline, navigate]);
+
+  // ── Global search ──────────────────────────────────────────────────────────
+
+  const handleSelectSearchPolity = useCallback((r: SearchPolityResult) => {
+    const found = geojsonRef.current?.features.find((f) => (f.properties as FeatureProperties).id === r.id);
+    if (!found) return;
+    const props = found.properties as FeatureProperties;
+    handleNavigateToFeature(props);
+    setSelectedFeature(props);
+    setStack({ index: 0, total: 1 });
+  }, [handleNavigateToFeature]);
+
+  // Resolve a pending search-result selection once the geojson contains the feature.
+  useEffect(() => {
+    if (!pendingSearchSelectId) return;
+    const found = geojson.features.find((f) => (f.properties as FeatureProperties).id === pendingSearchSelectId);
+    if (found) {
+      const props = found.properties as FeatureProperties;
+      setSelectedFeature(props);
+      setStack({ index: 0, total: 1 });
+      setZoomRequest({ feature: props, id: ++zoomIdRef.current });
+      setPendingSearchSelectId(null);
+    }
+  }, [geojson, pendingSearchSelectId]);
+
+  const handleSelectSearchEvent = useCallback((r: SearchEventResult) => {
+    // Try current geojson first
+    const found = geojsonRef.current?.features.find((f) => (f.properties as FeatureProperties).id === r.id);
+    if (found) {
+      const props = found.properties as FeatureProperties;
+      handleNavigateToFeature(props);
+      setSelectedFeature(props);
+      setStack({ index: 0, total: 1 });
+      return;
+    }
+    // Outside current window: seek timeline to event start, wait for new window to load
+    if (r.yearStart != null) {
+      const dt = encodeDate(r.yearStart, 1, 1);
+      timeline.seek(dt);
+      setPendingSearchSelectId(r.id);
+    }
+  }, [handleNavigateToFeature, timeline]);
 
   const handleStartStory = useCallback(async (slug: string) => {
     setSelectedFeature(null);
@@ -706,6 +748,13 @@ export default function App() {
           showOhm={showOhm}
           showOhmAdmin={showOhmAdmin}
         />
+        <GlobalSearchPanel
+          yearMin={currentYear}
+          yearMax={currentYear + Math.max(1, Math.floor(timeline.stepSize / STEP_YEAR))}
+          isMobile={isMobile}
+          onSelectPolity={handleSelectSearchPolity}
+          onSelectEvent={handleSelectSearchEvent}
+        />
         {(() => {
           const items: string[] = [];
           if (seedLoading) items.push('Polities');
@@ -715,7 +764,7 @@ export default function App() {
           if (items.length === 0) return null;
           return (
             <div style={{
-              position: 'absolute', top: 0, left: 8, zIndex: 10,
+              position: 'absolute', bottom: 8, right: 8, zIndex: 10,
               background: 'rgba(0,0,0,0.7)', color: '#ccc', padding: '4px 10px',
               borderRadius: 6, fontSize: 12, pointerEvents: 'none',
             }}>
@@ -759,10 +808,8 @@ export default function App() {
                 || ohmLinks.some((l) => l.polityId === selectedFeature.id && !l.explicitlyUnlinked)
               : false
           }
-          onAddToOhm={(feature) => {
-            setOhmPlacement({ feature });
-            setSelectedFeature(null);  // close info panel to enter placement mode
-          }}
+          // onAddToOhm hidden — OHM API writes are blocked by Cloudflare on our backend.
+          // Re-enable when we have a working path (iD editor deep-link, whitelisted IP, etc.).
         />
       )}
 
@@ -941,12 +988,14 @@ export default function App() {
               setOhmPlacement(null);
             } catch (e: any) {
               console.error('[OHM] Create failed:', e);
-              if (e.message?.includes('401') || e.message?.includes('403')) {
-                // Token expired — clear and retry auth
+              const msg = e.message ?? '';
+              if (msg.includes('Just a moment') || msg.includes('Cloudflare') || msg.includes('challenges.cloudflare')) {
+                setOhmError('OHM blocked our server (Cloudflare). The API write path is not available from our backend. We will need to use the OHM iD editor instead.');
+              } else if (msg.includes('401')) {
                 clearOhmToken();
                 setOhmError('OHM session expired. Click Save again to re-authenticate.');
               } else {
-                setOhmError(e.message || 'Failed to create label');
+                setOhmError(msg || 'Failed to create label');
               }
             } finally {
               setOhmSaving(false);

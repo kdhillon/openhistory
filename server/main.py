@@ -903,6 +903,133 @@ def remove_territory_mappings_for_polity(polity_id: str, _: None = Depends(requi
         conn.close()
 
 
+@app.get("/api/search")
+def search_features(q: str, year_min: int, year_max: int, limit: int = 50):
+    """
+    Search polities and events by title (case-insensitive substring + simple
+    polity-type-word stripping). Returns matches sorted with those that overlap
+    the [year_min, year_max] window first, then the rest.
+
+    Response shape:
+      { polities: [PolityResult], events: [EventResult], totalCount: N }
+    """
+    if not q or len(q.strip()) < 2:
+        return {"polities": [], "events": [], "totalCount": 0}
+
+    raw = q.strip()
+    raw_lower = raw.lower()
+    # Mirror frontend stripPolityTypeWords for fuzzy polity matching.
+    type_words_re = re.compile(
+        r"\b(Kingdom|Empire|Republic|Sultanate|Caliphate|Principality|Duchy|"
+        r"Khanate|Tsardom|Emirate|County|Confederation|Confederacy|Federation|"
+        r"Dynasty|State|Imperial|Commonwealth|Viceroyalty|Protectorate|Mandate|"
+        r"Colony|Papacy|Holy|Tribe|Nation)\b\s*(?:of\s+)?",
+        re.IGNORECASE,
+    )
+    stripped_q = type_words_re.sub("", raw).strip().lower()
+    stripped_q = re.sub(r"^the\s+", "", stripped_q).strip()
+    if not stripped_q:
+        stripped_q = raw_lower
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # ── Polities ────────────────────────────────────────────────────────
+        # Match against either raw query OR stripped name (so "France" finds
+        # "Kingdom of France" and vice versa).
+        cur.execute(
+            """
+            SELECT id, slug, name, polity_type, year_start, year_end,
+                   wikidata_qid, wikipedia_summary, sitelinks_count
+            FROM polities
+            WHERE manually_hidden = FALSE
+              AND (
+                LOWER(name) LIKE %(raw)s
+                OR LOWER(REGEXP_REPLACE(
+                    REGEXP_REPLACE(name,
+                      '\\b(Kingdom|Empire|Republic|Sultanate|Caliphate|Principality|Duchy|Khanate|Tsardom|Emirate|County|Confederation|Confederacy|Federation|Dynasty|State|Imperial|Commonwealth|Viceroyalty|Protectorate|Mandate|Colony|Papacy|Holy|Tribe|Nation)\\b\\s*(of\\s+)?',
+                      '', 'gi'),
+                    '^the\\s+', '', 'i'
+                )) LIKE %(stripped)s
+              )
+            ORDER BY
+              -- Overlap with current window first (1 = overlap, 0 = not)
+              (CASE WHEN year_start <= %(ymax)s
+                     AND COALESCE(year_end, 9999) >= %(ymin)s THEN 1 ELSE 0 END) DESC,
+              -- Then by sitelinks (importance)
+              COALESCE(sitelinks_count, 0) DESC,
+              -- Then by year_start
+              year_start
+            LIMIT %(limit)s
+            """,
+            {
+                "raw": f"%{raw_lower}%",
+                "stripped": f"%{stripped_q}%",
+                "ymin": year_min, "ymax": year_max,
+                "limit": limit,
+            },
+        )
+        polity_rows = cur.fetchall()
+
+        # ── Events ──────────────────────────────────────────────────────────
+        cur.execute(
+            """
+            SELECT e.id, e.slug, e.title, e.year_start, e.year_end,
+                   e.categories, e.location_name, e.sitelinks_count,
+                   e.wikipedia_summary
+            FROM events e
+            WHERE e.manually_hidden = FALSE
+              AND LOWER(e.title) LIKE %(raw)s
+            ORDER BY
+              (CASE WHEN e.year_start <= %(ymax)s
+                     AND COALESCE(e.year_end, e.year_start) >= %(ymin)s THEN 1 ELSE 0 END) DESC,
+              COALESCE(e.sitelinks_count, 0) DESC,
+              e.year_start
+            LIMIT %(limit)s
+            """,
+            {
+                "raw": f"%{raw_lower}%",
+                "ymin": year_min, "ymax": year_max,
+                "limit": limit,
+            },
+        )
+        event_rows = cur.fetchall()
+
+        polities = [{
+            "id": str(r["id"]),
+            "slug": r["slug"],
+            "title": r["name"],
+            "polityType": r["polity_type"],
+            "yearStart": r["year_start"],
+            "yearEnd": r["year_end"],
+            "wikidataQid": r["wikidata_qid"],
+            "summary": (r["wikipedia_summary"] or "")[:140],
+            "sitelinksCount": r["sitelinks_count"],
+        } for r in polity_rows]
+
+        events = [{
+            "id": str(r["id"]),
+            "slug": r["slug"],
+            "title": r["title"],
+            "yearStart": r["year_start"],
+            "yearEnd": r["year_end"],
+            "categories": r["categories"] or [],
+            "primaryCategory": (r["categories"] or ["unknown"])[0],
+            "locationName": r["location_name"] or "",
+            "summary": (r["wikipedia_summary"] or "")[:140],
+            "sitelinksCount": r["sitelinks_count"],
+        } for r in event_rows]
+
+        return {
+            "polities": polities,
+            "events": events,
+            "totalCount": len(polities) + len(events),
+        }
+    finally:
+        conn.close()
+
+
 @app.get("/api/events")
 def get_events(year_min: int, year_max: int):
     """

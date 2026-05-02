@@ -298,6 +298,44 @@ export async function searchOhm(name: string): Promise<OhmSearchMatch[]> {
   return data.matches ?? [];
 }
 
+export interface SearchPolityResult {
+  id: string;
+  slug: string;
+  title: string;
+  polityType: string;
+  yearStart: number | null;
+  yearEnd: number | null;
+  wikidataQid: string | null;
+  summary: string;
+  sitelinksCount: number | null;
+}
+
+export interface SearchEventResult {
+  id: string;
+  slug: string;
+  title: string;
+  yearStart: number | null;
+  yearEnd: number | null;
+  categories: string[];
+  primaryCategory: string;
+  locationName: string;
+  summary: string;
+  sitelinksCount: number | null;
+}
+
+export interface SearchResponse {
+  polities: SearchPolityResult[];
+  events: SearchEventResult[];
+  totalCount: number;
+}
+
+export async function searchAll(q: string, yearMin: number, yearMax: number): Promise<SearchResponse> {
+  const params = new URLSearchParams({ q, year_min: String(yearMin), year_max: String(yearMax) });
+  const res = await fetch(`${API_BASE}/search?${params}`);
+  if (!res.ok) return { polities: [], events: [], totalCount: 0 };
+  return res.json();
+}
+
 export async function importPolityFromWikidata(qid: string): Promise<GeoJSON.Feature> {
   const res = await fetch(`${API_BASE}/polities/import-from-wikidata`, {
     method: 'POST',
