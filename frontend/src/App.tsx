@@ -257,6 +257,13 @@ export default function App() {
   }, [territorySource, ohmMatchedPolityIds, patchedTerritories, currentYear]);
 
   // Derive the GeoJSON passed to MapView: static features + windowed events + overrides
+  // Event features with overrides applied — used by UnlocatedEventsPanel so the list
+  // reflects in-app location/date edits immediately (without waiting for a pipeline rerun).
+  const mergedEventFeatures = useMemo(() => {
+    if (overrideMap.size === 0) return eventFeatures;
+    return eventFeatures.map((f) => overrideMap.get((f.properties as { id: string }).id) ?? f);
+  }, [eventFeatures, overrideMap]);
+
   const geojson = useMemo((): GeoJSON.FeatureCollection => {
     const baseFeatures = [...staticFeatures, ...eventFeatures];
     const withOverrides = overrideMap.size > 0
@@ -324,14 +331,18 @@ export default function App() {
     setLocalPolygonUnlinks((prev) => new Set(prev).add(polygonId));
   }, []);
 
-  const handleUnlinkOhmTerritory = useCallback((ohmName: string) => {
+  const handleUnlinkOhmTerritory = useCallback(async (ohmName: string) => {
     const link = ohmLinks.find((l) => l.ohmName === ohmName && l.polityId && !l.explicitlyUnlinked);
-    if (link) {
-      unlinkOhmLink(link.id).catch(console.error);
-    } else {
-      suppressOhmLink(ohmName).catch(console.error);
+    try {
+      if (link) {
+        await unlinkOhmLink(link.id);
+      } else {
+        await suppressOhmLink(ohmName);
+      }
+      refreshOhmLinks();
+    } catch (e) {
+      console.error(e);
     }
-    refreshOhmLinks();
   }, [ohmLinks, refreshOhmLinks]);
 
   const handleToggleHiddenNation = useCallback((polityId: string) => {
@@ -692,7 +703,7 @@ export default function App() {
       <div style={{ position: 'absolute', inset: `${topBarHeight}px 0 ${bottomBarHeight}px 0` }}>
         <div style={{ position: 'absolute', bottom: 10, left: 10, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none', maxWidth: 240 }}>
           <UnlocatedEventsPanel
-            eventFeatures={eventFeatures}
+            eventFeatures={mergedEventFeatures}
             currentDateInt={timeline.currentDateInt}
             stepSize={timeline.stepSize}
             onSelectFeature={(props) => {
@@ -763,8 +774,13 @@ export default function App() {
           if (ohmLinksLoading) items.push('OHM Links');
           if (items.length === 0) return null;
           return (
+            // Fixed (viewport-relative) so it's above the InfoPanel (zIndex 90),
+            // and offset above the timeline bar so it's never clipped.
             <div style={{
-              position: 'absolute', bottom: 8, right: 8, zIndex: 10,
+              position: 'fixed',
+              bottom: (isMobile ? 90 : 64) + 8,
+              right: 8,
+              zIndex: 100,
               background: 'rgba(0,0,0,0.7)', color: '#ccc', padding: '4px 10px',
               borderRadius: 6, fontSize: 12, pointerEvents: 'none',
             }}>

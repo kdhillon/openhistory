@@ -462,9 +462,13 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           'text-color': [
             'case',
             ['!=', ['get', 'polityId'], null], '#eeeeee',
-            '#9e9e9e',
+            '#bebebe',
           ],
-          'text-halo-color': 'rgba(0,0,0,0.6)',
+          'text-halo-color': [
+            'case',
+            ['!=', ['get', 'polityId'], null], 'rgba(0,0,0,0.6)',  // mapped → softer halo
+            '#000000',                                              // unmapped → opaque black
+          ],
           'text-halo-width': 1.5,
         },
       });
@@ -574,8 +578,8 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           visibility: ohmInitialVis,
         },
         paint: {
-          'text-color': '#9e9e9e',
-          'text-halo-color': 'rgba(0,0,0,0.6)',
+          'text-color': '#bebebe',
+          'text-halo-color': '#000000',  // default = unmapped (black). Overridden per-name in rebuildColors.
           'text-halo-width': 1.5,
         },
       });
@@ -598,8 +602,8 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           visibility: ohmInitialVis,
         },
         paint: {
-          'text-color': '#9e9e9e',
-          'text-halo-color': 'rgba(0,0,0,0.5)',
+          'text-color': '#bebebe',
+          'text-halo-color': '#000000',  // default = unmapped (black). Overridden per-name in rebuildColors.
           'text-halo-width': 1,
         },
       });
@@ -661,7 +665,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           'icon-color': ['coalesce', ['get', '_color'], '#9E9E9E'],
           'icon-opacity': ['number', ['get', '_opacity'], 1.0],
           'text-color': '#bdbdbd',
-          'text-halo-color': 'rgba(0,0,0,0.6)',
+          'text-halo-color': '#000000',
           'text-halo-width': 1,
         },
       });
@@ -716,9 +720,13 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           'text-color': [
             'case',
             ['==', ['get', 'mapped'], true], '#eeeeee',  // mapped → white
-            '#9e9e9e',                                      // unmapped → gray
+            '#bebebe',                                      // unmapped → gray (lighter)
           ],
-          'text-halo-color': 'rgba(0,0,0,0.7)',
+          'text-halo-color': [
+            'case',
+            ['==', ['get', 'mapped'], true], 'rgba(0,0,0,0.7)',  // mapped → softer halo
+            '#000000',                                            // unmapped → opaque black
+          ],
           'text-halo-width': 2,
         },
       });
@@ -1004,9 +1012,21 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       const fillColor = fillPairs.length > 0
         ? (['match', nameExpr, ...fillPairs, '#78909C'] as unknown as maplibregl.ExpressionSpecification)
         : '#78909C';
+      // Unmapped polity label color — ~20% lighter than the original #9e9e9e
+      // so the gray text reads as visually lighter without changing stroke weight.
+      const UNMAPPED_LABEL_COLOR = '#bebebe';
       const labelColor = labelPairs.length > 0
-        ? (['match', nameExpr, ...labelPairs, '#9e9e9e'] as unknown as maplibregl.ExpressionSpecification)
-        : '#9e9e9e';
+        ? (['match', nameExpr, ...labelPairs, UNMAPPED_LABEL_COLOR] as unknown as maplibregl.ExpressionSpecification)
+        : UNMAPPED_LABEL_COLOR;
+      // Halo color — black for unmapped (gray text needs strong stroke for contrast),
+      // softer rgba black for mapped (white text reads fine with a lighter halo).
+      const haloPairs: (string | number)[] = [];
+      for (let i = 0; i < labelPairs.length; i += 2) {
+        haloPairs.push(labelPairs[i] as string, 'rgba(0,0,0,0.6)');  // mapped → softer halo
+      }
+      const labelHaloColor = haloPairs.length > 0
+        ? (['match', nameExpr, ...haloPairs, '#000000'] as unknown as maplibregl.ExpressionSpecification)
+        : '#000000';
       // Label text: mapped names strip date suffix; unmapped fall back to raw tile name.
       const labelText = textPairs.length > 0
         ? (['match', nameExpr, ...textPairs, nameExpr] as unknown as maplibregl.ExpressionSpecification)
@@ -1018,6 +1038,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       for (const id of ['ohm-labels', 'ohm-labels-small']) {
         if (map.getLayer(id)) {
           map.setPaintProperty(id, 'text-color', labelColor);
+          map.setPaintProperty(id, 'text-halo-color', labelHaloColor);
           map.setLayoutProperty(id, 'text-field', labelText);
         }
       }
