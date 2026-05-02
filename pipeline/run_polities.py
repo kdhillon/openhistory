@@ -238,12 +238,20 @@ def extract_polity(entity: dict) -> Optional[dict]:
         return None
 
     labels    = entity.get("labels", {})
+    aliases   = entity.get("aliases", {})
     sitelinks = entity.get("sitelinks", {})
     claims    = entity.get("claims", {})
 
     label_en = labels.get("en", {}).get("value")
     if label_en:
         label_en = label_en[0].upper() + label_en[1:]
+
+    # Wikidata aliases are alternate names (e.g. "Persia" for Iran).
+    # Capture English aliases — used for OHM tile name matching and search.
+    aliases_en = [
+        a.get("value") for a in aliases.get("en", [])
+        if isinstance(a, dict) and a.get("value")
+    ]
 
     enwiki         = sitelinks.get("enwiki", {})
     wikipedia_title = enwiki.get("title")
@@ -351,6 +359,7 @@ def extract_polity(entity: dict) -> Optional[dict]:
     return {
         "wikidata_qid":         qid,
         "name":                 label_en or wikipedia_title,
+        "aliases":              aliases_en,
         "wikipedia_title":      wikipedia_title,
         "wikipedia_url":        wikipedia_url,
         "slug":                 slug,

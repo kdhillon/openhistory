@@ -60,7 +60,7 @@ def export(conn: "psycopg2.connection | None" = None) -> int:
     # Polities
     cur.execute("""
         SELECT
-          id, wikidata_qid, slug, name, wikipedia_title, wikipedia_summary, wikipedia_url,
+          id, wikidata_qid, slug, name, aliases, wikipedia_title, wikipedia_summary, wikipedia_url,
           year_start, year_end, date_is_fuzzy,
           polity_type, capital_name, capital_wikidata_qid,
           lng, lat, preceded_by_qid, succeeded_by_qid,
@@ -151,6 +151,7 @@ def export(conn: "psycopg2.connection | None" = None) -> int:
                 "wikidataQid": row["wikidata_qid"],
                 "slug": row["slug"],
                 "title": row["name"],
+                "aliases": row.get("aliases") or [],
                 "wikipediaTitle": row["wikipedia_title"],
                 "wikipediaSummary": row["wikipedia_summary"] or "",
                 "wikipediaUrl": row["wikipedia_url"],

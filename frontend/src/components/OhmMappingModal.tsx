@@ -54,7 +54,11 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, p
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
     const matches = q
-      ? polities.filter((p) => p.title.toLowerCase().includes(q))
+      ? polities.filter((p) => {
+          if (p.title.toLowerCase().includes(q)) return true;
+          const aliases = (p.aliases as string[] | undefined) ?? [];
+          return aliases.some((a) => a.toLowerCase().includes(q));
+        })
       : polities;
     const overlaps = matches
       .filter((p) => overlapsRange(p, yearStart, yearEnd))

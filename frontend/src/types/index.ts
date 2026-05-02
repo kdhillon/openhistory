@@ -60,6 +60,8 @@ export interface FeatureProperties {
   wikidataClasses?: string[];
   /** Polity subtype — only present on polity features. */
   polityType?: PolityType;
+  /** Wikidata English aliases (e.g. ["Persia"] for Iran). Polity features only. */
+  aliases?: string[];
   /** True once polity_territories has polygon data for this polity. */
   hasTerritory?: boolean;
   /** Capital city name — polity features only. */

@@ -434,7 +434,7 @@ async def patch_polity(polity_id: str, request: Request, _: None = Depends(requi
         # Return the updated polity as a GeoJSON-style feature
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT id, wikidata_qid, slug, name, wikipedia_title, wikipedia_summary, wikipedia_url,
+            SELECT id, wikidata_qid, slug, name, aliases, wikipedia_title, wikipedia_summary, wikipedia_url,
                    year_start, year_end, date_is_fuzzy, polity_type,
                    capital_name, capital_wikidata_qid, lng, lat,
                    preceded_by_qid, succeeded_by_qid, sovereign_qids, p31_qids,
@@ -603,6 +603,7 @@ def _build_polity_feature(row: dict) -> dict:
             "wikidataQid": row["wikidata_qid"],
             "slug": row["slug"],
             "title": row["name"],
+            "aliases": row.get("aliases") or [],
             "wikipediaTitle": row["wikipedia_title"],
             "wikipediaSummary": row["wikipedia_summary"] or "",
             "wikipediaUrl": row["wikipedia_url"],
@@ -654,7 +655,7 @@ async def import_polity_from_wikidata(request: Request, _: None = Depends(requir
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT id, wikidata_qid, slug, name, wikipedia_title, wikipedia_summary, wikipedia_url,
+            SELECT id, wikidata_qid, slug, name, aliases, wikipedia_title, wikipedia_summary, wikipedia_url,
                    year_start, year_end, date_is_fuzzy, polity_type,
                    capital_name, capital_wikidata_qid, lng, lat,
                    preceded_by_qid, succeeded_by_qid, p31_qids,
@@ -675,11 +676,13 @@ async def import_polity_from_wikidata(request: Request, _: None = Depends(requir
 
     claims = entity.get("claims", {})
     labels = entity.get("labels", {})
+    aliases = entity.get("aliases", {})
     sitelinks = entity.get("sitelinks", {})
 
     name = (labels.get("en") or labels.get(next(iter(labels), ""), {})).get("value") or qid
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     wp_title = sitelinks.get("enwiki", {}).get("title")
+    aliases_en = [a.get("value") for a in aliases.get("en", []) if isinstance(a, dict) and a.get("value")]
 
     year_start = _wd_year(claims, "P571") or _wd_year(claims, "P580")
     year_end   = _wd_year(claims, "P576") or _wd_year(claims, "P582")
@@ -723,27 +726,27 @@ async def import_polity_from_wikidata(request: Request, _: None = Depends(requir
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
             INSERT INTO polities (
-                wikidata_qid, slug, name, wikipedia_title, wikipedia_summary, wikipedia_url,
+                wikidata_qid, slug, name, aliases, wikipedia_title, wikipedia_summary, wikipedia_url,
                 year_start, year_end, date_is_fuzzy, polity_type,
                 capital_name, capital_wikidata_qid, lng, lat,
                 preceded_by_qid, succeeded_by_qid, p31_qids,
                 data_version, pipeline_run
             ) VALUES (
-                %(wikidata_qid)s, %(slug)s, %(name)s, %(wikipedia_title)s,
+                %(wikidata_qid)s, %(slug)s, %(name)s, %(aliases)s, %(wikipedia_title)s,
                 %(wikipedia_summary)s, %(wikipedia_url)s,
                 %(year_start)s, %(year_end)s, FALSE, %(polity_type)s,
                 %(capital_name)s, %(capital_wikidata_qid)s, %(lng)s, %(lat)s,
                 %(preceded_by_qid)s, %(succeeded_by_qid)s, %(p31_qids)s,
                 2, 'manual-import'
             )
-            ON CONFLICT (wikidata_qid) DO UPDATE SET pipeline_run = polities.pipeline_run
-            RETURNING id, wikidata_qid, slug, name, wikipedia_title, wikipedia_summary, wikipedia_url,
+            ON CONFLICT (wikidata_qid) DO UPDATE SET aliases = EXCLUDED.aliases, pipeline_run = polities.pipeline_run
+            RETURNING id, wikidata_qid, slug, name, aliases, wikipedia_title, wikipedia_summary, wikipedia_url,
                       year_start, year_end, date_is_fuzzy, polity_type,
                       capital_name, capital_wikidata_qid, lng, lat,
                       preceded_by_qid, succeeded_by_qid, p31_qids,
                       sitelinks_count, data_version, pipeline_run
         """, {
-            "wikidata_qid": qid, "slug": slug, "name": name,
+            "wikidata_qid": qid, "slug": slug, "name": name, "aliases": aliases_en,
             "wikipedia_title": wp_title, "wikipedia_summary": wp_summary, "wikipedia_url": wp_url,
             "year_start": year_start, "year_end": year_end, "polity_type": polity_type,
             "capital_name": capital_name, "capital_wikidata_qid": capital_qid,
@@ -770,7 +773,7 @@ def get_manual_polities():
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT id, wikidata_qid, slug, name, wikipedia_title, wikipedia_summary, wikipedia_url,
+            SELECT id, wikidata_qid, slug, name, aliases, wikipedia_title, wikipedia_summary, wikipedia_url,
                    year_start, year_end, date_is_fuzzy, polity_type,
                    capital_name, capital_wikidata_qid, lng, lat,
                    preceded_by_qid, succeeded_by_qid, p31_qids,
@@ -816,7 +819,7 @@ def get_polity_overrides():
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT id, wikidata_qid, slug, name, wikipedia_title, wikipedia_summary, wikipedia_url,
+            SELECT id, wikidata_qid, slug, name, aliases, wikipedia_title, wikipedia_summary, wikipedia_url,
                    year_start, year_end, date_is_fuzzy, polity_type,
                    capital_name, capital_wikidata_qid, lng, lat,
                    preceded_by_qid, succeeded_by_qid, sovereign_qids, p31_qids
@@ -936,11 +939,11 @@ def search_features(q: str, year_min: int, year_max: int, limit: int = 50):
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         # ── Polities ────────────────────────────────────────────────────────
-        # Match against either raw query OR stripped name (so "France" finds
-        # "Kingdom of France" and vice versa).
+        # Match against raw query, stripped polity name, OR any alias
+        # (so "Persia" finds Iran via its English aliases).
         cur.execute(
             """
-            SELECT id, slug, name, polity_type, year_start, year_end,
+            SELECT id, slug, name, aliases, polity_type, year_start, year_end,
                    wikidata_qid, wikipedia_summary, sitelinks_count
             FROM polities
             WHERE manually_hidden = FALSE
@@ -952,6 +955,10 @@ def search_features(q: str, year_min: int, year_max: int, limit: int = 50):
                       '', 'gi'),
                     '^the\\s+', '', 'i'
                 )) LIKE %(stripped)s
+                OR EXISTS (
+                  SELECT 1 FROM unnest(aliases) AS alias
+                  WHERE LOWER(alias) LIKE %(raw)s
+                )
               )
             ORDER BY
               -- Overlap with current window first (1 = overlap, 0 = not)

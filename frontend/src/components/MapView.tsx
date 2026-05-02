@@ -904,6 +904,8 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       if (!map.getLayer('ohm-fills') && !map.getLayer('ohm-labels')) return;
 
       // Build lowercase polity-name → color/id lookup from loaded polities (always fresh via ref)
+      // Includes both the canonical title and all Wikidata aliases (e.g. "Persia" → Iran),
+      // so OHM tile names that match an alias resolve to the right polity.
       // Note: avoid `new Map()` — `Map` is shadowed by the maplibre-gl import.
       const polityColorByName: Record<string, string> = {};
       const polityIdByName: Record<string, string> = {};
@@ -912,11 +914,17 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         const p = f.properties as FeatureProperties;
         if (p.featureType !== 'polity') continue;
         const color = CATEGORY_COLORS[(p.polityType as keyof typeof CATEGORY_COLORS) ?? 'other'] ?? CATEGORY_COLORS.other;
-        const key = p.title.toLowerCase();
-        polityColorByName[key] = color;
-        polityIdByName[key] = p.id;
-        if (!polityIdsByName[key]) polityIdsByName[key] = [];
-        polityIdsByName[key].push(p.id);
+        const aliases = (p.aliases as string[] | undefined) ?? [];
+        const keys = [p.title, ...aliases]
+          .filter((n): n is string => typeof n === 'string' && n.length > 0)
+          .map((n) => n.toLowerCase());
+        for (const key of keys) {
+          // Title takes priority for color/id; aliases only fill in if no title match exists yet.
+          if (!polityColorByName[key]) polityColorByName[key] = color;
+          if (!polityIdByName[key]) polityIdByName[key] = p.id;
+          if (!polityIdsByName[key]) polityIdsByName[key] = [];
+          if (!polityIdsByName[key].includes(p.id)) polityIdsByName[key].push(p.id);
+        }
       }
 
       // queryRenderedFeatures can throw if the map's WebGL painter isn't ready.

@@ -288,14 +288,14 @@ def upsert_polities(conn, polity_records: list[dict], pipeline_run: str = "") ->
 
     sql = """
         INSERT INTO polities (
-            id, wikidata_qid, slug, name, short_name, polity_type,
+            id, wikidata_qid, slug, name, aliases, short_name, polity_type,
             wikipedia_title, wikipedia_summary, wikipedia_url,
             year_start, year_end, date_is_fuzzy,
             capital_name, capital_wikidata_qid, lng, lat,
             preceded_by_qid, succeeded_by_qid, location_wikidata_qid,
             sovereign_qids, p31_qids, data_version, pipeline_run
         ) VALUES (
-            %(id)s, %(wikidata_qid)s, %(slug)s, %(name)s, %(short_name)s, %(polity_type)s,
+            %(id)s, %(wikidata_qid)s, %(slug)s, %(name)s, %(aliases)s, %(short_name)s, %(polity_type)s,
             %(wikipedia_title)s, %(wikipedia_summary)s, %(wikipedia_url)s,
             %(year_start)s, %(year_end)s, %(date_is_fuzzy)s,
             %(capital_name)s, %(capital_wikidata_qid)s, %(lng)s, %(lat)s,
@@ -305,6 +305,7 @@ def upsert_polities(conn, polity_records: list[dict], pipeline_run: str = "") ->
         ON CONFLICT (wikidata_qid) DO UPDATE SET
             slug                 = EXCLUDED.slug,
             name                 = EXCLUDED.name,
+            aliases              = EXCLUDED.aliases,
             short_name           = COALESCE(EXCLUDED.short_name, polities.short_name),
             polity_type          = EXCLUDED.polity_type,
             wikipedia_summary    = COALESCE(EXCLUDED.wikipedia_summary, polities.wikipedia_summary),
@@ -350,6 +351,7 @@ def upsert_polities(conn, polity_records: list[dict], pipeline_run: str = "") ->
                 "wikidata_qid":         rec.get("wikidata_qid"),
                 "slug":                 rec["slug"],
                 "name":                 rec["name"],
+                "aliases":              rec.get("aliases") or [],
                 "short_name":           rec.get("short_name"),
                 "polity_type":          rec.get("polity_type", "other"),
                 "wikipedia_title":      rec.get("wikipedia_title"),
