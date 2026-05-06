@@ -121,6 +121,11 @@ export function AboutPage({ onBack }: Props) {
           <a style={styles.a} href="https://github.com/kdhillon/openhistory/issues" target="_blank" rel="noreferrer">GitHub</a>.
         </p>
 
+        <h2 style={styles.h2}>Contact</h2>
+        <p style={styles.p}>
+          To get in touch for promotion or collaboration, reach me at kyle [at] openhistory.app.
+        </p>
+
         <hr style={styles.rule} />
         <p style={styles.footer}>
           Event &amp; polity data © <a style={styles.a} href="https://www.wikidata.org" target="_blank" rel="noreferrer">Wikidata</a> contributors (CC BY-SA) ·{' '}
