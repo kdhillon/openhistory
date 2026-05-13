@@ -65,7 +65,7 @@ def export(conn: "psycopg2.connection | None" = None) -> int:
           polity_type, capital_name, capital_wikidata_qid,
           lng, lat, preceded_by_qid, succeeded_by_qid,
           sovereign_qids, p31_qids, data_version, pipeline_run,
-          sitelinks_count
+          sitelinks_count, parents
         FROM polities
         WHERE lng IS NOT NULL AND lat IS NOT NULL
            OR id IN (SELECT DISTINCT polity_id FROM territories WHERE polity_id IS NOT NULL)
@@ -169,6 +169,7 @@ def export(conn: "psycopg2.connection | None" = None) -> int:
                 "capitalWikidataQid": row["capital_wikidata_qid"],
                 "precededByQid": row["preceded_by_qid"],
                 "succeededByQid": row["succeeded_by_qid"],
+                "parents": row["parents"] or [],
                 "sovereignName": sovereign_resolved["name"] if sovereign_resolved else None,
                 "sovereignSlug": sovereign_resolved["slug"] if sovereign_resolved else None,
                 "sovereignQid":  sovereign_resolved["qid"] if sovereign_resolved else None,
