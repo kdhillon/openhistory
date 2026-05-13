@@ -41,7 +41,7 @@ function btnStyle(bg: string, disabled = false): React.CSSProperties {
 export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, osmType, osmId, polities, onClose, onPolityImported }: Props) {
   const [query, setQuery]               = useState(() => stripPolityTypeWords(ohmName));
   const [selectedId, setSelectedId]     = useState<string | null>(null);
-  const [status, setStatus]             = useState<'idle' | 'updating' | 'updated' | 'error'>('idle');
+  const [status, setStatus]             = useState<'idle' | 'updating' | 'updated' | 'opened' | 'error'>('idle');
   const [errorMsg, setErrorMsg]         = useState<string | null>(null);
   const [ohmToken, setOhmToken] = useState<string | null>(() => getOhmToken());
 
@@ -87,8 +87,10 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
     return () => { cancelled = true; };
   }, [query, wdOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Push the polity's wikidata (and wikipedia) tag onto the OHM element via OSM API.
-  // Sign-in is required; the footer button switches to "Sign in to OHM" when no token.
+  // API path: push the polity's wikidata (and wikipedia) tag onto the OHM element
+  // via our backend, which proxies the OSM API write under the user's OAuth token.
+  // Currently blocked by OHM's Cloudflare (returns "Just a moment" challenge to
+  // any non-browser client) — pending IP whitelist from OHM ops.
   async function handleUpdateOhm(polity?: FeatureProperties) {
     const p = polity ?? polities.find((x) => x.id === selectedId);
     if (!p) return;
@@ -99,8 +101,6 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
       return;
     }
     if (!ohmToken) {
-      // Should not happen via the footer (which swaps in the sign-in button when
-      // no token), but double-click on a row could land here.
       handleSignInToOhm();
       return;
     }
@@ -125,6 +125,41 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
     }
   }
 
+  // Fallback path: copy the polity's wikidata QID to the clipboard and deep-link
+  // to OHM's iD editor. Works for everyone (no auth needed). User pastes the QID
+  // into the wikidata field in iD and saves.
+  //
+  // Two URL parts:
+  //  • `?{type}={id}` — selects the element if our type guess matches. The frontend
+  //    type comes from the click site; it's reliable for polygon clicks but unreliable
+  //    for centroid-label clicks (label points carry the underlying RELATION's id,
+  //    not a node's, despite being rendered from a point layer).
+  //  • `#map=zoom/lat/lng` — always present, so iD lands at the user's current map
+  //    view regardless of whether the element-select succeeds. Without this, iD
+  //    defaults to world view when the element ID can't be resolved.
+  async function handleOpenInOhm(polity?: FeatureProperties) {
+    const p = polity ?? polities.find((x) => x.id === selectedId);
+    if (!p) return;
+    const qid = p.wikidataQid;
+    if (!qid) {
+      setStatus('error');
+      setErrorMsg(`${p.title} has no Wikidata QID in our database — pick a different polity or import one from Wikipedia below.`);
+      return;
+    }
+    setErrorMsg(null);
+    try { await navigator.clipboard.writeText(qid); } catch { /* clipboard blocked — user can copy from the success card */ }
+    const zoom = Math.max(13, Math.round(Number(localStorage.getItem('oh-map-zoom') ?? '5')));
+    const lat = Number(localStorage.getItem('oh-map-lat') ?? '30').toFixed(4);
+    const lng = Number(localStorage.getItem('oh-map-lng') ?? '0').toFixed(4);
+    // Centroid-label clicks almost always carry a relation id; if our frontend tagged
+    // it 'node' from the sign-convention heuristic, override to 'relation' so iD has
+    // a better chance of selecting the element.
+    const effectiveType = osmType === 'node' ? 'relation' : osmType;
+    const url = `https://www.openhistoricalmap.org/edit?${effectiveType}=${osmId}#map=${zoom}/${lat}/${lng}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setStatus('opened');
+  }
+
   async function handleSignInToOhm() {
     try {
       const r = await fetch(`${API_BASE}/ohm/auth-url`);
@@ -135,9 +170,6 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
         setErrorMsg('Backend returned no auth URL.');
         return;
       }
-      // Open in a new tab so the user keeps their local dev / map context.
-      // The OAuth `redirect_uri` is the production callback, which forwards the
-      // token back to the originating origin via postMessage (see callback handler).
       window.open(data.url, '_blank', 'noopener,noreferrer');
     } catch (e) {
       setStatus('error');
@@ -190,7 +222,7 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
     boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
     display: 'flex', flexDirection: 'column', gap: 14,
     position: 'relative',
-    ...(status === 'updated'
+    ...((status === 'updated' || status === 'opened')
       ? { height: 'auto' }
       : { height: 'calc(100vh - 120px)', maxHeight: 780 }),
     overflow: 'hidden',
@@ -235,6 +267,15 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
             <div style={{ color: '#66bb6a', fontSize: 15, marginBottom: 8 }}>✓ OHM updated</div>
             <div style={{ color: '#8899bb', fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
               Tag pushed to <code>{osmType}/{osmId}</code>. The polygon will recolor once OHM's tile cache refreshes (usually within a few minutes).
+            </div>
+            <button onClick={onClose} style={btnStyle('#3a4560')}>Close</button>
+          </div>
+        ) : status === 'opened' ? (
+          <div style={{ textAlign: 'center', padding: '14px 4px' }}>
+            <div style={{ color: '#66bb6a', fontSize: 15, marginBottom: 8 }}>✓ OHM editor opened in a new tab</div>
+            <div style={{ color: '#8899bb', fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
+              QID copied to your clipboard. In iD, click the <code>wikidata</code> field on this element and paste, then Save.
+              The map will recolor once OHM's tile cache refreshes.
             </div>
             <button onClick={onClose} style={btnStyle('#3a4560')}>Close</button>
           </div>
@@ -360,15 +401,28 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
               <div style={{ fontSize: 12, color: '#ef5350' }}>{errorMsg}</div>
             )}
 
-            {/* Footer buttons. The only write path is the OSM API — sign-in required. */}
+            {/* Footer buttons. Two write paths:
+                  (a) "Update OHM →" — direct OSM API write via our backend, requires
+                      OAuth sign-in. Currently 403'd by OHM's Cloudflare for non-browser
+                      clients; awaiting IP whitelist.
+                  (b) "Open in editor" — deep-link to OHM's iD editor with the element
+                      pre-selected and the QID copied to clipboard. Always works. */}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
               <button onClick={onClose} style={btnStyle('#3a4560')}>Cancel</button>
+              <button
+                onClick={() => handleOpenInOhm()}
+                disabled={!selectedId}
+                style={btnStyle('#2d3a55', !selectedId)}
+                title="Copy QID and open OHM's iD editor on this element (always works)"
+              >
+                Open in editor
+              </button>
               {ohmToken ? (
                 <button
                   onClick={() => handleUpdateOhm()}
                   disabled={!selectedId || status === 'updating'}
                   style={btnStyle('#2a5a3a', !selectedId || status === 'updating')}
-                  title="Push wikidata/wikipedia tags onto this OHM element via the OSM API"
+                  title="Push wikidata/wikipedia tags directly via the OSM API (requires OHM whitelist)"
                 >
                   {status === 'updating' ? 'Updating…' : 'Update OHM →'}
                 </button>
@@ -376,9 +430,9 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
                 <button
                   onClick={handleSignInToOhm}
                   style={btnStyle('#2a5a3a')}
-                  title="Sign in to OpenHistoricalMap so we can push tag edits via their API"
+                  title="Sign in to OpenHistoricalMap to use the direct-write API path"
                 >
-                  Sign in to OHM to update →
+                  Sign in to OHM →
                 </button>
               )}
             </div>

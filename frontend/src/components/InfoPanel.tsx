@@ -389,7 +389,11 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
       });
   }, [article]);
 
-  // Intercept wiki-content link clicks — navigate on-map if the article exists in our dataset
+  // Intercept wiki-content link clicks — navigate on-map if the article exists in our dataset.
+  // For polities and events we navigate in-app. For regions we prefer the polity twin
+  // (same wikidataQid) when one exists; if there's no polity twin we don't intercept,
+  // since navigating to a region card auto-activates the 'region' category filter
+  // (cluttering the map) and that's not what the user wants from a wiki-link click.
   const handleBodyClick = useCallback((e: React.MouseEvent) => {
     if (!geojson || !onNavigateToFeature) return;
     const anchor = (e.target as Element).closest('a');
@@ -403,11 +407,26 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
       const p = f.properties as FeatureProperties;
       return p.wikipediaTitle === slug || p.wikipediaTitle === slugSpaces || p.slug === slug;
     });
-    if (found) {
+    if (!found) return;  // no match → link opens Wikipedia normally
+    const foundProps = found.properties as FeatureProperties;
+
+    if (foundProps.featureType === 'region') {
+      // Region-only matches: open the polity twin if we have one, else let the link
+      // open Wikipedia in a new tab (don't pollute the map with region markers).
+      if (!foundProps.wikidataQid) return;
+      const twin = geojson.features.find((f) => {
+        const p = f.properties as FeatureProperties;
+        return p.featureType === 'polity' && p.wikidataQid === foundProps.wikidataQid;
+      });
+      if (!twin) return;
       e.preventDefault();
-      onNavigateToFeature(found.properties as FeatureProperties);
+      onNavigateToFeature(twin.properties as FeatureProperties);
+      return;
     }
-    // no match → let the link open normally in a new tab
+
+    // Polities and events: navigate in-app as before.
+    e.preventDefault();
+    onNavigateToFeature(foundProps);
   }, [geojson, onNavigateToFeature]);
 
 
