@@ -2166,7 +2166,16 @@ async def ohm_update_element(request: Request):
     # which serves a "Just a moment" JS challenge to non-browser clients. Overpass
     # returns the same data (version + tags + members + lat/lon) as JSON with no
     # bot challenge. The subsequent PUT to OSM API for the write still works.
-    overpass_query = f"[out:json][timeout:30];{osm_type}({osm_id});out meta tags;"
+    #
+    # We query node/way/relation in one shot because the client's osm_type can be
+    # wrong: centroid-label features on the frontend carry an osm_id that may point
+    # to a relation, but the tile's positive id sign made the client tag it 'node'.
+    # We pick whichever type Overpass actually finds, preferring the requested one.
+    overpass_query = (
+        f"[out:json][timeout:30];"
+        f"(node({osm_id});way({osm_id});relation({osm_id}););"
+        f"out meta tags;"
+    )
     def _fetch_element():
         data = urllib.parse.urlencode({"data": overpass_query}).encode()
         req = urllib.request.Request(
@@ -2182,13 +2191,16 @@ async def ohm_update_element(request: Request):
         op_data = await loop.run_in_executor(None, _fetch_element)
     except urllib.error.HTTPError as e:
         detail = e.read().decode()
-        print(f"[ohm] overpass fetch {osm_type}/{osm_id} failed: {e.code} {detail}", flush=True)
-        raise HTTPException(e.code, f"Failed to read {osm_type}/{osm_id}: {detail}")
+        print(f"[ohm] overpass fetch {osm_id} failed: {e.code} {detail}", flush=True)
+        raise HTTPException(e.code, f"Failed to read element {osm_id}: {detail}")
 
     elements = op_data.get("elements") or []
     if not elements:
-        raise HTTPException(404, f"{osm_type}/{osm_id} not found in OHM")
-    el = elements[0]
+        raise HTTPException(404, f"No element {osm_id} (node/way/relation) found in OHM")
+    # Prefer the requested type; fall back to whatever exists.
+    el = next((e for e in elements if e.get("type") == osm_type), elements[0])
+    # The actual type drives the PUT URL and the XML element name.
+    osm_type = el.get("type", osm_type)
     version = el.get("version")
     if version is None:
         raise HTTPException(502, f"Overpass response missing version for {osm_type}/{osm_id}")
