@@ -9,7 +9,8 @@ Runs the full post-pipeline sequence after a pipeline pass:
   3. backfill-part-of         — fetch P361 for events missing it
   4. backfill-city-summaries  — fetch Wikipedia summaries for locations missing them
   5. backfill-sitelinks       — fetch sitelinks count for zoom-based importance filtering
-  6. export GeoJSON           — write frontend/public/data/seed.geojson
+  6. backfill-polity-parents  — fetch Wikidata parent links onto polities.parents JSONB
+  7. export GeoJSON           — write frontend/public/data/seed.geojson
 
 Usage:
     python3 -m pipeline.post_process          # standalone
@@ -67,6 +68,8 @@ def main():
              [py, str(SCRIPTS / "backfill-city-summaries.py")]),
             ("Backfill Wikidata sitelinks count for events",
              [py, str(SCRIPTS / "backfill-sitelinks.py")]),
+            ("Backfill polity parent links from Wikidata",
+             [py, str(SCRIPTS / "backfill-polity-parents.py")]),
         ]
 
     steps.append(
