@@ -10,6 +10,7 @@ Endpoints:
     PATCH /api/polities/{polity_id}     — save a user correction to a polity record
 """
 
+import asyncio
 import atexit
 import anthropic
 import json
@@ -18,6 +19,7 @@ import re
 import urllib.request
 import urllib.parse
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.responses import Response as FastAPIResponse
 from typing import Optional
@@ -26,6 +28,8 @@ from fastapi.middleware.gzip import GZipMiddleware
 import psycopg2
 import psycopg2.extras
 from posthog import Posthog
+
+from pipeline.polity_parents import fetch_parents
 
 DATABASE_URL = os.environ["DATABASE_URL"]  # set via Railway env
 
@@ -44,7 +48,7 @@ async def lifespan(app: FastAPI):
     global posthog_client
     if POSTHOG_API_KEY:
         posthog_client = Posthog(
-            api_key=POSTHOG_API_KEY,
+            project_api_key=POSTHOG_API_KEY,
             host=POSTHOG_HOST,
             enable_exception_autocapture=True,
         )
@@ -653,6 +657,7 @@ def _build_polity_feature(row: dict) -> dict:
             "capitalWikidataQid": row["capital_wikidata_qid"],
             "precededByQid": row["preceded_by_qid"],
             "succeededByQid": row["succeeded_by_qid"],
+            "parents": row.get("parents") or [],
             "sovereignName": None, "sovereignSlug": None, "sovereignQid": None,
             "locationName": "",
             "locationSlug": None,
@@ -695,7 +700,7 @@ async def import_polity_from_wikidata(request: Request, _: None = Depends(requir
                    year_start, year_end, date_is_fuzzy, polity_type,
                    capital_name, capital_wikidata_qid, lng, lat,
                    preceded_by_qid, succeeded_by_qid, p31_qids,
-                   sitelinks_count, data_version, pipeline_run
+                   sitelinks_count, data_version, pipeline_run, parents
             FROM polities WHERE wikidata_qid = %s
         """, (qid,))
         existing = cur.fetchone()
@@ -780,7 +785,7 @@ async def import_polity_from_wikidata(request: Request, _: None = Depends(requir
                       year_start, year_end, date_is_fuzzy, polity_type,
                       capital_name, capital_wikidata_qid, lng, lat,
                       preceded_by_qid, succeeded_by_qid, p31_qids,
-                      sitelinks_count, data_version, pipeline_run
+                      sitelinks_count, data_version, pipeline_run, parents
         """, {
             "wikidata_qid": qid, "slug": slug, "name": name, "aliases": aliases_en,
             "wikipedia_title": wp_title, "wikipedia_summary": wp_summary, "wikipedia_url": wp_url,
@@ -792,6 +797,24 @@ async def import_polity_from_wikidata(request: Request, _: None = Depends(requir
         })
         conn.commit()
         row = dict(cur.fetchone())
+
+        # Fetch parent links from Wikidata and persist them inline so the response
+        # reflects the full polity state without waiting for post_process to run.
+        # No eligible_children filter here: for a single-polity import, the parent
+        # may not yet be in our registry — we record the QID anyway and surface it
+        # in the UI when the parent is later imported.
+        try:
+            fetched = fetch_parents([qid])
+            parents_value = fetched.get(qid, [])
+            cur.execute(
+                "UPDATE polities SET parents = %s WHERE wikidata_qid = %s",
+                (json.dumps(parents_value), qid),
+            )
+            conn.commit()
+            row["parents"] = parents_value
+        except Exception as e:
+            print(f"[import_polity_from_wikidata] parent fetch failed for {qid}: {e}", flush=True)
+
         _capture("polity_imported", {"qid": qid, "polity_type": polity_type}, request)
         return _build_polity_feature(row)
     finally:
@@ -814,7 +837,7 @@ def get_manual_polities():
                    year_start, year_end, date_is_fuzzy, polity_type,
                    capital_name, capital_wikidata_qid, lng, lat,
                    preceded_by_qid, succeeded_by_qid, p31_qids,
-                   sitelinks_count, data_version, pipeline_run
+                   sitelinks_count, data_version, pipeline_run, parents
             FROM polities WHERE pipeline_run = 'manual-import'
             ORDER BY name
         """)
@@ -859,7 +882,7 @@ def get_polity_overrides():
             SELECT id, wikidata_qid, slug, name, aliases, wikipedia_title, wikipedia_summary, wikipedia_url,
                    year_start, year_end, date_is_fuzzy, polity_type,
                    capital_name, capital_wikidata_qid, lng, lat,
-                   preceded_by_qid, succeeded_by_qid, sovereign_qids, p31_qids
+                   preceded_by_qid, succeeded_by_qid, sovereign_qids, p31_qids, parents
             FROM polities
             WHERE manually_edited_at IS NOT NULL
             ORDER BY manually_edited_at DESC
@@ -2085,6 +2108,334 @@ def _xml_escape(s: str) -> str:
     """Escape XML special characters."""
     return (s.replace("&", "&amp;").replace("<", "&lt;")
              .replace(">", "&gt;").replace('"', "&quot;").replace("'", "&apos;"))
+
+
+@app.post("/api/ohm/update-element")
+async def ohm_update_element(request: Request):
+    """
+    Add or update tags on an existing OHM relation/way/node.
+
+    Used by the territory mapping modal to push a wikidata=Q... (and optionally
+    wikipedia=lang:Title) tag onto an OHM element that's missing one. The OSM
+    API uses optimistic concurrency on the `version` attribute — we fetch the
+    current element, modify tags in place, and PUT it back inside a changeset.
+
+    Body: {
+        "accessToken": "<OHM OAuth2 token>",
+        "osmType": "relation" | "node" | "way",
+        "osmId": 12345,
+        "setTags": { "wikidata": "Q123", "wikipedia": "en:Title" },
+        "comment": "...",      // optional changeset comment
+    }
+    """
+    import xml.etree.ElementTree as ET
+
+    body = await request.json()
+    token = body.get("accessToken")
+    osm_type = body.get("osmType")
+    osm_id = body.get("osmId")
+    set_tags = body.get("setTags") or {}
+    comment = body.get("comment") or "Link to Wikidata/Wikipedia via OpenHistory"
+
+    if not token:
+        raise HTTPException(401, "accessToken required")
+    if osm_type not in ("relation", "node", "way"):
+        raise HTTPException(400, "osmType must be relation, node, or way")
+    if not osm_id:
+        raise HTTPException(400, "osmId required")
+    if not isinstance(set_tags, dict) or not set_tags:
+        raise HTTPException(400, "setTags must be a non-empty object")
+
+    base_headers = {
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "OpenHistory/1.0 (+https://openhistory.app; contact: kyle@openhistory.app)",
+    }
+    write_headers = {**base_headers, "Content-Type": "text/xml; charset=utf-8", "Accept": "text/plain, */*"}
+    loop = asyncio.get_event_loop()
+
+    # Step 1: GET current element so we have the version + existing tags + members.
+    def _fetch_element():
+        req = urllib.request.Request(
+            f"{OHM_API_BASE}/{osm_type}/{osm_id}",
+            headers={**base_headers, "Accept": "text/xml"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.read()
+
+    try:
+        xml_bytes = await loop.run_in_executor(None, _fetch_element)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode()
+        print(f"[ohm] fetch {osm_type}/{osm_id} failed: {e.code} {detail}", flush=True)
+        raise HTTPException(e.code, f"Failed to fetch {osm_type}/{osm_id}: {detail}")
+
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError as e:
+        raise HTTPException(502, f"OHM returned unparseable XML: {e}")
+
+    element = root.find(osm_type)
+    if element is None:
+        raise HTTPException(502, f"OHM response missing <{osm_type}> element")
+
+    # Apply tag updates (preserve existing, overwrite or add the requested keys).
+    existing_tags = {t.get("k"): t for t in element.findall("tag")}
+    for k, v in set_tags.items():
+        if not isinstance(k, str) or not isinstance(v, str):
+            continue
+        if k in existing_tags:
+            existing_tags[k].set("v", v)
+        else:
+            new_tag = ET.SubElement(element, "tag")
+            new_tag.set("k", k)
+            new_tag.set("v", v)
+
+    # Step 2: create a changeset.
+    changeset_xml = (
+        '<osm><changeset>'
+        f'<tag k="comment" v="{_xml_escape(comment)}"/>'
+        '<tag k="created_by" v="OpenHistory/1.0"/>'
+        '</changeset></osm>'
+    )
+
+    def _create_changeset():
+        req = urllib.request.Request(
+            f"{OHM_API_BASE}/changeset/create",
+            data=changeset_xml.encode(),
+            headers=write_headers,
+            method="PUT",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.read().decode().strip()
+
+    try:
+        changeset_id = await loop.run_in_executor(None, _create_changeset)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode()
+        print(f"[ohm] changeset create failed: {e.code} {detail}", flush=True)
+        raise HTTPException(e.code, f"Failed to create changeset: {detail}")
+
+    # Step 3: PUT the element with the new changeset id. Version stays the same
+    # (OSM increments on success). The XML must include `changeset` attribute.
+    element.set("changeset", str(changeset_id))
+    updated_xml = ET.tostring(root, encoding="utf-8")
+
+    def _put_element():
+        req = urllib.request.Request(
+            f"{OHM_API_BASE}/{osm_type}/{osm_id}",
+            data=updated_xml,
+            headers=write_headers,
+            method="PUT",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.read().decode().strip()
+
+    new_version: Optional[str] = None
+    try:
+        new_version = await loop.run_in_executor(None, _put_element)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode()
+        print(f"[ohm] update {osm_type}/{osm_id} failed: {e.code} {detail}", flush=True)
+        # Try to close the changeset so it doesn't linger.
+        try:
+            await loop.run_in_executor(None, lambda: urllib.request.urlopen(
+                urllib.request.Request(
+                    f"{OHM_API_BASE}/changeset/{changeset_id}/close",
+                    headers=write_headers, method="PUT"
+                ), timeout=10))
+        except Exception:
+            pass
+        raise HTTPException(e.code, f"Failed to update {osm_type}/{osm_id}: {detail}")
+
+    # Step 4: close the changeset.
+    def _close_changeset():
+        req = urllib.request.Request(
+            f"{OHM_API_BASE}/changeset/{changeset_id}/close",
+            headers=write_headers,
+            method="PUT",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.status
+
+    try:
+        await loop.run_in_executor(None, _close_changeset)
+    except urllib.error.HTTPError:
+        pass  # auto-closes after 1h
+
+    # Bust the qid-map cache so the next request reflects the new tag.
+    if osm_type in ("relation", "node"):
+        _OHM_QID_CACHE["fetched_at"] = None
+
+    _capture("ohm_element_updated", {
+        "osm_type": osm_type,
+        "tag_keys": list(set_tags.keys()),
+    }, request)
+
+    return {
+        "changesetId": int(changeset_id),
+        "osmType": osm_type,
+        "osmId": int(osm_id),
+        "newVersion": int(new_version) if new_version and new_version.isdigit() else None,
+    }
+
+
+# In-memory cache for the OHM relation → Wikidata QID mapping.
+# A single Overpass query covers every admin boundary in OHM that carries a wikidata tag.
+# Cached for OHM_QID_CACHE_TTL seconds; clients may force a refresh with ?force=true.
+_OHM_QID_CACHE: dict = {"map": None, "fetched_at": None, "count": 0}
+OHM_QID_CACHE_TTL_SECONDS = 300  # 5 min
+
+
+@app.get("/api/ohm-qid-map")
+async def ohm_qid_map(request: Request, force: bool = False):
+    """
+    Return a JSON map of OHM relation osm_id → Wikidata QID for every administrative
+    boundary in OHM that carries a `wikidata` tag. Used by the frontend to color
+    OHM vector-tile polygons by polity (joined on osm_id since the tile generator
+    strips the wikidata tag).
+    """
+    now = datetime.now(timezone.utc)
+    fetched_at = _OHM_QID_CACHE["fetched_at"]
+    is_fresh = fetched_at is not None and (now - fetched_at).total_seconds() < OHM_QID_CACHE_TTL_SECONDS
+
+    if is_fresh and not force and _OHM_QID_CACHE["map"] is not None:
+        return {
+            "map": _OHM_QID_CACHE["map"],
+            "fetchedAt": fetched_at.isoformat(),
+            "count": _OHM_QID_CACHE["count"],
+            "cached": True,
+        }
+
+    # Polygon fills come from relation features; centroid labels come from place=*
+    # nodes (e.g. the Papal States 1815-1849 is node 2104063826 with place=country).
+    # Some entries carry only `wikipedia` (no `wikidata`) — we resolve those to QIDs
+    # via Wikipedia's API below so they're treated identically downstream.
+    query = """[out:json][timeout:180];
+(
+  relation[type=boundary][wikidata];
+  relation[type=boundary][wikipedia];
+  node[place~"^(country|state|province|region|territory|island|continent)$"][wikidata];
+  node[place~"^(country|state|province|region|territory|island|continent)$"][wikipedia];
+);
+out ids tags;"""
+
+    def _fetch():
+        data = urllib.parse.urlencode({"data": query}).encode()
+        req = urllib.request.Request(
+            "https://overpass-api.openhistoricalmap.org/api/interpreter",
+            data=data,
+            headers={"User-Agent": "OpenHistory/1.0 (https://openhistory.app)"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=200) as resp:
+            return json.loads(resp.read())
+
+    try:
+        result = await asyncio.get_event_loop().run_in_executor(None, _fetch)
+    except Exception as e:
+        print(f"[ohm-qid-map] Overpass query failed: {e}", flush=True)
+        if _OHM_QID_CACHE["map"] is not None:
+            return {
+                "map": _OHM_QID_CACHE["map"],
+                "fetchedAt": fetched_at.isoformat() if fetched_at else None,
+                "count": _OHM_QID_CACHE["count"],
+                "cached": True,
+                "warning": f"Overpass query failed; serving stale cache ({type(e).__name__}: {e})",
+            }
+        raise HTTPException(503, f"Overpass query failed and no cache available: {e}")
+
+    # OSM relation IDs and node IDs occupy separate namespaces; collisions in the
+    # merged map would be rare (different objects would need the same numeric id and
+    # both be relevant to our polities). We accept that tiny risk for simplicity here.
+    qid_map: dict = {}
+    # Entries that have only `wikipedia` (no `wikidata`) need a follow-up resolution.
+    pending: dict[str, list[tuple[str, str]]] = {}  # lang -> [(title, osm_id_str)]
+    for el in result.get("elements", []):
+        if el.get("type") not in ("relation", "node"):
+            continue
+        osm_id = el.get("id")
+        if osm_id is None:
+            continue
+        tags = el.get("tags") or {}
+        wikidata = tags.get("wikidata")
+        if wikidata:
+            qid_map[str(osm_id)] = wikidata
+            continue
+        wp = tags.get("wikipedia")
+        if not wp or ":" not in wp:
+            continue
+        lang, title = wp.split(":", 1)
+        lang = lang.strip().lower()
+        title = title.strip()
+        if not lang or not title:
+            continue
+        pending.setdefault(lang, []).append((title, str(osm_id)))
+
+    # Resolve wikipedia-only entries to QIDs via batched Wikipedia API calls.
+    # The API allows up to 50 titles per query for anonymous clients.
+    def _resolve_lang(lang: str, entries: list[tuple[str, str]]) -> dict[str, str]:
+        out: dict[str, str] = {}
+        BATCH = 50
+        for i in range(0, len(entries), BATCH):
+            chunk = entries[i:i + BATCH]
+            titles_param = "|".join(t for t, _ in chunk)
+            try:
+                qs = urllib.parse.urlencode({
+                    "action": "query", "format": "json",
+                    "prop": "pageprops", "ppprop": "wikibase_item",
+                    "redirects": "1", "titles": titles_param,
+                })
+                req = urllib.request.Request(
+                    f"https://{lang}.wikipedia.org/w/api.php?{qs}",
+                    headers={"User-Agent": "OpenHistory/1.0 (https://openhistory.app)"},
+                )
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    data = json.loads(r.read())
+            except Exception as e:
+                print(f"[ohm-qid-map] Wikipedia API failed for {lang} batch: {e}", flush=True)
+                continue
+            # Build title (possibly after normalization/redirect) → QID
+            title_to_qid: dict[str, str] = {}
+            for p in (data.get("query") or {}).get("pages", {}).values():
+                if "pageprops" in p and "wikibase_item" in p["pageprops"]:
+                    title_to_qid[p.get("title", "")] = p["pageprops"]["wikibase_item"]
+            # Map back to the requested title via any normalization/redirect chain.
+            alias: dict[str, str] = {}
+            for n in (data.get("query") or {}).get("normalized", []):
+                alias[n.get("from", "")] = n.get("to", "")
+            for r in (data.get("query") or {}).get("redirects", []):
+                alias[r.get("from", "")] = r.get("to", "")
+            def _resolve_title(t: str) -> str:
+                seen = set()
+                while t in alias and t not in seen:
+                    seen.add(t)
+                    t = alias[t]
+                return t
+            for orig_title, osm_id_str in chunk:
+                final = _resolve_title(orig_title)
+                qid = title_to_qid.get(final) or title_to_qid.get(orig_title)
+                if qid:
+                    out[osm_id_str] = qid
+        return out
+
+    if pending:
+        loop = asyncio.get_event_loop()
+        for lang, entries in pending.items():
+            resolved = await loop.run_in_executor(None, _resolve_lang, lang, entries)
+            qid_map.update(resolved)
+
+    _OHM_QID_CACHE["map"] = qid_map
+    _OHM_QID_CACHE["fetched_at"] = now
+    _OHM_QID_CACHE["count"] = len(qid_map)
+
+    _capture("ohm_qid_map_refreshed", {"count": len(qid_map), "forced": force}, request)
+
+    return {
+        "map": qid_map,
+        "fetchedAt": now.isoformat(),
+        "count": len(qid_map),
+        "cached": False,
+    }
 
 
 @app.get("/api/ohm/search")
