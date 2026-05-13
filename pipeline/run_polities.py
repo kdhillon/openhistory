@@ -70,9 +70,15 @@ POLITY_SPARQL_CATEGORIES: list[tuple[str, str]] = [
     ("country",             "Q6256"),      # country (catches remaining sovereign states)
     # Colonial / dependent territories
     ("colony",              "Q133156"),    # colony (Dutch Ceylon, British India, etc.)
+    ("crown colony",        "Q1351282"),   # crown colony (British: Lower/Upper Canada, Cape Province, etc.)
     ("protectorate",        "Q164142"),    # protectorate (Tunisia, Morocco, etc.)
     ("captaincy general",   "Q5036886"),   # captaincy general (Guatemala, Cuba, etc.)
     ("viceroyalty",         "Q12356456"),  # viceroyalty (New Granada, New Spain, Peru, etc.)
+    # Catch-all for historical political entities classed generically.
+    # IMPORTANT: query with --direct-p31 for this class — the P279* transitive
+    # subtree is enormous and SPARQL times out.
+    ("former admin entity", "Q19953632"),  # former administrative territorial entity
+                                           # (Congress Poland, Captaincy of Venezuela, Cisleithania, etc.)
     # Other European political forms common in 1600–1900
     ("duchy",               "Q159627"),    # duchy (German states, Italian states)
     ("grand duchy",         "Q47848"),     # grand duchy (Tuscany, Lithuania, etc.)
