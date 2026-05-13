@@ -81,6 +81,9 @@ export interface FeatureProperties {
   partOf?: string[];
   /** Resolved partOf entries for display (populated at export time). */
   partOfResolved?: Array<{ qid: string; title: string; slug: string | null }>;
+  /** Wikidata-derived parent polity links with year ranges and source-property provenance.
+   *  Populated for polity features by scripts/backfill-polity-parents.py. */
+  parents?: Array<{ qid: string; yearStart?: number | null; yearEnd?: number | null; source: string }>;
   /** Number of Wikipedia language editions covering this event. Higher = more globally significant.
    *  Null until backfill-sitelinks.py has been run. Events only. */
   sitelinksCount?: number | null;

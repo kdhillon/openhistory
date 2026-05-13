@@ -835,6 +835,7 @@ export default function App() {
           selectedLang={selectedLang}
           onStartStory={handleStartStory}
           isMobile={isMobile}
+          currentDateInt={timeline.currentDateInt}
           isOhmMapped={
             selectedFeature?.featureType === 'polity'
               ? ohmMatchedPolityIds.has(selectedFeature.id)

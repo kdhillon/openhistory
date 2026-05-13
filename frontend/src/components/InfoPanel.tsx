@@ -40,6 +40,8 @@ interface Props {
   selectedLang?: string;
   onStartStory?: (slug: string) => void;
   isMobile?: boolean;
+  /** Current timeline year as YYYYMMDD — used to filter polity parents to those active at this year. */
+  currentDateInt: number;
   /** Whether this polity is already mapped to an OHM territory (via ohmLinks or auto-match). */
   isOhmMapped?: boolean;
   /** Enter placement mode: user clicks map to place a label for this polity. */
@@ -68,6 +70,16 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, '');
 }
 
+/** Human-readable description for a parent-link source property — used as chip tooltips. */
+function tooltipForSource(source: string): string {
+  if (source === 'P150') return 'From Wikidata: contains administrative territorial entity (P150)';
+  if (source === 'P361') return 'From Wikidata: part of (P361)';
+  if (source === 'P131') return 'From Wikidata: located in the administrative territorial entity (P131)';
+  if (source === 'P127') return 'From Wikidata: owned by (P127)';
+  if (source.startsWith('P31:')) return `From Wikidata: instance of ${source.slice(4)} (P31)`;
+  return `From Wikidata (${source})`;
+}
+
 function PencilIcon() {
   return (
     <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ display: 'block' }}>
@@ -76,7 +88,7 @@ function PencilIcon() {
   );
 }
 
-export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated, hiddenNations, onToggleHiddenNation, onHideFeature, selectedLang = 'en', onStartStory, isMobile, isOhmMapped, onAddToOhm }: Props) {
+export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated, hiddenNations, onToggleHiddenNation, onHideFeature, selectedLang = 'en', onStartStory, isMobile, currentDateInt, isOhmMapped, onAddToOhm }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [expandedWidth, setExpandedWidth] = useState(468);
   const [editField, setEditField] = useState<'date' | 'location' | 'capital' | 'sovereign' | null>(null);
@@ -975,16 +987,86 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
                     key={qid}
                     style={styles.partOfChip}
                     onClick={() => onNavigateToFeature(parentFeature.properties as FeatureProperties)}
-                    title={title}
+                    title={`${title} — From Wikidata: part of (P361)`}
                   >
                     {title} →
                   </button>
                 ) : (
-                  <span key={qid} style={{ ...styles.partOfChip, cursor: 'default', opacity: 0.6 }}>
+                  <span
+                    key={qid}
+                    style={{ ...styles.partOfChip, cursor: 'default', opacity: 0.6 }}
+                    title="From Wikidata: part of (P361)"
+                  >
                     {title}
                   </span>
                 );
               })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Part of — polity hierarchy chips (P150/P361/P131/P127/P31 reverse-class) */}
+      {feature.featureType === 'polity' && feature.parents != null && (() => {
+        type ParentEntry = { qid: string; yearStart?: number | null; yearEnd?: number | null; source: string };
+        // Defensive parse — matches the existing partOfResolved handling above. Mapbox/MapLibre
+        // can stringify array properties on some code paths; tolerate both shapes.
+        const parents: ParentEntry[] = Array.isArray(feature.parents)
+          ? (feature.parents as ParentEntry[])
+          : typeof feature.parents === 'string'
+            ? (() => { try { return JSON.parse(feature.parents as unknown as string); } catch { return []; } })()
+            : [];
+        if (parents.length === 0) return null;
+
+        const currentYear = Math.floor(currentDateInt / 10000);
+        const active = parents.filter(p =>
+          (p.yearStart == null || p.yearStart <= currentYear) &&
+          (p.yearEnd == null || p.yearEnd >= currentYear)
+        );
+        if (active.length === 0) return null;
+
+        const rank = (s: string) => s === 'P150' ? 0 : s === 'P361' ? 1 : s === 'P131' ? 2 : s === 'P127' ? 3 : 4;
+        active.sort((a, b) => rank(a.source) - rank(b.source));
+
+        // Resolve each active parent against the in-memory polity registry. Skip parents not in registry.
+        const chips = active
+          .map(entry => {
+            const parentFeature = geojson?.features.find(f => {
+              const pp = f.properties as FeatureProperties;
+              return pp.featureType === 'polity' && pp.wikidataQid === entry.qid;
+            });
+            if (!parentFeature) return null;
+            const props = parentFeature.properties as FeatureProperties;
+            return { entry, feature: parentFeature, title: props.title ?? entry.qid };
+          })
+          .filter((c): c is NonNullable<typeof c> => c !== null);
+
+        if (chips.length === 0) return null;
+
+        return (
+          <div style={styles.partOfRow}>
+            <span style={styles.partOfLabel}>Part of</span>
+            <div style={styles.partOfChips}>
+              {chips.map(({ entry, feature: pf, title }) => (
+                onNavigateToFeature ? (
+                  <button
+                    key={entry.qid}
+                    style={styles.partOfChip}
+                    onClick={() => onNavigateToFeature(pf.properties as FeatureProperties)}
+                    title={`${title} — ${tooltipForSource(entry.source)}`}
+                  >
+                    {title} →
+                  </button>
+                ) : (
+                  <span
+                    key={entry.qid}
+                    style={{ ...styles.partOfChip, cursor: 'default', opacity: 0.6 }}
+                    title={tooltipForSource(entry.source)}
+                  >
+                    {title}
+                  </span>
+                )
+              ))}
             </div>
           </div>
         );
