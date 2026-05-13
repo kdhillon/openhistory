@@ -2171,10 +2171,13 @@ async def ohm_update_element(request: Request):
     # wrong: centroid-label features on the frontend carry an osm_id that may point
     # to a relation, but the tile's positive id sign made the client tag it 'node'.
     # We pick whichever type Overpass actually finds, preferring the requested one.
+    # `out meta;` is the most verbose mode: includes tags + members/nodes + version
+    # + timestamp. `out meta tags;` is invalid syntax (Overpass takes only one
+    # verbosity keyword and silently uses the last one, which drops version).
     overpass_query = (
         f"[out:json][timeout:30];"
         f"(node({osm_id});way({osm_id});relation({osm_id}););"
-        f"out meta tags;"
+        f"out meta;"
     )
     def _fetch_element():
         data = urllib.parse.urlencode({"data": overpass_query}).encode()
