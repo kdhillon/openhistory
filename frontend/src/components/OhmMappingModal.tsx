@@ -145,12 +145,23 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
     }
   }
 
-  // Refresh the token from localStorage in case it changed (e.g. user signed in
-  // from another tab while this modal was open).
+  // Refresh the token from localStorage whenever it might have changed.
+  // The OAuth flow opens a second tab that writes the token; cross-tab `storage`
+  // events fire but can be unreliable (browser quirks, popup blockers, fast tab
+  // close). Belt-and-suspenders: also re-check on focus and on a 1s poll.
   useEffect(() => {
-    const onStorage = () => setOhmToken(getOhmToken());
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    const sync = () => {
+      const fresh = getOhmToken();
+      setOhmToken((prev) => (prev === fresh ? prev : fresh));
+    };
+    window.addEventListener('storage', sync);
+    window.addEventListener('focus', sync);
+    const interval = setInterval(sync, 1000);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('focus', sync);
+      clearInterval(interval);
+    };
   }, []);
 
   async function handleImport(r: EntityResult) {

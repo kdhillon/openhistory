@@ -10,7 +10,7 @@ import { useWikidataEntity } from '../hooks/useWikidataEntity';
 import { LANG_CODE_TO_NAME } from '../lib/languages';
 import { patchFeature, patchPolity, searchOhm } from '../lib/api';
 import { EVENT_CATEGORIES, POLITY_CATEGORIES } from '../theme/categories';
-import { getPolityColorAtYear, isValidPaletteId, DEFAULT_PALETTE_ID } from '../theme/polityPalettes';
+import { getPolityColorAtYear, activeParentAt, isValidPaletteId, DEFAULT_PALETTE_ID } from '../theme/polityPalettes';
 import type { PaletteId, PolityForColor, ParentEntry } from '../theme/polityPalettes';
 
 interface WikiSection {
@@ -468,23 +468,49 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
     const paletteId: PaletteId = isValidPaletteId(savedPalette) ? savedPalette : DEFAULT_PALETTE_ID;
 
     // Build a registry for the cascade resolver from the loaded GeoJSON.
+    // Also index by capital so the capital-sibling cascade fallback works when
+    // a polity (e.g. Fascist Italy) has no direct parent in Wikidata but shares
+    // a capital with one that does.
     const polityByQid: Record<string, PolityForColor> = {};
+    const polityByCapital: Record<string, PolityForColor[]> = {};
     if (geojson) {
       for (const f of geojson.features) {
         const p = f.properties as FeatureProperties;
         if (p.featureType !== 'polity' || !p.wikidataQid) continue;
         if (!polityByQid[p.wikidataQid]) {
-          polityByQid[p.wikidataQid] = {
+          const pfc: PolityForColor = {
             qid: p.wikidataQid,
             polityType: p.polityType,
             parents: p.parents,
             // Hash by capital QID for semantic color grouping (Spain ≈ Spanish Empire).
             polityKey: p.capitalWikidataQid ?? p.title,
+            capitalName: p.capitalName ?? null,
+            yearStart: p.yearStart ?? null,
+            yearEnd: p.yearEnd ?? null,
           };
+          polityByQid[p.wikidataQid] = pfc;
+          if (p.capitalName) {
+            const key = p.capitalName.toLowerCase();
+            (polityByCapital[key] ??= []).push(pfc);
+          }
         }
       }
     }
     const resolveByQid = (qid: string): PolityForColor | null => polityByQid[qid] ?? null;
+    const findCapitalSibling = (capitalName: string, year: number, excludeQid: string): PolityForColor | null => {
+      const candidates = polityByCapital[capitalName.toLowerCase()];
+      if (!candidates) return null;
+      const activeC = candidates.filter((c) =>
+        c.qid !== excludeQid &&
+        (c.yearStart == null || c.yearStart <= year) &&
+        (c.yearEnd == null || c.yearEnd >= year)
+      );
+      if (activeC.length === 0) return null;
+      const withParent = activeC.filter((c) => activeParentAt(c.parents, year));
+      const pool = withParent.length > 0 ? withParent : activeC;
+      pool.sort((a, b) => (a.yearStart ?? 0) - (b.yearStart ?? 0));
+      return pool[0];
+    };
 
     // Find the first active parent that is in our registry — that's the one we display.
     let parentFeature: GeoJSON.Feature | null = null;
@@ -506,8 +532,11 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
       polityType: polityFeature.polityType,
       parents: parents,
       polityKey: polityFeature.capitalWikidataQid ?? polityFeature.title,
+      capitalName: polityFeature.capitalName ?? null,
+      yearStart: polityFeature.yearStart ?? null,
+      yearEnd: polityFeature.yearEnd ?? null,
     };
-    const color = getPolityColorAtYear(selfPolity, currentYear, paletteId, resolveByQid);
+    const color = getPolityColorAtYear(selfPolity, currentYear, paletteId, resolveByQid, findCapitalSibling);
 
     if (parentTitle) {
       return { kind: 'parent', text: `Part of ${parentTitle}`, color, targetFeature: parentFeature };

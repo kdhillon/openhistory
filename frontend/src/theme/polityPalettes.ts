@@ -60,9 +60,20 @@ export type PolityForColor = {
    *  polity title here to keep color stable across QID/title swaps and to
    *  match the existing name-hashed rendering. */
   polityKey?: string;
+  /** Capital city name — used by the capital-cascade fallback. When a polity has
+   *  no parent of its own but another polity active at the same year shares its
+   *  capital, the cascade follows that sibling's chain instead. */
+  capitalName?: string | null;
+  yearStart?: number | null;
+  yearEnd?: number | null;
 };
 
 export type ParentResolver = (qid: string) => PolityForColor | null;
+/** Find another polity active at `year` whose capital matches `capitalName`.
+ *  Used as a fallback when the polity has no direct parent in Wikidata
+ *  (e.g. "Fascist Italy" has no `part-of Kingdom of Italy` link, but both
+ *  have Rome as capital — so we let it inherit the Kingdom's color). */
+export type CapitalSiblingResolver = (capitalName: string, year: number, excludeQid: string) => PolityForColor | null;
 
 const SOURCE_RANK: Record<string, number> = { P150: 0, P361: 1, P131: 2, P127: 3 };
 
@@ -84,12 +95,16 @@ export function activeParentAt(parents: ParentEntry[] | undefined, year: number)
 }
 
 /** Resolve a polity's effective color at a given year, walking up its parent chain.
- *  Cycle-safe; falls back to the polity's own color when the parent is missing from the registry. */
+ *  When a polity has no direct parent active at this year, falls back to the
+ *  capital-sibling cascade: any other polity active at this year sharing the
+ *  same capital is treated as a sibling and we follow its cascade instead.
+ *  Cycle-safe; ultimate fallback is the polity's own QID/title hash. */
 export function getPolityColorAtYear(
   polity: PolityForColor,
   year: number,
   paletteId: PaletteId,
   resolve: ParentResolver,
+  findCapitalSibling?: CapitalSiblingResolver,
   seen: Set<string> = new Set(),
 ): string {
   if (seen.has(polity.qid)) {
@@ -97,8 +112,18 @@ export function getPolityColorAtYear(
   }
   seen.add(polity.qid);
   const parent = activeParentAt(polity.parents, year);
-  if (!parent) return getPolityColor(polity.polityKey ?? polity.qid, polity.polityType, paletteId);
-  const parentPolity = resolve(parent.qid);
-  if (!parentPolity) return getPolityColor(polity.polityKey ?? polity.qid, polity.polityType, paletteId);
-  return getPolityColorAtYear(parentPolity, year, paletteId, resolve, seen);
+  if (parent) {
+    const parentPolity = resolve(parent.qid);
+    if (parentPolity) {
+      return getPolityColorAtYear(parentPolity, year, paletteId, resolve, findCapitalSibling, seen);
+    }
+  }
+  // Capital-sibling fallback: same capital active at this year → follow its chain.
+  if (findCapitalSibling && polity.capitalName) {
+    const sibling = findCapitalSibling(polity.capitalName, year, polity.qid);
+    if (sibling && !seen.has(sibling.qid)) {
+      return getPolityColorAtYear(sibling, year, paletteId, resolve, findCapitalSibling, seen);
+    }
+  }
+  return getPolityColor(polity.polityKey ?? polity.qid, polity.polityType, paletteId);
 }

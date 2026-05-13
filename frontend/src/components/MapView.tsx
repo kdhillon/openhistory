@@ -4,7 +4,7 @@ import maplibregl, { Map, GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { FeatureProperties, Category } from '../types';
 import { CATEGORY_COLORS } from '../theme/categories';
-import { getPolityColorAtYear, POLITY_PALETTES } from '../theme/polityPalettes';
+import { getPolityColorAtYear, activeParentAt, POLITY_PALETTES } from '../theme/polityPalettes';
 import type { PaletteId, PolityForColor } from '../theme/polityPalettes';
 import { CATEGORY_SVGS } from '../theme/icons';
 import { encodeDate, eventDateRange, STEP_YEAR, decodeDate } from '../hooks/useTimeline';
@@ -940,23 +940,51 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       // (Spain / Spanish Empire / Crown of Castile, all Madrid-capital) pick the
       // same color. Falls back to title when no capital is set.
       const polityByQid: Record<string, PolityForColor> = {};
+      // Capital → list of polities with that capital, used by the capital-sibling
+      // cascade fallback (so e.g. Fascist Italy can inherit Kingdom of Italy's
+      // color via shared "Rome" when its own Wikidata record has no parent link).
+      const polityByCapital: Record<string, PolityForColor[]> = {};
       for (const f of geojsonRef.current.features) {
         const p = f.properties as FeatureProperties;
         if (!p.wikidataQid) continue;
         if (!polityIdByQid[p.wikidataQid]) polityIdByQid[p.wikidataQid] = p.id;
         if (p.featureType === 'polity' && !polityByQid[p.wikidataQid]) {
-          polityByQid[p.wikidataQid] = {
+          const pfc: PolityForColor = {
             qid: p.wikidataQid,
             polityType: p.polityType,
             parents: p.parents,
             polityKey: p.capitalWikidataQid ?? p.title,
+            capitalName: p.capitalName ?? null,
+            yearStart: p.yearStart ?? null,
+            yearEnd: p.yearEnd ?? null,
           };
+          polityByQid[p.wikidataQid] = pfc;
+          if (p.capitalName) {
+            const key = p.capitalName.toLowerCase();
+            (polityByCapital[key] ??= []).push(pfc);
+          }
         }
       }
       // Read via ref — the surrounding useEffect has [] deps, so closures over
       // the prop would be frozen at first render.
       const currentYear = decodeDate(currentDateIntRef.current).year;
       const resolveByQid = (qid: string): PolityForColor | null => polityByQid[qid] ?? null;
+      const findCapitalSibling = (capitalName: string, year: number, excludeQid: string): PolityForColor | null => {
+        const candidates = polityByCapital[capitalName.toLowerCase()];
+        if (!candidates) return null;
+        // Active at `year`, not the same polity, and prefer ones with an active parent
+        // (so we actually cascade somewhere useful). Among ties, prefer the longest-running entity.
+        const active = candidates.filter((c) =>
+          c.qid !== excludeQid &&
+          (c.yearStart == null || c.yearStart <= year) &&
+          (c.yearEnd == null || c.yearEnd >= year)
+        );
+        if (active.length === 0) return null;
+        const withParent = active.filter((c) => activeParentAt(c.parents, year));
+        const pool = withParent.length > 0 ? withParent : active;
+        pool.sort((a, b) => (a.yearStart ?? 0) - (b.yearStart ?? 0));
+        return pool[0];
+      };
 
       // queryRenderedFeatures can throw if the map's WebGL painter isn't ready.
       // This is safe to swallow — sourcedata/moveend will retry automatically.
@@ -1049,7 +1077,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           // when our DB has them linked; otherwise the QID itself is hashed as
           // the stable fallback (no polity-DB dependency).
           const polity: PolityForColor = polityByQid[wikidataQid] ?? { qid: wikidataQid };
-          const color = getPolityColorAtYear(polity, currentYear, polityPaletteRef.current, resolveByQid);
+          const color = getPolityColorAtYear(polity, currentYear, polityPaletteRef.current, resolveByQid, findCapitalSibling);
           matchedNames.add(fullName);
           fillPairs.push(fullName, color);
           labelPairs.push(fullName, '#eeeeee');

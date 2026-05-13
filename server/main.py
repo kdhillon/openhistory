@@ -2161,42 +2161,69 @@ async def ohm_update_element(request: Request):
     write_headers = {**base_headers, "Content-Type": "text/xml; charset=utf-8", "Accept": "text/plain, */*"}
     loop = asyncio.get_event_loop()
 
-    # Step 1: GET current element so we have the version + existing tags + members.
+    # Step 1: read the current element via OVERPASS (not the OSM API).
+    # `www.openhistoricalmap.org/api/0.6/{type}/{id}` is fronted by Cloudflare,
+    # which serves a "Just a moment" JS challenge to non-browser clients. Overpass
+    # returns the same data (version + tags + members + lat/lon) as JSON with no
+    # bot challenge. The subsequent PUT to OSM API for the write still works.
+    overpass_query = f"[out:json][timeout:30];{osm_type}({osm_id});out meta tags;"
     def _fetch_element():
+        data = urllib.parse.urlencode({"data": overpass_query}).encode()
         req = urllib.request.Request(
-            f"{OHM_API_BASE}/{osm_type}/{osm_id}",
-            headers={**base_headers, "Accept": "text/xml"},
+            "https://overpass-api.openhistoricalmap.org/api/interpreter",
+            data=data,
+            headers={"User-Agent": base_headers["User-Agent"]},
+            method="POST",
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.read()
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read())
 
     try:
-        xml_bytes = await loop.run_in_executor(None, _fetch_element)
+        op_data = await loop.run_in_executor(None, _fetch_element)
     except urllib.error.HTTPError as e:
         detail = e.read().decode()
-        print(f"[ohm] fetch {osm_type}/{osm_id} failed: {e.code} {detail}", flush=True)
-        raise HTTPException(e.code, f"Failed to fetch {osm_type}/{osm_id}: {detail}")
+        print(f"[ohm] overpass fetch {osm_type}/{osm_id} failed: {e.code} {detail}", flush=True)
+        raise HTTPException(e.code, f"Failed to read {osm_type}/{osm_id}: {detail}")
 
-    try:
-        root = ET.fromstring(xml_bytes)
-    except ET.ParseError as e:
-        raise HTTPException(502, f"OHM returned unparseable XML: {e}")
+    elements = op_data.get("elements") or []
+    if not elements:
+        raise HTTPException(404, f"{osm_type}/{osm_id} not found in OHM")
+    el = elements[0]
+    version = el.get("version")
+    if version is None:
+        raise HTTPException(502, f"Overpass response missing version for {osm_type}/{osm_id}")
 
-    element = root.find(osm_type)
-    if element is None:
-        raise HTTPException(502, f"OHM response missing <{osm_type}> element")
+    # Build the updated OSM XML from the Overpass response. Tags are merged
+    # (existing preserved, requested keys upserted). Members + lat/lon are
+    # carried through so the PUT preserves geometry/topology.
+    root = ET.Element("osm")
+    element = ET.SubElement(root, osm_type, {
+        "id": str(osm_id),
+        "version": str(version),
+    })
+    if osm_type == "node":
+        if el.get("lat") is not None:
+            element.set("lat", str(el["lat"]))
+        if el.get("lon") is not None:
+            element.set("lon", str(el["lon"]))
+    elif osm_type == "way":
+        for nd_id in (el.get("nodes") or []):
+            ET.SubElement(element, "nd", {"ref": str(nd_id)})
+    elif osm_type == "relation":
+        for m in (el.get("members") or []):
+            member = ET.SubElement(element, "member", {
+                "type": m.get("type", ""),
+                "ref": str(m.get("ref", "")),
+                "role": m.get("role", "") or "",
+            })
+            _ = member  # appease linters
 
-    # Apply tag updates (preserve existing, overwrite or add the requested keys).
-    existing_tags = {t.get("k"): t for t in element.findall("tag")}
+    merged_tags: dict = dict(el.get("tags") or {})
     for k, v in set_tags.items():
-        if not isinstance(k, str) or not isinstance(v, str):
-            continue
-        if k in existing_tags:
-            existing_tags[k].set("v", v)
-        else:
-            new_tag = ET.SubElement(element, "tag")
-            new_tag.set("k", k)
-            new_tag.set("v", v)
+        if isinstance(k, str) and isinstance(v, str):
+            merged_tags[k] = v
+    for k, v in merged_tags.items():
+        ET.SubElement(element, "tag", {"k": k, "v": v})
 
     # Step 2: create a changeset.
     changeset_xml = (

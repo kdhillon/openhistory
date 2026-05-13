@@ -67,9 +67,9 @@ def export(conn: "psycopg2.connection | None" = None) -> int:
           sovereign_qids, p31_qids, data_version, pipeline_run,
           sitelinks_count, parents
         FROM polities
-        WHERE lng IS NOT NULL AND lat IS NOT NULL
-           OR id IN (SELECT DISTINCT polity_id FROM territories WHERE polity_id IS NOT NULL)
-           OR polity_type = 'people'
+        -- Export every polity. Those without coords get geometry=null and don't
+        -- render as map dots, but they're still in the GeoJSON as registry
+        -- entries for the cascade + InfoPanel twin lookup.
         ORDER BY year_start NULLS LAST
     """)
     polities = cur.fetchall()
