@@ -53,6 +53,10 @@ export type PolityForColor = {
   qid: string;
   polityType?: PolityType;
   parents?: ParentEntry[];
+  /** Optional override for the color-hash input. Defaults to qid. Pass the
+   *  polity title here to keep color stable across QID/title swaps and to
+   *  match the existing name-hashed rendering. */
+  polityKey?: string;
 };
 
 export type ParentResolver = (qid: string) => PolityForColor | null;
@@ -86,12 +90,12 @@ export function getPolityColorAtYear(
   seen: Set<string> = new Set(),
 ): string {
   if (seen.has(polity.qid)) {
-    return getPolityColor(polity.qid, polity.polityType, paletteId);
+    return getPolityColor(polity.polityKey ?? polity.qid, polity.polityType, paletteId);
   }
   seen.add(polity.qid);
   const parent = activeParentAt(polity.parents, year);
-  if (!parent) return getPolityColor(polity.qid, polity.polityType, paletteId);
+  if (!parent) return getPolityColor(polity.polityKey ?? polity.qid, polity.polityType, paletteId);
   const parentPolity = resolve(parent.qid);
-  if (!parentPolity) return getPolityColor(polity.qid, polity.polityType, paletteId);
+  if (!parentPolity) return getPolityColor(polity.polityKey ?? polity.qid, polity.polityType, paletteId);
   return getPolityColorAtYear(parentPolity, year, paletteId, resolve, seen);
 }
