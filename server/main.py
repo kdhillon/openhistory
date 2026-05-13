@@ -800,11 +800,19 @@ async def import_polity_from_wikidata(request: Request, _: None = Depends(requir
 
         # Fetch parent links from Wikidata and persist them inline so the response
         # reflects the full polity state without waiting for post_process to run.
-        # No eligible_children filter here: for a single-polity import, the parent
-        # may not yet be in our registry — we record the QID anyway and surface it
-        # in the UI when the parent is later imported.
+        # Load the full polity registry so the fetcher can (a) filter parents to
+        # known polities and (b) intersect year ranges with each parent's lifetime.
         try:
-            fetched = fetch_parents([qid])
+            cur.execute("""
+                SELECT wikidata_qid, year_start, year_end
+                FROM polities
+                WHERE wikidata_qid IS NOT NULL
+            """)
+            polity_meta = {
+                r["wikidata_qid"]: {"year_start": r["year_start"], "year_end": r["year_end"]}
+                for r in cur.fetchall()
+            }
+            fetched = fetch_parents([qid], polity_meta=polity_meta)
             parents_value = fetched.get(qid, [])
             cur.execute(
                 "UPDATE polities SET parents = %s WHERE wikidata_qid = %s",

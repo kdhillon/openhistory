@@ -90,6 +90,10 @@ export interface FeatureProperties {
   yearDisplay: string;
   dataVersion?: number;
   pipelineRun?: string;
+  /** Transient: the OHM element this feature was opened from (when reached via OHM tile click).
+   *  Lets InfoPanel offer a direct-edit path back to the OHM relation/node. Not persisted. */
+  _ohmOsmType?: 'relation' | 'node';
+  _ohmOsmId?: number;
 }
 
 export interface StoryBeat {

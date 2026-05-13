@@ -4,19 +4,20 @@ import { importPolityFromWikidata } from '../lib/api';
 import { searchEntities } from '../lib/wikidataApi';
 import type { EntityResult } from '../lib/wikidataApi';
 import { stripPolityTypeWords } from '../lib/polityNames';
+import { getOhmToken, updateOhmElement } from '../lib/ohmApi';
 
 const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
-const WRITE_SECRET = import.meta.env.VITE_WRITE_SECRET ?? '';
 
 interface Props {
   ohmName: string;
   ohmWikidataQid: string | null;
   yearStart?: number | null;
   yearEnd?: number | null;
+  osmType: 'relation' | 'node';
+  osmId: number;
   polities: FeatureProperties[];
   onClose: () => void;
   onPolityImported?: (feature: GeoJSON.Feature) => void;
-  onSaved?: () => void;
 }
 
 function overlapsRange(p: FeatureProperties, intervalStart: number | null | undefined, intervalEnd: number | null | undefined): boolean {
@@ -37,11 +38,12 @@ function btnStyle(bg: string, disabled = false): React.CSSProperties {
   };
 }
 
-export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, polities, onClose, onPolityImported, onSaved }: Props) {
+export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, osmType, osmId, polities, onClose, onPolityImported }: Props) {
   const [query, setQuery]               = useState(() => stripPolityTypeWords(ohmName));
   const [selectedId, setSelectedId]     = useState<string | null>(null);
-  const [status, setStatus]             = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [status, setStatus]             = useState<'idle' | 'updating' | 'updated' | 'error'>('idle');
   const [errorMsg, setErrorMsg]         = useState<string | null>(null);
+  const [ohmToken, setOhmToken] = useState<string | null>(() => getOhmToken());
 
   const [wdResults, setWdResults]       = useState<EntityResult[]>([]);
   const [wdLoading, setWdLoading]       = useState(false);
@@ -85,32 +87,71 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, p
     return () => { cancelled = true; };
   }, [query, wdOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function handleSave(polity?: FeatureProperties) {
+  // Push the polity's wikidata (and wikipedia) tag onto the OHM element via OSM API.
+  // Sign-in is required; the footer button switches to "Sign in to OHM" when no token.
+  async function handleUpdateOhm(polity?: FeatureProperties) {
     const p = polity ?? polities.find((x) => x.id === selectedId);
     if (!p) return;
-    setStatus('saving');
-    setErrorMsg(null);
-    try {
-      const res = await fetch(`${API_BASE}/ohm-links`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Write-Secret': WRITE_SECRET,
-        },
-        body: JSON.stringify({
-          ohmName,
-          ohmWikidataQid,
-          polityId: p.id,
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setStatus('saved');
-      onSaved?.();
-    } catch (e) {
-      setErrorMsg((e as Error).message);
+    const qid = p.wikidataQid;
+    if (!qid) {
       setStatus('error');
+      setErrorMsg(`${p.title} has no Wikidata QID in our database — pick a different polity or import one from Wikipedia below.`);
+      return;
+    }
+    if (!ohmToken) {
+      // Should not happen via the footer (which swaps in the sign-in button when
+      // no token), but double-click on a row could land here.
+      handleSignInToOhm();
+      return;
+    }
+    setStatus('updating');
+    setErrorMsg(null);
+    const tags: Record<string, string> = { wikidata: qid };
+    if (p.wikipediaTitle) {
+      tags.wikipedia = `en:${p.wikipediaTitle}`;
+    }
+    try {
+      await updateOhmElement({
+        token: ohmToken,
+        osmType,
+        osmId,
+        setTags: tags,
+        comment: `Link to ${p.title} (${qid}) via OpenHistory`,
+      });
+      setStatus('updated');
+    } catch (e) {
+      setStatus('error');
+      setErrorMsg((e as Error).message);
     }
   }
+
+  async function handleSignInToOhm() {
+    try {
+      const r = await fetch(`${API_BASE}/ohm/auth-url`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      if (!data.url) {
+        setStatus('error');
+        setErrorMsg('Backend returned no auth URL.');
+        return;
+      }
+      // Open in a new tab so the user keeps their local dev / map context.
+      // The OAuth `redirect_uri` is the production callback, which forwards the
+      // token back to the originating origin via postMessage (see callback handler).
+      window.open(data.url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      setStatus('error');
+      setErrorMsg(`Sign-in failed: ${(e as Error).message}`);
+    }
+  }
+
+  // Refresh the token from localStorage in case it changed (e.g. user signed in
+  // from another tab while this modal was open).
+  useEffect(() => {
+    const onStorage = () => setOhmToken(getOhmToken());
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   async function handleImport(r: EntityResult) {
     setImportingQid(r.id);
@@ -138,7 +179,7 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, p
     boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
     display: 'flex', flexDirection: 'column', gap: 14,
     position: 'relative',
-    ...(status === 'saved'
+    ...(status === 'updated'
       ? { height: 'auto' }
       : { height: 'calc(100vh - 120px)', maxHeight: 780 }),
     overflow: 'hidden',
@@ -150,21 +191,40 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, p
 
         {/* Header */}
         <div>
-          <div style={{ fontSize: 13, color: '#8899bb', marginBottom: 3 }}>Assign OHM territory</div>
-          <div style={{ fontSize: 17, fontWeight: 600 }}>{ohmName}</div>
-          {(yearStart != null) && (
-            <div style={{ fontSize: 12, color: '#8899bb', marginTop: 3 }}>
-              {yearStart}–{yearEnd ?? '∞'}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: '#8899bb', marginBottom: 3 }}>Add Wikidata QID to OHM</div>
+              <div style={{ fontSize: 17, fontWeight: 600 }}>{ohmName}</div>
+              {(yearStart != null) && (
+                <div style={{ fontSize: 12, color: '#8899bb', marginTop: 3 }}>
+                  {yearStart}–{yearEnd ?? '∞'}
+                </div>
+              )}
+              <div style={{ fontSize: 10, color: '#445', marginTop: 4, fontFamily: 'monospace' }}>{osmType}/{osmId}</div>
             </div>
-          )}
-          {ohmWikidataQid && (
-            <div style={{ fontSize: 11, color: '#556', marginTop: 3 }}>{ohmWikidataQid}</div>
+            {ohmToken ? (
+              <span style={{ fontSize: 10, color: '#66bb6a', padding: '2px 8px', border: '1px solid #2d5a3a', borderRadius: 4, whiteSpace: 'nowrap', flexShrink: 0 }}>OHM signed in</span>
+            ) : (
+              <button
+                onClick={handleSignInToOhm}
+                style={{ ...btnStyle('#3a4560'), padding: '4px 10px', fontSize: 11, flexShrink: 0 }}
+                title="Sign in to OpenHistoricalMap to publish tag edits"
+              >Sign in to OHM</button>
+            )}
+          </div>
+          {ohmWikidataQid ? (
+            <div style={{ fontSize: 11, color: '#778', marginTop: 6 }}>OHM already has <code>{ohmWikidataQid}</code> — confirm it matches the polity you want, or pick a replacement below.</div>
+          ) : (
+            <div style={{ fontSize: 11, color: '#778', marginTop: 6 }}>This element has no Wikidata tag in OHM. Pick the matching polity; pressing the button will add <code>wikidata=Q…</code> (and <code>wikipedia=…</code> when available) directly on OHM.</div>
           )}
         </div>
 
-        {status === 'saved' ? (
-          <div style={{ textAlign: 'center', padding: '14px 0' }}>
-            <div style={{ color: '#66bb6a', fontSize: 15, marginBottom: 6 }}>✓ Mapping saved</div>
+        {status === 'updated' ? (
+          <div style={{ textAlign: 'center', padding: '14px 4px' }}>
+            <div style={{ color: '#66bb6a', fontSize: 15, marginBottom: 8 }}>✓ OHM updated</div>
+            <div style={{ color: '#8899bb', fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
+              Tag pushed to <code>{osmType}/{osmId}</code>. The polygon will recolor once OHM's tile cache refreshes (usually within a few minutes).
+            </div>
             <button onClick={onClose} style={btnStyle('#3a4560')}>Close</button>
           </div>
         ) : (
@@ -193,7 +253,7 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, p
                   <div
                     key={p.id}
                     onClick={() => setSelectedId(p.id)}
-                    onDoubleClick={() => { setSelectedId(p.id); handleSave(p); }}
+                    onDoubleClick={() => { setSelectedId(p.id); if (ohmToken) handleUpdateOhm(p); else handleSignInToOhm(); }}
                     style={{
                       padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #1e2a3e',
                       background: p.id === selectedId ? '#2a3a5a' : 'transparent',
@@ -285,22 +345,31 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, p
               )}
             </div>
 
-            {status === 'error' && (
-              <div style={{ fontSize: 12, color: '#ef5350' }}>
-                Save failed{errorMsg ? `: ${errorMsg}` : ' — is the API running?'}
-              </div>
+            {status === 'error' && errorMsg && (
+              <div style={{ fontSize: 12, color: '#ef5350' }}>{errorMsg}</div>
             )}
 
-            {/* Footer buttons */}
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            {/* Footer buttons. The only write path is the OSM API — sign-in required. */}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
               <button onClick={onClose} style={btnStyle('#3a4560')}>Cancel</button>
-              <button
-                onClick={() => handleSave()}
-                disabled={!selectedId || status === 'saving'}
-                style={btnStyle('#2a4a7a', !selectedId || status === 'saving')}
-              >
-                {status === 'saving' ? 'Saving…' : 'Assign'}
-              </button>
+              {ohmToken ? (
+                <button
+                  onClick={() => handleUpdateOhm()}
+                  disabled={!selectedId || status === 'updating'}
+                  style={btnStyle('#2a5a3a', !selectedId || status === 'updating')}
+                  title="Push wikidata/wikipedia tags onto this OHM element via the OSM API"
+                >
+                  {status === 'updating' ? 'Updating…' : 'Update OHM →'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleSignInToOhm}
+                  style={btnStyle('#2a5a3a')}
+                  title="Sign in to OpenHistoricalMap so we can push tag edits via their API"
+                >
+                  Sign in to OHM to update →
+                </button>
+              )}
             </div>
           </>
         )}

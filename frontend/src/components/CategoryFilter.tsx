@@ -59,6 +59,8 @@ interface Props {
   onToggleOhmAdmin: () => void;
   polityPalette: PaletteId;
   onPolityPaletteChange: (id: PaletteId) => void;
+  maxAdminLevel: number;
+  onMaxAdminLevelChange: (level: number) => void;
 }
 
 function Spinner() {
@@ -158,7 +160,7 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
   );
 }
 
-export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onOpenStories, onEditTerritory, editorMode, territorySource, getOhmEditUrl, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin, polityPalette, onPolityPaletteChange }: Props) {
+export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onOpenStories, onEditTerritory, editorMode, territorySource, getOhmEditUrl, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin, polityPalette, onPolityPaletteChange, maxAdminLevel, onMaxAdminLevelChange }: Props) {
   const bordersColor = '#607D8B';
   const ohmPolygonsColor = '#4CAF50';
   const otherPolitiesColor = '#9C27B0';
@@ -244,6 +246,18 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
               <input type="checkbox" checked={showOhmAdmin} onChange={onToggleOhmAdmin} style={{ margin: 0 }} />
               <span style={styles.settingsCheckLabel}>Show OHM fills</span>
             </label>
+            <div style={{ ...styles.settingsRow, marginTop: 6 }} title="Filter OHM polygons and labels by admin_level. 2 = countries only. Higher values show finer subdivisions (states, counties, districts).">
+              <label style={styles.settingsLabel}>Show admin level ≤</label>
+              <select
+                value={maxAdminLevel}
+                onChange={(e) => onMaxAdminLevelChange(Number(e.target.value))}
+                style={styles.langSelect}
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
             <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.08)', margin: '10px 0' }} />
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.35)', marginBottom: 8 }}>Map theme</div>
             <div style={styles.settingsRow}>

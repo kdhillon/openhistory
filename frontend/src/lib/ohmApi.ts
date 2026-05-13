@@ -52,6 +52,46 @@ interface CreateLabelResult {
   changesetId: number;
 }
 
+export interface UpdateElementParams {
+  token: string;
+  osmType: 'relation' | 'node' | 'way';
+  osmId: number;
+  setTags: Record<string, string>;
+  comment?: string;
+}
+
+export interface UpdateElementResult {
+  changesetId: number;
+  osmType: 'relation' | 'node' | 'way';
+  osmId: number;
+  newVersion: number | null;
+}
+
+/**
+ * Add or update tags on an existing OHM element (relation/node/way).
+ * Used by the territory mapping modal to push wikidata/wikipedia tags onto
+ * an element that's missing them.
+ */
+export async function updateOhmElement(params: UpdateElementParams): Promise<UpdateElementResult> {
+  const { token, osmType, osmId, setTags, comment } = params;
+  const res = await fetch(`${API_BASE}/ohm/update-element`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      accessToken: token,
+      osmType,
+      osmId,
+      setTags,
+      comment,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OHM update failed (${res.status}): ${text.slice(0, 300)}`);
+  }
+  return res.json();
+}
+
 /**
  * Create a place=country node on OHM via our backend proxy.
  * Backend uses the user's OAuth Bearer token to authenticate to OHM.

@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { FeatureProperties, Category, StoryIndexEntry } from '../types';
+import type { FeatureProperties, Category, PolityType, StoryIndexEntry } from '../types';
 import type { StackInfo } from './MapView';
 import { CATEGORY_COLORS, CATEGORY_LABELS } from '../theme/categories';
 import { CATEGORY_SVGS, colorSvg, svgDataUri } from '../theme/icons';
-import { displayYear, encodeDate, STEP_DAY, STEP_MONTH, STEP_YEAR } from '../hooks/useTimeline';
+import { displayYear, encodeDate, decodeDate, STEP_DAY, STEP_MONTH, STEP_YEAR } from '../hooks/useTimeline';
 import { WikiEditForm } from './WikiEditForm';
 import { fetchArticleInLanguage } from '../lib/wikidataApi';
+import { useWikidataEntity } from '../hooks/useWikidataEntity';
 import { LANG_CODE_TO_NAME } from '../lib/languages';
 import { patchFeature, patchPolity, searchOhm } from '../lib/api';
 import { EVENT_CATEGORIES, POLITY_CATEGORIES } from '../theme/categories';
+import { getPolityColorAtYear, isValidPaletteId, DEFAULT_PALETTE_ID } from '../theme/polityPalettes';
+import type { PaletteId, PolityForColor, ParentEntry } from '../theme/polityPalettes';
 
 interface WikiSection {
   title: string;
@@ -46,6 +49,8 @@ interface Props {
   isOhmMapped?: boolean;
   /** Enter placement mode: user clicks map to place a label for this polity. */
   onAddToOhm?: (feature: FeatureProperties) => void;
+  /** Open the OHM mapping modal for the OHM element this feature came from (when known). */
+  onEditOhm?: (ctx: { osmType: 'relation' | 'node'; osmId: number; name: string; currentQid: string | null; yearStart: number | null; yearEnd: number | null }) => void;
 }
 
 function wikiApi(lang: string) {
@@ -70,14 +75,50 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, '');
 }
 
-/** Human-readable description for a parent-link source property — used as chip tooltips. */
-function tooltipForSource(source: string): string {
-  if (source === 'P150') return 'From Wikidata: contains administrative territorial entity (P150)';
-  if (source === 'P361') return 'From Wikidata: part of (P361)';
-  if (source === 'P131') return 'From Wikidata: located in the administrative territorial entity (P131)';
-  if (source === 'P127') return 'From Wikidata: owned by (P127)';
-  if (source.startsWith('P31:')) return `From Wikidata: instance of ${source.slice(4)} (P31)`;
-  return `From Wikidata (${source})`;
+function MissingWikiNote({ qid, onEdit }: { qid: string; onEdit?: () => void }) {
+  // When we know which OHM element this feature came from (onEdit provided),
+  // clicking "Open Historical Map" opens the OHM mapping modal — the user
+  // picks a different polity and the new wikidata tag is pushed straight to
+  // OHM via the API. Without that context, fall back to deep-linking OHM's
+  // iD editor at the current map view.
+  const zoom = Math.max(15, Math.round(Number(localStorage.getItem('oh-map-zoom') ?? '5')));
+  const lat = Number(localStorage.getItem('oh-map-lat') ?? '30').toFixed(4);
+  const lng = Number(localStorage.getItem('oh-map-lng') ?? '0').toFixed(4);
+  const ohmUrl = `https://www.openhistoricalmap.org/edit#map=${zoom}/${lat}/${lng}`;
+  const linkStyle: React.CSSProperties = { color: '#3366cc', textDecoration: 'none' };
+  return (
+    <p style={{
+      fontSize: 12.5,
+      color: '#7a8aa0',
+      fontStyle: 'italic',
+      margin: 0,
+      padding: '14px 16px 0',
+      lineHeight: 1.5,
+    }}>
+      No English Wikipedia article linked for{' '}
+      <a
+        href={`https://www.wikidata.org/wiki/${qid}`}
+        target="_blank"
+        rel="noreferrer"
+        style={linkStyle}
+      >{qid}</a>.{' '}
+      If this is the incorrect Wikidata ID, you can correct it on{' '}
+      {onEdit ? (
+        <a
+          href="#"
+          onClick={(e) => { e.preventDefault(); onEdit(); }}
+          style={linkStyle}
+        >Open Historical Map</a>
+      ) : (
+        <a
+          href={ohmUrl}
+          target="_blank"
+          rel="noreferrer"
+          style={linkStyle}
+        >Open Historical Map</a>
+      )}.
+    </p>
+  );
 }
 
 function PencilIcon() {
@@ -88,15 +129,55 @@ function PencilIcon() {
   );
 }
 
-export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated, hiddenNations, onToggleHiddenNation, onHideFeature, selectedLang = 'en', onStartStory, isMobile, currentDateInt, isOhmMapped, onAddToOhm }: Props) {
+export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated, hiddenNations, onToggleHiddenNation, onHideFeature, selectedLang = 'en', onStartStory, isMobile, currentDateInt, isOhmMapped, onAddToOhm, onEditOhm }: Props) {
+  // Live-fetch Wikidata when either:
+  //   (a) the feature is a Wikidata stub (synthesized in MapView for OHM polygons
+  //       with no matching local feature — id starts with `wd:`), or
+  //   (b) it's a local feature with a wikidataQid but no Wikipedia data cached
+  //       (e.g. our polity row exists but no wikipedia_url/summary in seed.geojson).
+  // Either way we overlay the fetched fields onto the rawFeature so the panel
+  // renders consistently. Local-DB fields (title, etc.) take precedence; live data
+  // only fills gaps.
+  const isWikidataStub = rawFeature?.id?.startsWith('wd:') ?? false;
+  const needsLiveFetch = !!(rawFeature?.wikidataQid && !rawFeature.wikipediaSummary && !rawFeature.wikipediaUrl);
+  const fetchQid = (isWikidataStub || needsLiveFetch) ? rawFeature?.wikidataQid ?? null : null;
+  const { data: liveEntity } = useWikidataEntity(fetchQid, selectedLang);
+  const feature: FeatureProperties | null = (rawFeature && fetchQid && liveEntity)
+    ? {
+        ...rawFeature,
+        title: rawFeature.title || liveEntity.title,
+        wikipediaSummary: rawFeature.wikipediaSummary || liveEntity.summary,
+        wikipediaUrl: rawFeature.wikipediaUrl || liveEntity.wikipediaUrl,
+        yearStart: rawFeature.yearStart ?? liveEntity.yearStart,
+        yearEnd: rawFeature.yearEnd ?? liveEntity.yearEnd,
+      }
+    : rawFeature;
+  // True when the entity has a QID but no English Wikipedia article is linked
+  // from Wikidata (either because no `enwiki` sitelink exists, or because the
+  // resolved URL points to Wikidata itself). Surfaced as a hint so the user can
+  // fix it upstream rather than working around it client-side.
+  const missingEnglishWiki = !!(
+    feature?.wikidataQid &&
+    (!feature.wikipediaUrl || /wikidata\.org/.test(feature.wikipediaUrl))
+  );
+  // When the feature came from an OHM tile click, we know which relation/node
+  // it's linked to and can push tag edits directly via the API. Otherwise the
+  // MissingWikiNote falls back to a deep-link to OHM's iD editor.
+  const ohmEditHandler = (onEditOhm && feature?._ohmOsmType && feature?._ohmOsmId)
+    ? () => onEditOhm({
+        osmType: feature._ohmOsmType as 'relation' | 'node',
+        osmId: feature._ohmOsmId as number,
+        name: feature.title ?? '',
+        currentQid: feature.wikidataQid ?? null,
+        yearStart: feature.yearStart ?? null,
+        yearEnd: feature.yearEnd ?? null,
+      })
+    : undefined;
   const [expanded, setExpanded] = useState(false);
   const [expandedWidth, setExpandedWidth] = useState(468);
-  const [editField, setEditField] = useState<'date' | 'location' | 'capital' | 'sovereign' | null>(null);
+  const [editField, setEditField] = useState<'date' | 'location' | 'capital' | null>(null);
   const [capitalDraft, setCapitalDraft] = useState<{ name: string; lat: string; lng: string } | null>(null);
   const [capitalSaving, setCapitalSaving] = useState(false);
-  const [sovereignQuery, setSovereignQuery] = useState('');
-  const [sovereignQidDraft, setSovereignQidDraft] = useState<string | null>(null);
-  const [sovereignSaving, setSovereignSaving] = useState(false);
   const [article, setArticle] = useState<WikiArticle | null>(null);
   const [loading, setLoading] = useState(false);
   const [openSections, setOpenSections] = useState<Set<number>>(new Set());
@@ -183,8 +264,6 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
     setImageExpanded(false);
     setEditField(null);
     setCapitalDraft(null);
-    setSovereignQuery('');
-    setSovereignQidDraft(null);
     setCategoryPickerOpen(false);
   }, [feature?.title]);
 
@@ -240,10 +319,14 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
 
     if (selectedLang === 'en') {
       if (!feature?.wikipediaUrl) return;
-      const match = feature.wikipediaUrl.match(/\/wiki\/([^#?]+)/);
-      if (!match) return;
+      // Parse host AND title. wikipediaUrl may point to a non-English wiki (e.g. nlwiki
+      // when no English article exists) or to Wikidata directly — only fetch when it's
+      // actually the English Wikipedia.
+      const urlMatch = feature.wikipediaUrl.match(/^https?:\/\/([a-z-]+)\.wikipedia\.org\/wiki\/([^#?]+)/);
+      if (!urlMatch) return; // Wikidata or unsupported host — show summary only
+      if (urlMatch[1] !== 'en') return; // foreign-lang wiki — don't try to render
       apiBase = wikiApi('en');
-      pageTitle = decodeURIComponent(match[1]);
+      pageTitle = decodeURIComponent(urlMatch[2]);
     } else {
       // Wait for translatedContent to resolve the sitelink title
       if (!translatedContent?.wikiTitle) return;
@@ -335,6 +418,104 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
   // Build date string: null means no known date (permanent locations)
   const isLocation = feature.featureType === 'city' || feature.featureType === 'region';
   const isPolity = feature.featureType === 'polity';
+
+  // Polity-status tag: replaces the polity-type category tag with either
+  //   "Part of {parent.title}"  (when the polity has an active parent at currentYear)
+  //   "Independent Polity"      (when it doesn't)
+  // Also applies to region features that have a polity twin (same wikidataQid) — these
+  // are entities like Viceroyalty of Peru that exist in both the locations and polities
+  // tables; the region card should still surface the parent relationship.
+  type PolityTagInfo =
+    | { kind: 'parent'; text: string; color: string; targetFeature: GeoJSON.Feature | null }
+    | { kind: 'independent'; color: string; polityType: PolityType | undefined };
+  const polityStatusTag: PolityTagInfo | null = (() => {
+    if (!isPolity && feature.featureType !== 'region') return null;
+
+    // Find the polity feature to read parents from. For polity features that's the
+    // current one; for region features it's the twin in geojson by wikidataQid.
+    let polityFeature: FeatureProperties | null = null;
+    if (isPolity) {
+      polityFeature = feature;
+    } else if (feature.wikidataQid && geojson) {
+      const twin = geojson.features.find(f => {
+        const p = f.properties as FeatureProperties;
+        return p.featureType === 'polity' && p.wikidataQid === feature.wikidataQid;
+      });
+      if (twin) polityFeature = twin.properties as FeatureProperties;
+    }
+    if (!polityFeature) return null;
+
+    // Defensive parse of parents (matches the partOfResolved handling above).
+    const rawParents = polityFeature.parents;
+    const parents: ParentEntry[] = Array.isArray(rawParents)
+      ? (rawParents as ParentEntry[])
+      : typeof rawParents === 'string'
+        ? (() => { try { return JSON.parse(rawParents as unknown as string); } catch { return []; } })()
+        : [];
+
+    // Strictly use the current timeline year. The parent shown is whichever was
+    // active AT THAT YEAR — not at the polity's midpoint or boundary.
+    const currentYear = decodeDate(currentDateInt).year;
+    const active = parents.filter(p =>
+      (p.yearStart == null || p.yearStart <= currentYear) &&
+      (p.yearEnd == null || p.yearEnd >= currentYear)
+    );
+    const rank = (s: string) => s === 'P150' ? 0 : s === 'P361' ? 1 : s === 'P131' ? 2 : s === 'P127' ? 3 : 4;
+    active.sort((a, b) => rank(a.source) - rank(b.source));
+
+    // Read the user's chosen palette so the tag color matches the map exactly.
+    const savedPalette = localStorage.getItem('oh-polity-palette');
+    const paletteId: PaletteId = isValidPaletteId(savedPalette) ? savedPalette : DEFAULT_PALETTE_ID;
+
+    // Build a registry for the cascade resolver from the loaded GeoJSON.
+    const polityByQid: Record<string, PolityForColor> = {};
+    if (geojson) {
+      for (const f of geojson.features) {
+        const p = f.properties as FeatureProperties;
+        if (p.featureType !== 'polity' || !p.wikidataQid) continue;
+        if (!polityByQid[p.wikidataQid]) {
+          polityByQid[p.wikidataQid] = {
+            qid: p.wikidataQid,
+            polityType: p.polityType,
+            parents: p.parents,
+            // Hash by capital QID for semantic color grouping (Spain ≈ Spanish Empire).
+            polityKey: p.capitalWikidataQid ?? p.title,
+          };
+        }
+      }
+    }
+    const resolveByQid = (qid: string): PolityForColor | null => polityByQid[qid] ?? null;
+
+    // Find the first active parent that is in our registry — that's the one we display.
+    let parentFeature: GeoJSON.Feature | null = null;
+    let parentTitle: string | null = null;
+    for (const p of active) {
+      const pf = geojson?.features.find(f => {
+        const props = f.properties as FeatureProperties;
+        return props.featureType === 'polity' && props.wikidataQid === p.qid;
+      }) ?? null;
+      if (pf) {
+        parentFeature = pf;
+        parentTitle = (pf.properties as FeatureProperties).title ?? p.qid;
+        break;
+      }
+    }
+
+    const selfPolity: PolityForColor = {
+      qid: polityFeature.wikidataQid ?? '',
+      polityType: polityFeature.polityType,
+      parents: parents,
+      polityKey: polityFeature.capitalWikidataQid ?? polityFeature.title,
+    };
+    const color = getPolityColorAtYear(selfPolity, currentYear, paletteId, resolveByQid);
+
+    if (parentTitle) {
+      return { kind: 'parent', text: `Part of ${parentTitle}`, color, targetFeature: parentFeature };
+    }
+    // No active parent — render the polity's own category tag (Kingdom / Empire / etc.)
+    // but with the cascade-resolved color so the tag matches the map fill exactly.
+    return { kind: 'independent', color, polityType: polityFeature.polityType };
+  })();
   // Format a raw year/month/day to a display string at the highest available granularity
   const fmtDate = (year: number, month: number | null | undefined, day: number | null | undefined) => {
     const step = day != null ? STEP_DAY : month != null ? STEP_MONTH : STEP_YEAR;
@@ -402,7 +583,65 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
       {/* Header */}
       <div style={styles.header}>
         <div style={{ ...styles.headerLeft, position: 'relative' }}>
-          {(feature.categories ?? []).map((cat) => {
+          {polityStatusTag?.kind === 'parent' ? (
+            // "Part of X" tag — replaces the polity-type category tag. Color matches the
+            // map render color (parent's color via the cascade).
+            (() => {
+              const { text, color, targetFeature } = polityStatusTag;
+              const clickable = !!(targetFeature && onNavigateToFeature);
+              return (
+                <span
+                  title={clickable ? `Navigate to ${text.replace(/^Part of /, '')}` : undefined}
+                  onClick={clickable ? () => onNavigateToFeature!(targetFeature!.properties as FeatureProperties) : undefined}
+                  style={{
+                    ...styles.tag,
+                    background: `${color}22`,
+                    color,
+                    borderColor: `${color}44`,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    cursor: clickable ? 'pointer' : 'default',
+                  }}
+                >
+                  {text}
+                </span>
+              );
+            })()
+          ) : polityStatusTag?.kind === 'independent' ? (
+            // No active parent — show the polity's own type label (Kingdom / Empire / etc.)
+            // but recolored to match the cascade (which equals its own map color here).
+            (() => {
+              const cat = (polityStatusTag.polityType ?? 'other') as Category;
+              const color = polityStatusTag.color;
+              const rawSvg = CATEGORY_SVGS[cat];
+              const iconSrc = rawSvg ? svgDataUri(colorSvg(rawSvg, color)) : null;
+              const isEditable = feature.featureType === 'event' || feature.featureType === 'polity';
+              return (
+                <span
+                  key={cat}
+                  title={isEditable ? 'Click to reassign category' : undefined}
+                  onClick={isEditable ? () => setCategoryPickerOpen((v) => !v) : undefined}
+                  style={{
+                    ...styles.tag,
+                    background: `${color}22`,
+                    color,
+                    borderColor: `${color}44`,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    cursor: isEditable ? 'pointer' : 'default',
+                  }}
+                >
+                  {iconSrc && (
+                    <img src={iconSrc} width={12} height={12} style={{ flexShrink: 0, display: 'block' }} />
+                  )}
+                  {CATEGORY_LABELS[cat] ?? cat}
+                  {isEditable && <span style={{ opacity: 0.5, marginLeft: 2, display: 'flex', alignItems: 'center' }}><PencilIcon /></span>}
+                </span>
+              );
+            })()
+          ) : (feature.categories ?? []).map((cat) => {
             const color   = CATEGORY_COLORS[cat as Category] ?? '#9E9E9E';
             const rawSvg  = CATEGORY_SVGS[cat as Category];
             const iconSrc = rawSvg ? svgDataUri(colorSvg(rawSvg, color)) : null;
@@ -770,147 +1009,6 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
         );
       })()}
 
-      {/* Sovereign — polities only */}
-      {isPolity && (() => {
-        const sovFeature = feature.sovereignName ? geojson?.features.find((f) => {
-          const p = f.properties as FeatureProperties;
-          return p.featureType === 'polity' && (feature.sovereignSlug ? p.slug === feature.sovereignSlug : p.title === feature.sovereignName);
-        }) : undefined;
-
-        const polityMatches = editField === 'sovereign' && sovereignQuery.trim().length > 0
-          ? (geojson?.features ?? [])
-              .filter((f) => {
-                const p = f.properties as FeatureProperties;
-                return p.featureType === 'polity'
-                  && p.id !== feature.id
-                  && p.title?.toLowerCase().includes(sovereignQuery.toLowerCase());
-              })
-              .slice(0, 8)
-              .map((f) => f.properties as FeatureProperties)
-          : [];
-
-        return (
-          <>
-            <div style={styles.meta}>
-              <span style={{ ...styles.metaLocation, color: '#9a9a9a', fontSize: 12, marginRight: 4 }}>Part of:</span>
-              {feature.sovereignName
-                ? sovFeature && onNavigateToFeature
-                  ? (
-                    <span
-                      style={{ ...styles.metaLocation, color: '#3366cc', cursor: 'pointer', textDecoration: 'underline' }}
-                      onClick={() => onNavigateToFeature(sovFeature.properties as FeatureProperties)}
-                    >
-                      {feature.sovereignName}
-                    </span>
-                  )
-                  : <span style={styles.metaLocation}>{feature.sovereignName}</span>
-                : <span style={{ ...styles.metaLocation, color: '#b0b0b0', fontStyle: 'italic' }}>—</span>
-              }
-              <button
-                style={{ ...styles.pencilBtn, marginLeft: 4 }}
-                onClick={() => {
-                  setSovereignQuery(feature.sovereignName ?? '');
-                  setSovereignQidDraft(feature.sovereignQid ?? null);
-                  setEditField(f => f === 'sovereign' ? null : 'sovereign');
-                }}
-                title="Edit sovereign / parent polity"
-              >
-                <PencilIcon />
-              </button>
-            </div>
-            {editField === 'sovereign' && (
-              <div style={{ padding: '0 16px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <input
-                  style={styles.editInput}
-                  placeholder="Search polities…"
-                  value={sovereignQuery}
-                  autoFocus
-                  onChange={e => { setSovereignQuery(e.target.value); setSovereignQidDraft(null); }}
-                />
-                {polityMatches.length > 0 && (
-                  <div style={{ border: '1px solid rgba(0,0,0,0.12)', borderRadius: 5, overflow: 'hidden', maxHeight: 160, overflowY: 'auto' }}>
-                    {polityMatches.map((p) => (
-                      <button
-                        key={p.id}
-                        style={{
-                          display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px',
-                          background: sovereignQidDraft === p.wikidataQid ? 'rgba(51,102,204,0.1)' : 'transparent',
-                          border: 'none', borderBottom: '1px solid rgba(0,0,0,0.06)',
-                          fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', color: '#202122',
-                        }}
-                        onClick={() => { setSovereignQuery(p.title); setSovereignQidDraft(p.wikidataQid ?? null); }}
-                      >
-                        <span style={{ fontWeight: 500 }}>{p.title}</span>
-                        <span style={{ color: '#9a9a9a', marginLeft: 6 }}>
-                          {p.yearStart != null ? p.yearDisplay : ''}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button
-                    style={{ ...styles.saveBtn, opacity: sovereignSaving || !sovereignQidDraft ? 0.6 : 1 }}
-                    disabled={sovereignSaving || !sovereignQidDraft}
-                    onClick={async () => {
-                      if (!sovereignQidDraft) return;
-                      setSovereignSaving(true);
-                      try {
-                        const res = await fetch(`http://localhost:8000/api/polities/${feature.id}`, {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ sovereign_qids: [sovereignQidDraft] }),
-                        });
-                        if (res.ok) {
-                          const selectedPolity = geojson?.features.find(
-                            f => (f.properties as FeatureProperties).wikidataQid === sovereignQidDraft
-                          )?.properties as FeatureProperties | undefined;
-                          onFeatureUpdated({
-                            sovereignName: selectedPolity?.title ?? sovereignQuery,
-                            sovereignSlug: selectedPolity?.slug ?? null,
-                            sovereignQid: sovereignQidDraft,
-                          });
-                          setEditField(null);
-                        }
-                      } finally {
-                        setSovereignSaving(false);
-                      }
-                    }}
-                  >
-                    {sovereignSaving ? 'Saving…' : 'Save'}
-                  </button>
-                  {feature.sovereignQid && (
-                    <button
-                      style={{ ...styles.cancelBtn, color: '#c62828' }}
-                      disabled={sovereignSaving}
-                      onClick={async () => {
-                        setSovereignSaving(true);
-                        try {
-                          const res = await fetch(`http://localhost:8000/api/polities/${feature.id}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ sovereign_qids: [] }),
-                          });
-                          if (res.ok) {
-                            onFeatureUpdated({ sovereignName: undefined, sovereignSlug: undefined, sovereignQid: undefined });
-                            setEditField(null);
-                          }
-                        } finally {
-                          setSovereignSaving(false);
-                        }
-                      }}
-                    >
-                      Clear
-                    </button>
-                  )}
-                  <button style={styles.cancelBtn} onClick={() => setEditField(null)}>Cancel</button>
-                </div>
-              </div>
-            )}
-          </>
-        );
-      })()}
-
       {/* Add to OHM — unmapped polities only */}
       {isPolity && !isOhmMapped && onAddToOhm && (
         <div style={{ padding: '4px 16px 8px' }}>
@@ -1006,72 +1104,6 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
         );
       })()}
 
-      {/* Part of — polity hierarchy chips (P150/P361/P131/P127/P31 reverse-class) */}
-      {feature.featureType === 'polity' && feature.parents != null && (() => {
-        type ParentEntry = { qid: string; yearStart?: number | null; yearEnd?: number | null; source: string };
-        // Defensive parse — matches the existing partOfResolved handling above. Mapbox/MapLibre
-        // can stringify array properties on some code paths; tolerate both shapes.
-        const parents: ParentEntry[] = Array.isArray(feature.parents)
-          ? (feature.parents as ParentEntry[])
-          : typeof feature.parents === 'string'
-            ? (() => { try { return JSON.parse(feature.parents as unknown as string); } catch { return []; } })()
-            : [];
-        if (parents.length === 0) return null;
-
-        const currentYear = Math.floor(currentDateInt / 10000);
-        const active = parents.filter(p =>
-          (p.yearStart == null || p.yearStart <= currentYear) &&
-          (p.yearEnd == null || p.yearEnd >= currentYear)
-        );
-        if (active.length === 0) return null;
-
-        const rank = (s: string) => s === 'P150' ? 0 : s === 'P361' ? 1 : s === 'P131' ? 2 : s === 'P127' ? 3 : 4;
-        active.sort((a, b) => rank(a.source) - rank(b.source));
-
-        // Resolve each active parent against the in-memory polity registry. Skip parents not in registry.
-        const chips = active
-          .map(entry => {
-            const parentFeature = geojson?.features.find(f => {
-              const pp = f.properties as FeatureProperties;
-              return pp.featureType === 'polity' && pp.wikidataQid === entry.qid;
-            });
-            if (!parentFeature) return null;
-            const props = parentFeature.properties as FeatureProperties;
-            return { entry, feature: parentFeature, title: props.title ?? entry.qid };
-          })
-          .filter((c): c is NonNullable<typeof c> => c !== null);
-
-        if (chips.length === 0) return null;
-
-        return (
-          <div style={styles.partOfRow}>
-            <span style={styles.partOfLabel}>Part of</span>
-            <div style={styles.partOfChips}>
-              {chips.map(({ entry, feature: pf, title }) => (
-                onNavigateToFeature ? (
-                  <button
-                    key={entry.qid}
-                    style={styles.partOfChip}
-                    onClick={() => onNavigateToFeature(pf.properties as FeatureProperties)}
-                    title={`${title} — ${tooltipForSource(entry.source)}`}
-                  >
-                    {title} →
-                  </button>
-                ) : (
-                  <span
-                    key={entry.qid}
-                    style={{ ...styles.partOfChip, cursor: 'default', opacity: 0.6 }}
-                    title={tooltipForSource(entry.source)}
-                  >
-                    {title}
-                  </span>
-                )
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-
       <div style={styles.divider} />
 
       {/* Body — scrollable only when expanded */}
@@ -1086,7 +1118,10 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
             if (translatedContent && !translatedContent.hasArticle && !translatedContent.summary) {
               return <p style={{ ...styles.summary, color: '#aaa', fontStyle: 'italic' }}>No article in {LANG_CODE_TO_NAME[selectedLang] ?? selectedLang}</p>;
             }
-            return <p style={styles.summary}>{summary}</p>;
+            return <>
+              {missingEnglishWiki && <MissingWikiNote qid={feature.wikidataQid!} onEdit={ohmEditHandler} />}
+              <p style={styles.summary}>{summary}</p>
+            </>;
           })()
         ) : loading ? (
           (() => {
@@ -1094,7 +1129,10 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
             if (translatedContent && !translatedContent.hasArticle && !translatedContent.summary) {
               return <p style={{ ...styles.summary, color: '#aaa', fontStyle: 'italic' }}>No article in {LANG_CODE_TO_NAME[selectedLang] ?? selectedLang}</p>;
             }
-            return <p style={styles.summary}>{summary}</p>;
+            return <>
+              {missingEnglishWiki && <MissingWikiNote qid={feature.wikidataQid!} onEdit={ohmEditHandler} />}
+              <p style={styles.summary}>{summary}</p>
+            </>;
           })()
         ) : article ? (
           <>
@@ -1146,7 +1184,11 @@ export function InfoPanel({ feature, stack, onClose, geojson, onNavigateToFeatur
         ) : (
           (() => {
             const summary = translatedContent?.summary || feature.wikipediaSummary || fetchedSummary;
-            return summary ? <p style={styles.summary}>{summary}</p> : null;
+            if (!summary && !missingEnglishWiki) return null;
+            return <>
+              {missingEnglishWiki && <MissingWikiNote qid={feature.wikidataQid!} onEdit={ohmEditHandler} />}
+              {summary && <p style={styles.summary}>{summary}</p>}
+            </>;
           })()
         )}
       </div>

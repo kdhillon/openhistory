@@ -35,19 +35,28 @@ def main() -> int:
 
     conn = psycopg2.connect(dsn)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    sql = "SELECT wikidata_qid, parents FROM polities WHERE wikidata_qid IS NOT NULL ORDER BY wikidata_qid"
-    if args.limit:
-        sql += f" LIMIT {int(args.limit)}"
-    cur.execute(sql)
-    rows = cur.fetchall()
-    print(f"Loaded {len(rows)} polities from DB.", file=sys.stderr)
+    # Load the polity meta we need for filtering and year-range intersection.
+    # We need the full registry for the parent filter even when --limit is used.
+    cur.execute("""
+        SELECT wikidata_qid, year_start, year_end, parents
+        FROM polities
+        WHERE wikidata_qid IS NOT NULL
+        ORDER BY wikidata_qid
+    """)
+    all_rows = cur.fetchall()
+    print(f"Loaded {len(all_rows)} polities from DB.", file=sys.stderr)
 
-    qids = [r["wikidata_qid"] for r in rows]
-    eligible = set(qids)  # children must be in our registry
-    existing = {r["wikidata_qid"]: (r["parents"] or []) for r in rows}
+    polity_meta: dict[str, dict] = {
+        r["wikidata_qid"]: {"year_start": r["year_start"], "year_end": r["year_end"]}
+        for r in all_rows
+    }
+    existing = {r["wikidata_qid"]: (r["parents"] or []) for r in all_rows}
 
-    print("Fetching from Wikidata...", file=sys.stderr)
-    fetched = fetch_parents(qids, eligible_children=eligible)
+    # `qids` are the children we'll FETCH parents for. With --limit, only that subset
+    # is queried; the parent filter still recognizes the full polity registry.
+    qids = [r["wikidata_qid"] for r in (all_rows[: args.limit] if args.limit else all_rows)]
+    print(f"Fetching parents for {len(qids)} children from Wikidata...", file=sys.stderr)
+    fetched = fetch_parents(qids, polity_meta=polity_meta)
     print(f"Wikidata returned parent links for {len(fetched)} children.", file=sys.stderr)
 
     added = changed = removed = unchanged = 0

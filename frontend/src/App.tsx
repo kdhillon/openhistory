@@ -3,7 +3,7 @@ import type { Map as MaplibreMap } from 'maplibre-gl';
 import { checkLogin, fetchEntityTranslations } from './lib/wikidataApi';
 import { handleOAuthCallback, getReturnPath } from './lib/wikidataAuth';
 import { TranslationContext } from './lib/TranslationContext';
-import { fetchOverrides, fetchPolityOverrides, fetchHiddenNations, addHiddenNation, removeHiddenNation, removeTerritoryMappingsByPolity, unlinkPolygon, unlinkOhmLink, suppressOhmLink, fetchManualPolities, fetchHiddenFeatures, setFeatureHidden } from './lib/api';
+import { fetchOverrides, fetchPolityOverrides, fetchHiddenNations, addHiddenNation, removeHiddenNation, removeTerritoryMappingsByPolity, unlinkPolygon, fetchManualPolities, fetchHiddenFeatures, setFeatureHidden } from './lib/api';
 import { MapView } from './components/MapView';
 import { TerritoryEditor } from './editor/TerritoryEditor';
 import { TerritoryMappingModal } from './components/TerritoryMappingModal';
@@ -27,7 +27,7 @@ import { useTimeline, encodeDate, decodeDate, STEP_YEAR, STEP_DAY } from './hook
 import { useStory } from './hooks/useStory';
 import { useEventSource } from './hooks/useEventSource';
 import { useTerritoriesSource } from './hooks/useTerritoriesSource';
-import { useOhmLinks } from './hooks/useOhmLinks';
+import { useOhmQidMap } from './hooks/useOhmQidMap';
 import type { FeatureProperties, Category } from './types';
 import type { StackInfo, ZoomRequest } from './components/MapView';
 import { EVENT_CATEGORIES, POLITY_CATEGORIES } from './theme/categories';
@@ -115,7 +115,8 @@ export default function App() {
   const { territoryFeatures, refresh: refreshTerritories, isLoading: territoriesLoading, error: territoriesError } =
     useTerritoriesSource({ currentYear: debouncedYear, stepSize: timeline.stepSize, source: 'hb' });
 
-  const { links: ohmLinks, refresh: refreshOhmLinks, isLoading: ohmLinksLoading } = useOhmLinks();
+  // OHM osm_id → wikidata QID lookup (server-cached, 5-min TTL). Joins tile features to polities.
+  const { map: ohmQidMap, isLoading: ohmQidMapLoading } = useOhmQidMap();
 
   // Map of id → patched feature for manual edits (applied on top of base features)
   const [overrideMap, setOverrideMap] = useState<Map<string, GeoJSON.Feature>>(new Map());
@@ -139,7 +140,7 @@ export default function App() {
   // Unmatched territory the user clicked — shows the mapping assignment modal
   const [mappingTarget, setMappingTarget] = useState<{ hbName: string; polygonId: string; yearStart: number; yearEnd: number | null } | null>(null);
   // OHM territory the user clicked — shows the OHM polity assignment modal
-  const [ohmMappingTarget, setOhmMappingTarget] = useState<{ ohmName: string; ohmWikidataQid: string | null; yearStart: number | null; yearEnd: number | null } | null>(null);
+  const [ohmMappingTarget, setOhmMappingTarget] = useState<{ ohmName: string; ohmWikidataQid: string | null; yearStart: number | null; yearEnd: number | null; osmType: 'relation' | 'node'; osmId: number } | null>(null);
   // QID of the major event chip selected in the bottom bar (null = no filter)
   const [majorEventFilter, setMajorEventFilter] = useState<string | null>(null);
   // OHM label placement mode: user is placing a polity label on the map
@@ -183,6 +184,17 @@ export default function App() {
   const handlePolityPaletteChange = useCallback((id: PaletteId) => {
     setPolityPalette(id);
     localStorage.setItem('oh-polity-palette', id);
+  }, []);
+
+  // Show OHM admin polygons/labels for admin_level <= maxAdminLevel.
+  // 2 = countries only (default). Higher = include states, counties, districts, etc.
+  const [maxAdminLevel, setMaxAdminLevel] = useState<number>(() => {
+    const saved = Number(localStorage.getItem('oh-ohm-max-admin-level'));
+    return Number.isFinite(saved) && saved >= 1 && saved <= 8 ? saved : 2;
+  });
+  const handleMaxAdminLevelChange = useCallback((level: number) => {
+    setMaxAdminLevel(level);
+    localStorage.setItem('oh-ohm-max-admin-level', String(level));
   }, []);
 
   const territoriesFeatureCollection = useMemo(
@@ -344,20 +356,6 @@ export default function App() {
     unlinkPolygon(polygonId).catch(console.error);
     setLocalPolygonUnlinks((prev) => new Set(prev).add(polygonId));
   }, []);
-
-  const handleUnlinkOhmTerritory = useCallback(async (ohmName: string) => {
-    const link = ohmLinks.find((l) => l.ohmName === ohmName && l.polityId && !l.explicitlyUnlinked);
-    try {
-      if (link) {
-        await unlinkOhmLink(link.id);
-      } else {
-        await suppressOhmLink(ohmName);
-      }
-      refreshOhmLinks();
-    } catch (e) {
-      console.error(e);
-    }
-  }, [ohmLinks, refreshOhmLinks]);
 
   const handleToggleHiddenNation = useCallback((polityId: string) => {
     if (hiddenNations.has(polityId)) {
@@ -713,6 +711,8 @@ export default function App() {
           onToggleOhmAdmin={handleToggleOhmAdmin}
           polityPalette={polityPalette}
           onPolityPaletteChange={handlePolityPaletteChange}
+          maxAdminLevel={maxAdminLevel}
+          onMaxAdminLevelChange={handleMaxAdminLevelChange}
         />
       )}
 
@@ -767,14 +767,14 @@ export default function App() {
           onMapReady={setMapInstance}
           editorMode={editorMode}
           territorySource={territorySource}
-          ohmLinks={ohmLinks}
-          onOhmTerritoryClick={(ohmName, ohmWikidataQid, yearStart, yearEnd) => setOhmMappingTarget({ ohmName, ohmWikidataQid, yearStart, yearEnd })}
-          onUnlinkOhmTerritory={handleUnlinkOhmTerritory}
+          onOhmTerritoryClick={(ohmName, ohmWikidataQid, yearStart, yearEnd, osmType, osmId) => setOhmMappingTarget({ ohmName, ohmWikidataQid, yearStart, yearEnd, osmType, osmId })}
           onOhmMatchedPolityIds={setOhmMatchedPolityIds}
           showRecentEvents={showRecentEvents}
           showOhm={showOhm}
           showOhmAdmin={showOhmAdmin}
           polityPalette={polityPalette}
+          ohmQidMap={ohmQidMap}
+          maxAdminLevel={maxAdminLevel}
         />
         <GlobalSearchPanel
           yearMin={currentYear}
@@ -788,7 +788,7 @@ export default function App() {
           if (seedLoading) items.push('Polities');
           if (eventsLoading) items.push('Events');
           if (territoriesLoading) items.push('Territories');
-          if (ohmLinksLoading) items.push('OHM Links');
+          if (ohmQidMapLoading) items.push('OHM QID Map');
           if (items.length === 0) return null;
           return (
             // Fixed (viewport-relative) so it's above the InfoPanel (zIndex 90),
@@ -839,9 +839,16 @@ export default function App() {
           isOhmMapped={
             selectedFeature?.featureType === 'polity'
               ? ohmMatchedPolityIds.has(selectedFeature.id)
-                || ohmLinks.some((l) => l.polityId === selectedFeature.id && !l.explicitlyUnlinked)
               : false
           }
+          onEditOhm={(ctx) => setOhmMappingTarget({
+            ohmName: ctx.name,
+            ohmWikidataQid: ctx.currentQid,
+            yearStart: ctx.yearStart,
+            yearEnd: ctx.yearEnd,
+            osmType: ctx.osmType,
+            osmId: ctx.osmId,
+          })}
           // onAddToOhm hidden — OHM API writes are blocked by Cloudflare on our backend.
           // Re-enable when we have a working path (iD editor deep-link, whitelisted IP, etc.).
         />
@@ -914,6 +921,8 @@ export default function App() {
           ohmWikidataQid={ohmMappingTarget.ohmWikidataQid}
           yearStart={ohmMappingTarget.yearStart}
           yearEnd={ohmMappingTarget.yearEnd}
+          osmType={ohmMappingTarget.osmType}
+          osmId={ohmMappingTarget.osmId}
           polities={polityFeatures}
           onClose={() => setOhmMappingTarget(null)}
           onPolityImported={(feature) => {
@@ -921,10 +930,6 @@ export default function App() {
               ...prev,
               features: [...prev.features, feature],
             }));
-          }}
-          onSaved={() => {
-            setOhmMappingTarget(null);
-            refreshOhmLinks();
           }}
         />
       )}

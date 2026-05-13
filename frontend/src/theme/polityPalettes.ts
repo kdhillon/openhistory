@@ -1,13 +1,16 @@
 import { CATEGORY_COLORS } from './categories';
 import type { PolityType } from '../types';
 
-export type PaletteId = 'polity-type' | 'muted-classic' | 'saturated-retro' | 'earth-tones';
+export type PaletteId = 'polity-type' | 'muted-classic' | 'saturated-retro' | 'retro' | 'earth-tones';
 
-export const POLITY_PALETTES: Record<PaletteId, { label: string; colors: string[] }> = {
-  'polity-type':     { label: 'By polity type (default)', colors: [] },
-  'muted-classic':   { label: 'Muted classic',            colors: ['#F2B5A8', '#F4D58D', '#BFD8B8', '#A8C6DF', '#D5BCE0', '#F0C292'] },
-  'saturated-retro': { label: 'Saturated retro',          colors: ['#E76F51', '#F4A261', '#E9C46A', '#2A9D8F', '#4A90A4', '#9B5DE5'] },
-  'earth-tones':     { label: 'Earth tones',              colors: ['#C97B63', '#D9A05B', '#B4A269', '#8FA6A0', '#7C95B1', '#B58FA8', '#D9C2A0'] },
+export const POLITY_PALETTES: Record<PaletteId, { label: string; colors: string[]; fillOpacity: number }> = {
+  // Pastels and earth tones are quieter — they read better at higher opacity.
+  // Saturated/default palettes are already vivid, so keep them airy.
+  'polity-type':     { label: 'By polity type (default)', colors: [],                                                                                                  fillOpacity: 0.22 },
+  'muted-classic':   { label: 'Muted classic',            colors: ['#F2B5A8', '#F4D58D', '#BFD8B8', '#A8C6DF', '#D5BCE0', '#F0C292', '#A8D6CD'],                       fillOpacity: 0.6 },
+  'saturated-retro': { label: 'Saturated retro',          colors: ['#C9536E', '#ED7B2F', '#D9A92E', '#2A9D8F', '#2E86C1', '#9B5DE5', '#5BB377'],                       fillOpacity: 0.4 },
+  'retro':           { label: 'Retro',                    colors: ['#C9536E', '#ED7B2F', '#D9A92E', '#2A9D8F', '#2E86C1', '#9B5DE5', '#5BB377'],                       fillOpacity: 0.25 },
+  'earth-tones':     { label: 'Earth tones',              colors: ['#C97B63', '#D9A05B', '#B4A269', '#8FA6A0', '#7C95B1', '#B58FA8', '#7B8B5C'],                       fillOpacity: 0.6 },
 };
 
 export const DEFAULT_PALETTE_ID: PaletteId = 'saturated-retro';

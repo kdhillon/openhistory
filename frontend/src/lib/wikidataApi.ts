@@ -351,3 +351,99 @@ export async function submitLocationEdit(
   if (existing[0]?.id) claim.id = existing[0].id;
   await submitClaim(entityId, claim, csrf, summary);
 }
+
+// ── Live entity fetch for InfoPanel (OHM polygons with no local feature) ─────
+
+export interface WikidataEntityInfo {
+  qid: string;
+  title: string;
+  description: string;
+  summary: string;
+  wikipediaUrl: string;
+  wikidataUrl: string;
+  yearStart: number | null;
+  yearEnd: number | null;
+  /** Where the summary came from. 'wikidata-only' means no Wikipedia article exists in any language. */
+  source: 'wikipedia-en' | 'wikipedia-other' | 'wikidata-only';
+}
+
+/** Extract a year integer from a Wikidata time claim array. Handles BCE via leading '-'. */
+function _extractYear(claims: unknown): number | null {
+  const arr = claims as Array<{ mainsnak?: { datavalue?: { value?: { time?: string } } } }> | undefined;
+  if (!arr?.length) return null;
+  const t = arr[0]?.mainsnak?.datavalue?.value?.time;
+  if (!t) return null;
+  const m = t.match(/^([+-])(\d{1,4})/);
+  if (!m) return null;
+  return m[1] === '-' ? -parseInt(m[2], 10) : parseInt(m[2], 10);
+}
+
+/**
+ * Fetch enough of a Wikidata entity to populate the InfoPanel:
+ * label, description, dates (P580/P582 fallback to P571/P576), and the best
+ * available Wikipedia URL + summary. Falls back to the Wikidata page itself
+ * when no Wikipedia article exists.
+ */
+export async function fetchEntityForInfoPanel(
+  qid: string,
+  preferredLang: string = 'en',
+): Promise<WikidataEntityInfo> {
+  const entityResp = await fetch(`https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`);
+  if (!entityResp.ok) throw new Error(`Wikidata entity fetch failed: HTTP ${entityResp.status}`);
+  const entityData = await entityResp.json();
+  const entity = entityData.entities?.[qid];
+  if (!entity) throw new Error(`Wikidata entity ${qid} not found in response`);
+
+  const labels = entity.labels ?? {};
+  const descriptions = entity.descriptions ?? {};
+  const title: string =
+    labels[preferredLang]?.value ?? labels.en?.value ?? Object.values<{ value: string }>(labels)[0]?.value ?? qid;
+  const description: string =
+    descriptions[preferredLang]?.value ?? descriptions.en?.value ?? '';
+
+  // Try only the user's preferred language and English. If neither Wikipedia article
+  // exists, fall back to the Wikidata description (short but in the right language)
+  // rather than substituting a foreign-language Wikipedia article.
+  const sitelinks = (entity.sitelinks ?? {}) as Record<string, { site: string; title: string; url?: string }>;
+  const articleLangs: string[] = [];
+  if (preferredLang && sitelinks[`${preferredLang}wiki`]) articleLangs.push(preferredLang);
+  if (sitelinks.enwiki && !articleLangs.includes('en')) articleLangs.push('en');
+
+  let wikipediaUrl = '';
+  let summary = description;
+  let source: WikidataEntityInfo['source'] = 'wikidata-only';
+
+  for (const lang of articleLangs) {
+    const link = sitelinks[`${lang}wiki`];
+    if (!link?.title) continue;
+    wikipediaUrl = link.url ?? `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(link.title.replace(/ /g, '_'))}`;
+    try {
+      const sumResp = await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(link.title)}`);
+      if (sumResp.ok) {
+        const sumData = await sumResp.json();
+        if (sumData.extract) {
+          summary = sumData.extract;
+          source = lang === 'en' ? 'wikipedia-en' : 'wikipedia-other';
+          break;
+        }
+      }
+    } catch { /* try next language */ }
+  }
+
+  // Dates: P580 (start time) / P582 (end time) for entities with active periods,
+  // fall back to P571 (inception) / P576 (dissolution) for stable entities.
+  const yearStart = _extractYear(entity.claims?.P580) ?? _extractYear(entity.claims?.P571);
+  const yearEnd = _extractYear(entity.claims?.P582) ?? _extractYear(entity.claims?.P576);
+
+  return {
+    qid,
+    title,
+    description,
+    summary,
+    wikipediaUrl: wikipediaUrl || `https://www.wikidata.org/wiki/${qid}`,
+    wikidataUrl: `https://www.wikidata.org/wiki/${qid}`,
+    yearStart,
+    yearEnd,
+    source,
+  };
+}
