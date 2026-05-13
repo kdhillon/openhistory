@@ -10,12 +10,14 @@ Endpoints:
     PATCH /api/polities/{polity_id}     — save a user correction to a polity record
 """
 
+import atexit
 import anthropic
 import json
 import os
 import re
 import urllib.request
 import urllib.parse
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.responses import Response as FastAPIResponse
 from typing import Optional
@@ -23,6 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 import psycopg2
 import psycopg2.extras
+from posthog import Posthog
 
 DATABASE_URL = os.environ["DATABASE_URL"]  # set via Railway env
 
@@ -30,11 +33,42 @@ DATABASE_URL = os.environ["DATABASE_URL"]  # set via Railway env
 # X-Write-Secret header to match. Unset in local dev to skip the check.
 WRITE_SECRET = os.environ.get("WRITE_SECRET")
 
+POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY", "")
+POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com")
+
+posthog_client: Optional[Posthog] = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global posthog_client
+    if POSTHOG_API_KEY:
+        posthog_client = Posthog(
+            api_key=POSTHOG_API_KEY,
+            host=POSTHOG_HOST,
+            enable_exception_autocapture=True,
+        )
+        atexit.register(posthog_client.shutdown)
+    yield
+    if posthog_client:
+        posthog_client.flush()
+
+
+def _capture(event: str, properties: dict, request: Optional[Request] = None) -> None:
+    """Capture a PostHog event. Reads distinct_id from X-PostHog-Distinct-Id header if present."""
+    if not posthog_client:
+        return
+    distinct_id = "anonymous"
+    if request is not None:
+        distinct_id = request.headers.get("X-PostHog-Distinct-Id", "anonymous")
+    posthog_client.capture(distinct_id=distinct_id, event=event, properties=properties)
+
+
 async def require_write_secret(x_write_secret: Optional[str] = Header(default=None)):
     if WRITE_SECRET and x_write_secret != WRITE_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-app = FastAPI(title="OurStory API", version="0.1.0")
+app = FastAPI(title="OurStory API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
@@ -49,7 +83,7 @@ app.add_middleware(
     ],
     allow_credentials=True,
     allow_methods=["GET", "PATCH", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Write-Secret", "Authorization"],
+    allow_headers=["Content-Type", "X-Write-Secret", "Authorization", "X-PostHog-Distinct-Id", "X-PostHog-Session-Id"],
 )
 
 # ── DB helpers ─────────────────────────────────────────────────────────────────
@@ -384,6 +418,7 @@ async def patch_feature(event_id: str, request: Request, _: None = Depends(requi
         sql = f"UPDATE events SET {', '.join(set_parts)} WHERE id = %(id)s"
         cur.execute(sql, {**updates, "id": event_id})
         conn.commit()
+        _capture("event_edited", {"fields_edited": list(updates.keys()), "field_count": len(updates)}, request)
 
         # Return the fully re-fetched feature so the frontend has accurate coords
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -430,6 +465,7 @@ async def patch_polity(polity_id: str, request: Request, _: None = Depends(requi
         sql = f"UPDATE polities SET {', '.join(set_parts)} WHERE id = %(id)s"
         cur.execute(sql, {**updates, "id": polity_id})
         conn.commit()
+        _capture("polity_edited", {"fields_edited": list(updates.keys()), "field_count": len(updates)}, request)
 
         # Return the updated polity as a GeoJSON-style feature
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -756,6 +792,7 @@ async def import_polity_from_wikidata(request: Request, _: None = Depends(requir
         })
         conn.commit()
         row = dict(cur.fetchone())
+        _capture("polity_imported", {"qid": qid, "polity_type": polity_type}, request)
         return _build_polity_feature(row)
     finally:
         conn.close()
@@ -907,7 +944,7 @@ def remove_territory_mappings_for_polity(polity_id: str, _: None = Depends(requi
 
 
 @app.get("/api/search")
-def search_features(q: str, year_min: int, year_max: int, limit: int = 50):
+def search_features(q: str, year_min: int, year_max: int, request: Request, limit: int = 50):
     """
     Search polities and events by title (case-insensitive substring + simple
     polity-type-word stripping). Returns matches sorted with those that overlap
@@ -1028,10 +1065,17 @@ def search_features(q: str, year_min: int, year_max: int, limit: int = 50):
             "sitelinksCount": r["sitelinks_count"],
         } for r in event_rows]
 
+        total = len(polities) + len(events)
+        _capture("search_performed", {
+            "query_length": len(q.strip()),
+            "year_min": year_min,
+            "year_max": year_max,
+            "result_count": total,
+        }, request)
         return {
             "polities": polities,
             "events": events,
-            "totalCount": len(polities) + len(events),
+            "totalCount": total,
         }
     finally:
         conn.close()
@@ -1264,6 +1308,13 @@ async def assign_territory(territory_id: str, request: Request, _: None = Depend
             """, (slice_end + 1, t_end, territory_id, territory_id))
 
         conn.commit()
+        _capture("territory_assigned", {
+            "territory_id": territory_id,
+            "year_start": slice_start,
+            "year_end": slice_end,
+            "created_before_gap": needs_before,
+            "created_after_gap": needs_after,
+        }, request)
         return {
             "ok": True,
             "yearStart": t_start,
@@ -1339,6 +1390,7 @@ async def create_territory(request: Request, _: None = Depends(require_write_sec
         """, (hb_name, json.dumps(boundary), year_start, year_end))
         row = cur.fetchone()
         conn.commit()
+        _capture("territory_created", {"year_start": year_start, "year_end": year_end}, request)
         return {"id": str(row["id"])}
     finally:
         conn.close()
@@ -1401,12 +1453,13 @@ async def patch_territory_geometry(territory_id: str, request: Request, _: None 
         """, (boundary_json, year, territory_id))
 
         conn.commit()
+        _capture("territory_geometry_edited", {"territory_id": territory_id, "year": year}, request)
     finally:
         conn.close()
 
 
 @app.patch("/api/territories/{territory_id}/unlink", status_code=204)
-def unlink_territory(territory_id: str, _: None = Depends(require_write_secret)):
+def unlink_territory(territory_id: str, request: Request, _: None = Depends(require_write_secret)):
     """Mark a territory row as explicitly_unlinked=TRUE and clear polity_id."""
     conn = get_conn()
     try:
@@ -1418,6 +1471,7 @@ def unlink_territory(territory_id: str, _: None = Depends(require_write_secret))
         if cur.rowcount == 0:
             raise HTTPException(404, f"Territory {territory_id} not found.")
         conn.commit()
+        _capture("territory_unlinked", {"territory_id": territory_id}, request)
     finally:
         conn.close()
 
@@ -1728,7 +1782,7 @@ async def extract_dates(request: Request):
         except (TypeError, ValueError):
             return None
 
-    return {
+    result = {
         "startYear":  _int_or_none(data.get("startYear")),
         "startMonth": _int_or_none(data.get("startMonth")),
         "startDay":   _int_or_none(data.get("startDay")),
@@ -1736,6 +1790,8 @@ async def extract_dates(request: Request):
         "endMonth":   _int_or_none(data.get("endMonth")),
         "endDay":     _int_or_none(data.get("endDay")),
     }
+    _capture("ai_dates_extracted", {"text_length": len(text)}, request)
+    return result
 
 
 @app.post("/api/ai/extract-location")
@@ -1775,6 +1831,7 @@ async def extract_location(request: Request):
         raise HTTPException(500, "Location extraction failed")
 
     location = data.get("location")
+    _capture("ai_location_extracted", {"text_length": len(text), "location_found": location is not None}, request)
     return {"location": str(location) if location else None}
 
 
@@ -1817,7 +1874,9 @@ async def oauth_callback(request: Request):
 
     try:
         with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read())
+            data = json.loads(resp.read())
+            _capture("wikidata_oauth_completed", {}, request)
+            return data
     except urllib.error.HTTPError as e:
         detail = e.read().decode()
         print(f"[oauth] token exchange failed: {e.code} {detail}", flush=True)
@@ -1884,6 +1943,7 @@ async def ohm_oauth_callback(request: Request):
 
     # Redirect to frontend with the token in a fragment (keeps it out of server logs)
     token = data.get("access_token", "")
+    _capture("ohm_oauth_completed", {}, request)
     from starlette.responses import RedirectResponse
     return RedirectResponse(
         url=f"https://openhistory.app/#ohm_token={token}",
@@ -2013,6 +2073,11 @@ async def ohm_create_label(request: Request):
     except urllib.error.HTTPError:
         pass  # Non-critical — changeset auto-closes after 1h
 
+    _capture("ohm_label_created", {
+        "has_local_name": bool(body.get("nameLocal")),
+        "has_wikidata_qid": bool(body.get("wikidataQid")),
+        "has_end_date": bool(end_date),
+    }, request)
     return {"nodeId": int(node_id), "changesetId": int(changeset_id)}
 
 
