@@ -31,6 +31,8 @@ import { useOhmLinks } from './hooks/useOhmLinks';
 import type { FeatureProperties, Category } from './types';
 import type { StackInfo, ZoomRequest } from './components/MapView';
 import { EVENT_CATEGORIES, POLITY_CATEGORIES } from './theme/categories';
+import { DEFAULT_PALETTE_ID, isValidPaletteId } from './theme/polityPalettes';
+import type { PaletteId } from './theme/polityPalettes';
 
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
@@ -169,6 +171,18 @@ export default function App() {
   const handleLangChange = useCallback((lang: string) => {
     setSelectedLang(lang);
     localStorage.setItem('oh_lang', lang);
+  }, []);
+
+  // Polity color palette — controls how territory polygons are filled.
+  // 'polity-type' preserves the previous per-type color scheme; other palettes
+  // randomly assign one of N colors per polity (stable for the page session).
+  const [polityPalette, setPolityPalette] = useState<PaletteId>(() => {
+    const saved = localStorage.getItem('oh-polity-palette');
+    return isValidPaletteId(saved) ? saved : DEFAULT_PALETTE_ID;
+  });
+  const handlePolityPaletteChange = useCallback((id: PaletteId) => {
+    setPolityPalette(id);
+    localStorage.setItem('oh-polity-palette', id);
   }, []);
 
   const territoriesFeatureCollection = useMemo(
@@ -697,6 +711,8 @@ export default function App() {
           onToggleOhm={handleToggleOhm}
           showOhmAdmin={showOhmAdmin}
           onToggleOhmAdmin={handleToggleOhmAdmin}
+          polityPalette={polityPalette}
+          onPolityPaletteChange={handlePolityPaletteChange}
         />
       )}
 
@@ -758,6 +774,7 @@ export default function App() {
           showRecentEvents={showRecentEvents}
           showOhm={showOhm}
           showOhmAdmin={showOhmAdmin}
+          polityPalette={polityPalette}
         />
         <GlobalSearchPanel
           yearMin={currentYear}

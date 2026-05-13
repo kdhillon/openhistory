@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Category } from '../types';
 import { EVENT_CATEGORIES, LOCATION_CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS } from '../theme/categories';
+import { POLITY_PALETTES } from '../theme/polityPalettes';
+import type { PaletteId } from '../theme/polityPalettes';
 import { WIKIPEDIA_LANGUAGES } from '../lib/languages';
 import type { WindowInfo } from '../hooks/useEventSource';
 import { MOBILE_TIMELINE_BAR_HEIGHT, SPEED_OPTIONS, formatStepLabel } from './TimelineBar';
@@ -55,6 +57,8 @@ interface Props {
   onToggleOhm: () => void;
   showOhmAdmin: boolean;
   onToggleOhmAdmin: () => void;
+  polityPalette: PaletteId;
+  onPolityPaletteChange: (id: PaletteId) => void;
 }
 
 function Spinner() {
@@ -154,7 +158,7 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
   );
 }
 
-export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onOpenStories, onEditTerritory, editorMode, territorySource, getOhmEditUrl, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin }: Props) {
+export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onOpenStories, onEditTerritory, editorMode, territorySource, getOhmEditUrl, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin, polityPalette, onPolityPaletteChange }: Props) {
   const bordersColor = '#607D8B';
   const ohmPolygonsColor = '#4CAF50';
   const otherPolitiesColor = '#9C27B0';
@@ -240,6 +244,28 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
               <input type="checkbox" checked={showOhmAdmin} onChange={onToggleOhmAdmin} style={{ margin: 0 }} />
               <span style={styles.settingsCheckLabel}>Show OHM fills</span>
             </label>
+            <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.08)', margin: '10px 0' }} />
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.35)', marginBottom: 8 }}>Map theme</div>
+            <div style={styles.settingsRow}>
+              <label style={styles.settingsLabel}>Polity colors</label>
+              <select
+                value={polityPalette}
+                onChange={(e) => onPolityPaletteChange(e.target.value as PaletteId)}
+                style={styles.langSelect}
+                title="Choose how territory polygons are colored"
+              >
+                {(Object.entries(POLITY_PALETTES) as [PaletteId, { label: string; colors: string[] }][]).map(([id, p]) => (
+                  <option key={id} value={id}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+            {POLITY_PALETTES[polityPalette].colors.length > 0 && (
+              <div style={{ display: 'flex', gap: 4, marginTop: 6, marginLeft: 2 }}>
+                {POLITY_PALETTES[polityPalette].colors.map((c) => (
+                  <span key={c} title={c} style={{ width: 16, height: 16, borderRadius: 3, background: c, border: '1px solid rgba(0,0,0,0.12)' }} />
+                ))}
+              </div>
+            )}
             <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.08)', margin: '10px 0' }} />
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.35)', marginBottom: 8 }}>Data</div>
             {/* Events */}

@@ -5,6 +5,8 @@ import maplibregl, { Map, GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { FeatureProperties, Category } from '../types';
 import { CATEGORY_COLORS } from '../theme/categories';
+import { getPolityColor } from '../theme/polityPalettes';
+import type { PaletteId } from '../theme/polityPalettes';
 import { CATEGORY_SVGS } from '../theme/icons';
 import { encodeDate, eventDateRange, STEP_YEAR, decodeDate } from '../hooks/useTimeline';
 
@@ -220,6 +222,8 @@ interface Props {
   showOhm?: boolean;
   /** Show OHM admin fill polygons (boundaries layer from ohm_admin tileset) */
   showOhmAdmin?: boolean;
+  /** Polity color palette — 'polity-type' uses CATEGORY_COLORS; others assign one of a small palette per polity */
+  polityPalette?: PaletteId;
 }
 
 
@@ -271,7 +275,7 @@ interface HoveredLabel {
   y: number;
 }
 
-export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize, activeCategories, showBorders, showOtherPolities, showTerritoryLabels = false, onSelectFeature, zoomRequest, fitBoundsRequest, hiddenNations, suppressedPolityIds, polityIdsWithTerritory, onUnmatchedTerritoryClick, onUnlinkPolygon, majorEventFilter, onMapReady, editorMode, territorySource = 'hb', ohmLinks, onOhmTerritoryClick, onUnlinkOhmTerritory, onOhmMatchedPolityIds, showRecentEvents = false, showOhm = true, showOhmAdmin = false }: Props) {
+export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize, activeCategories, showBorders, showOtherPolities, showTerritoryLabels = false, onSelectFeature, zoomRequest, fitBoundsRequest, hiddenNations, suppressedPolityIds, polityIdsWithTerritory, onUnmatchedTerritoryClick, onUnlinkPolygon, majorEventFilter, onMapReady, editorMode, territorySource = 'hb', ohmLinks, onOhmTerritoryClick, onUnlinkOhmTerritory, onOhmMatchedPolityIds, showRecentEvents = false, showOhm = true, showOhmAdmin = false, polityPalette = 'polity-type' }: Props) {
   const translationMap = useTranslations();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
@@ -294,6 +298,8 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
   showOhmRef.current = showOhm;
   const showOhmAdminRef = useRef(showOhmAdmin);
   showOhmAdminRef.current = showOhmAdmin;
+  const polityPaletteRef = useRef(polityPalette);
+  polityPaletteRef.current = polityPalette;
   const ohmLinksRef = useRef(ohmLinks ?? []);
   ohmLinksRef.current = ohmLinks ?? [];
   const onOhmTerritoryClickRef = useRef(onOhmTerritoryClick);
@@ -921,7 +927,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       for (const f of geojsonRef.current.features) {
         const p = f.properties as FeatureProperties;
         if (p.featureType !== 'polity') continue;
-        const color = CATEGORY_COLORS[(p.polityType as keyof typeof CATEGORY_COLORS) ?? 'other'] ?? CATEGORY_COLORS.other;
+        const color = getPolityColor(p.title, p.polityType, polityPaletteRef.current);
         const aliases = (p.aliases as string[] | undefined) ?? [];
         const keys = [p.title, ...aliases]
           .filter((n): n is string => typeof n === 'string' && n.length > 0)
@@ -939,10 +945,12 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       // This is safe to swallow — sourcedata/moveend will retry automatically.
       let rendered: maplibregl.MapGeoJSONFeature[];
       try {
-        // Query both label layers for name matching and color assignment.
-        // ohm-fills is intentionally excluded — its polygons would generate unwanted
-        // centroid labels via polity-centroid-src. The label layers provide all names needed.
+        // Query the fill layer + both label layers. ohm-fills renders at every zoom level,
+        // so including it ensures we still find names to color-match when zoomed out far
+        // enough that label tiles have nothing in them. Centroid-label generation below
+        // filters back down to the label layers only to avoid duplicate centroids.
         const queryLayers: string[] = [];
+        if (map.getLayer('ohm-fills')) queryLayers.push('ohm-fills');
         if (map.getLayer('ohm-labels')) queryLayers.push('ohm-labels');
         if (map.getLayer('ohm-labels-small')) queryLayers.push('ohm-labels-small');
         if (queryLayers.length === 0) { return; }
@@ -1043,11 +1051,14 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         }
       }
 
-      // Build centroid labels from OHM rendered features
+      // Build centroid labels from OHM rendered features.
+      // Only consider features from the label layers — including ohm-fills here would
+      // produce redundant centroids on top of the ones OHM already places via labels.
       const centroidSrc = map.getSource('polity-centroid-src') as GeoJSONSource | undefined;
       if (centroidSrc) {
+        const labelRendered = rendered.filter((f) => f.layer.id === 'ohm-labels' || f.layer.id === 'ohm-labels-small');
         const byKey: Record<string, { area: number; centroid: [number, number]; name: string; mapped: boolean }> = {};
-        for (const f of rendered) {
+        for (const f of labelRendered) {
           const fullName = (f.properties?.name_en ?? f.properties?.name ?? '') as string;
           if (!fullName) continue;
           const displayName = stripDisplay(fullName);
@@ -1120,6 +1131,13 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
   useEffect(() => {
     rebuildColorsRef.current();
   }, [ohmLinks]);
+
+  // Re-run rebuildColors when the user picks a different polity palette.
+  // resetPolityColorAssignments() in App already cleared the index map, so
+  // each polity will pick a fresh random color from the new palette here.
+  useEffect(() => {
+    rebuildColorsRef.current();
+  }, [polityPalette]);
 
   const onSelectRef = useRef(onSelectFeature);
   onSelectRef.current = onSelectFeature;
