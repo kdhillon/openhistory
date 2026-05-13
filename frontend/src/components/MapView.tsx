@@ -5,8 +5,8 @@ import maplibregl, { Map, GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { FeatureProperties, Category } from '../types';
 import { CATEGORY_COLORS } from '../theme/categories';
-import { getPolityColor } from '../theme/polityPalettes';
-import type { PaletteId } from '../theme/polityPalettes';
+import { getPolityColorAtYear } from '../theme/polityPalettes';
+import type { PaletteId, PolityForColor } from '../theme/polityPalettes';
 import { CATEGORY_SVGS } from '../theme/icons';
 import { encodeDate, eventDateRange, STEP_YEAR, decodeDate } from '../hooks/useTimeline';
 
@@ -921,13 +921,33 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       // Includes both the canonical title and all Wikidata aliases (e.g. "Persia" → Iran),
       // so OHM tile names that match an alias resolve to the right polity.
       // Note: avoid `new Map()` — `Map` is shadowed by the maplibre-gl import.
+      // Build a qid -> PolityForColor registry once so the cascade resolver can walk
+      // up parent chains in O(1) per hop. polityKey is set to the title to preserve
+      // the existing name-hashed color assignment.
+      const polityByQid: Record<string, PolityForColor> = {};
+      for (const f of geojsonRef.current.features) {
+        const p = f.properties as FeatureProperties;
+        if (p.featureType !== 'polity' || !p.wikidataQid) continue;
+        polityByQid[p.wikidataQid] = {
+          qid: p.wikidataQid,
+          polityType: p.polityType,
+          parents: p.parents,
+          polityKey: p.title,
+        };
+      }
+      const currentYear = decodeDate(currentDateInt).year;
+      const resolveByQid = (qid: string): PolityForColor | null => polityByQid[qid] ?? null;
+
       const polityColorByName: Record<string, string> = {};
       const polityIdByName: Record<string, string> = {};
       const polityIdsByName: Record<string, string[]> = {};
       for (const f of geojsonRef.current.features) {
         const p = f.properties as FeatureProperties;
         if (p.featureType !== 'polity') continue;
-        const color = getPolityColor(p.title, p.polityType, polityPaletteRef.current);
+        const self: PolityForColor = p.wikidataQid
+          ? (polityByQid[p.wikidataQid] ?? { qid: p.wikidataQid, polityType: p.polityType, parents: p.parents, polityKey: p.title })
+          : { qid: '', polityType: p.polityType, polityKey: p.title };
+        const color = getPolityColorAtYear(self, currentYear, polityPaletteRef.current, resolveByQid);
         const aliases = (p.aliases as string[] | undefined) ?? [];
         const keys = [p.title, ...aliases]
           .filter((n): n is string => typeof n === 'string' && n.length > 0)
@@ -1138,6 +1158,13 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
   useEffect(() => {
     rebuildColorsRef.current();
   }, [polityPalette]);
+
+  // Re-run rebuildColors when the timeline year changes — parent-cascade color
+  // is year-gated (a polity may have one parent at 1820 and a different one at
+  // 1900), so the color expression must be rebuilt.
+  useEffect(() => {
+    rebuildColorsRef.current();
+  }, [currentDateInt]);
 
   const onSelectRef = useRef(onSelectFeature);
   onSelectRef.current = onSelectFeature;
