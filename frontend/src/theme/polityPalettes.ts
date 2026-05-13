@@ -37,3 +37,61 @@ export function getPolityColor(polityKey: string, polityType: PolityType | undef
 export function isValidPaletteId(id: string | null | undefined): id is PaletteId {
   return typeof id === 'string' && id in POLITY_PALETTES;
 }
+
+// ---------------------------------------------------------------------------
+// Parent-cascade color resolution
+// ---------------------------------------------------------------------------
+
+export type ParentEntry = {
+  qid: string;
+  yearStart?: number | null;
+  yearEnd?: number | null;
+  source: string;
+};
+
+export type PolityForColor = {
+  qid: string;
+  polityType?: PolityType;
+  parents?: ParentEntry[];
+};
+
+export type ParentResolver = (qid: string) => PolityForColor | null;
+
+const SOURCE_RANK: Record<string, number> = { P150: 0, P361: 1, P131: 2, P127: 3 };
+
+function sourceRank(source: string): number {
+  if (source.startsWith('P31:')) return 4;
+  return SOURCE_RANK[source] ?? 9;
+}
+
+/** Highest-priority parent active at `year`, or null. */
+export function activeParentAt(parents: ParentEntry[] | undefined, year: number): ParentEntry | null {
+  if (!parents || parents.length === 0) return null;
+  const active = parents.filter(p =>
+    (p.yearStart == null || p.yearStart <= year) &&
+    (p.yearEnd == null || p.yearEnd >= year)
+  );
+  if (active.length === 0) return null;
+  active.sort((a, b) => sourceRank(a.source) - sourceRank(b.source));
+  return active[0];
+}
+
+/** Resolve a polity's effective color at a given year, walking up its parent chain.
+ *  Cycle-safe; falls back to the polity's own color when the parent is missing from the registry. */
+export function getPolityColorAtYear(
+  polity: PolityForColor,
+  year: number,
+  paletteId: PaletteId,
+  resolve: ParentResolver,
+  seen: Set<string> = new Set(),
+): string {
+  if (seen.has(polity.qid)) {
+    return getPolityColor(polity.qid, polity.polityType, paletteId);
+  }
+  seen.add(polity.qid);
+  const parent = activeParentAt(polity.parents, year);
+  if (!parent) return getPolityColor(polity.qid, polity.polityType, paletteId);
+  const parentPolity = resolve(parent.qid);
+  if (!parentPolity) return getPolityColor(polity.qid, polity.polityType, paletteId);
+  return getPolityColorAtYear(parentPolity, year, paletteId, resolve, seen);
+}
