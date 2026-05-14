@@ -2213,11 +2213,12 @@ async def ohm_update_element(request: Request):
     if version is None:
         raise HTTPException(502, f"Overpass response missing version for {osm_type}/{osm_id}")
 
-    # Build the updated OSM XML from the Overpass response. Tags are merged
+    # Build the updated OSM element from the Overpass response. Tags are merged
     # (existing preserved, requested keys upserted). Members + lat/lon are
-    # carried through so the PUT preserves geometry/topology.
-    root = ET.Element("osm")
-    element = ET.SubElement(root, osm_type, {
+    # carried through so the upload preserves geometry/topology. The element is
+    # constructed standalone; the diff-upload step below wraps it in
+    # <osmChange><modify>…</modify></osmChange>.
+    element = ET.Element(osm_type, {
         "id": str(osm_id),
         "version": str(version),
     })
@@ -2270,27 +2271,33 @@ async def ohm_update_element(request: Request):
         print(f"[ohm] changeset create failed: {e.code} {detail}", flush=True)
         raise HTTPException(e.code, f"Failed to create changeset: {detail}")
 
-    # Step 3: PUT the element with the new changeset id. Version stays the same
-    # (OSM increments on success). The XML must include `changeset` attribute.
+    # Step 3: upload the change as an osmChange diff to the changeset's upload
+    # endpoint. We use this instead of a direct PUT to /api/0.6/{type}/{id}
+    # because OHM's Cloudflare WAF allowlists `/api/0.6/changeset/*` for our
+    # User-Agent but returns a 405 from the edge for element-update PUTs.
+    # The OsmChange flow is what iD/JOSM/Vespucci use, so it's the standard
+    # path for client-driven edits anyway.
     element.set("changeset", str(changeset_id))
-    updated_xml = ET.tostring(root, encoding="utf-8")
+    osm_change = ET.Element("osmChange", {"version": "0.6", "generator": "OpenHistory/1.0"})
+    modify = ET.SubElement(osm_change, "modify")
+    modify.append(element)
+    diff_xml = ET.tostring(osm_change, encoding="utf-8")
 
-    def _put_element():
+    def _upload_diff():
         req = urllib.request.Request(
-            f"{OHM_API_BASE}/{osm_type}/{osm_id}",
-            data=updated_xml,
+            f"{OHM_API_BASE}/changeset/{changeset_id}/upload",
+            data=diff_xml,
             headers=write_headers,
-            method="PUT",
+            method="POST",
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.read().decode().strip()
+            return resp.read().decode()
 
-    new_version: Optional[str] = None
     try:
-        new_version = await loop.run_in_executor(None, _put_element)
+        diff_result_xml = await loop.run_in_executor(None, _upload_diff)
     except urllib.error.HTTPError as e:
         detail = e.read().decode()
-        print(f"[ohm] update {osm_type}/{osm_id} failed: {e.code} {detail}", flush=True)
+        print(f"[ohm] upload diff for {osm_type}/{osm_id} failed: {e.code} {detail}", flush=True)
         # Try to close the changeset so it doesn't linger.
         try:
             await loop.run_in_executor(None, lambda: urllib.request.urlopen(
@@ -2300,7 +2307,20 @@ async def ohm_update_element(request: Request):
                 ), timeout=10))
         except Exception:
             pass
-        raise HTTPException(e.code, f"Failed to update {osm_type}/{osm_id}: {detail}")
+        raise HTTPException(e.code, f"Failed to upload diff for {osm_type}/{osm_id}: {detail}")
+
+    # The upload endpoint returns <diffResult><{type} old_id=… new_id=…
+    # new_version=…/></diffResult>. For a modify, old_id == new_id and
+    # new_version is the post-update version.
+    new_version: Optional[str] = None
+    try:
+        diff_root = ET.fromstring(diff_result_xml)
+        for child in diff_root:
+            if child.get("old_id") == str(osm_id):
+                new_version = child.get("new_version")
+                break
+    except ET.ParseError:
+        pass
 
     # Step 4: close the changeset.
     def _close_changeset():
