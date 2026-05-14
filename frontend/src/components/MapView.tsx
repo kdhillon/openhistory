@@ -947,10 +947,17 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       for (const id of ['ohm-borders', 'ohm-borders-1']) {
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', ohmBorderVis);
       }
-      // OHM labels (country centroids + admin centroids + imperial) — controlled by showLabels.
+      // OHM labels (country centroids + admin centroids) — controlled by showLabels.
       const labelVis = showLabels ? 'visible' : 'none';
-      for (const id of ['ohm-labels', 'ohm-labels-small', 'ohm-labels-imperial']) {
+      for (const id of ['ohm-labels', 'ohm-labels-small']) {
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', labelVis);
+      }
+      // Imperial labels (admin_level=1) have an extra gate: the "Show imperial
+      // territory" toggle. When unchecked, no admin_level=1 fills, borders, or
+      // labels render — consistent treatment across the three layers.
+      const imperialLabelVis = (showLabels && showImperialTerritory) ? 'visible' : 'none';
+      if (map.getLayer('ohm-labels-imperial')) {
+        map.setLayoutProperty('ohm-labels-imperial', 'visibility', imperialLabelVis);
       }
       // OHM polygon fills + outlines (from 'ohm_admin' tileset) — controlled by showOhmAdmin
       const ohmAdminVis = showOhmAdmin ? 'visible' : 'none';
@@ -960,7 +967,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
     };
     if (map.isStyleLoaded()) apply();
     else map.once('load', apply);
-  }, [territorySource, showBorders, showTerritoryLabels, showOhm, showOhmAdmin, showLabels]);
+  }, [territorySource, showBorders, showTerritoryLabels, showOhm, showOhmAdmin, showLabels, showImperialTerritory]);
 
   // Update OHM temporal filter on every year tick
   useEffect(() => {
@@ -1467,7 +1474,17 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
 
     const onClick = (e: maplibregl.MapMouseEvent) => {
       if (editorModeRef.current) return;
-      const features = map.queryRenderedFeatures(e.point, { layers: CLICK_LAYERS });
+      // Filter to layers that actually exist — when the basemap style fails to
+      // load (e.g. OpenFreeMap returns ERR_CONNECTION_CLOSED), our layers are
+      // never added and queryRenderedFeatures throws on missing layer IDs.
+      const existingLayers = CLICK_LAYERS.filter((id) => map.getLayer(id));
+      if (existingLayers.length === 0) return;
+      let features: maplibregl.MapGeoJSONFeature[];
+      try {
+        features = map.queryRenderedFeatures(e.point, { layers: existingLayers });
+      } catch {
+        return;
+      }
       if (!features || features.length === 0) return;
 
       const top = features[0];
