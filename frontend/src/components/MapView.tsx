@@ -269,6 +269,8 @@ interface Props {
   ohmQidMap?: Record<number, string>;
   /** Maximum OHM admin_level to render on the map (default 2 = countries only). */
   maxAdminLevel?: number;
+  /** User-preferred OHM label language (2-letter code). Falls back to name_en → name. */
+  selectedLang?: string;
 }
 
 
@@ -320,7 +322,7 @@ interface HoveredLabel {
   y: number;
 }
 
-export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize, activeCategories, showBorders, showOtherPolities, showTerritoryLabels = false, onSelectFeature, zoomRequest, fitBoundsRequest, hiddenNations, suppressedPolityIds, polityIdsWithTerritory, onUnmatchedTerritoryClick, onUnlinkPolygon, majorEventFilter, onMapReady, editorMode, territorySource = 'hb', onOhmTerritoryClick, onOhmMatchedPolityIds, showRecentEvents = false, showOhm = true, showOhmAdmin = false, polityPalette = 'polity-type', ohmQidMap = {}, maxAdminLevel = 2, showLabels = true }: Props) {
+export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize, activeCategories, showBorders, showOtherPolities, showTerritoryLabels = false, onSelectFeature, zoomRequest, fitBoundsRequest, hiddenNations, suppressedPolityIds, polityIdsWithTerritory, onUnmatchedTerritoryClick, onUnlinkPolygon, majorEventFilter, onMapReady, editorMode, territorySource = 'hb', onOhmTerritoryClick, onOhmMatchedPolityIds, showRecentEvents = false, showOhm = true, showOhmAdmin = false, polityPalette = 'polity-type', ohmQidMap = {}, maxAdminLevel = 2, showLabels = true, selectedLang = 'en' }: Props) {
   const translationMap = useTranslations();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
@@ -355,6 +357,8 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
   ohmQidMapRef.current = ohmQidMap;
   const maxAdminLevelRef = useRef(maxAdminLevel);
   maxAdminLevelRef.current = maxAdminLevel;
+  const selectedLangRef = useRef(selectedLang);
+  selectedLangRef.current = selectedLang;
   const onOhmTerritoryClickRef = useRef(onOhmTerritoryClick);
   onOhmTerritoryClickRef.current = onOhmTerritoryClick;
   const [showModernBorders, setShowModernBorders] = useState(false);
@@ -1022,15 +1026,35 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           }
         }
       }
-      /** Map sitelinks count to a label font size. Bigger = more globally significant.
-       *  Increases over the legacy 13px default are roughly halved so the typography
-       *  stays calm at high zoom. */
-      const sitelinksToSize = (sl: number): number => {
-        if (sl >= 120) return 17;
-        if (sl >= 60)  return 15;
-        if (sl >= 25)  return 14;
-        if (sl >= 10)  return 13;
+      /** Combine sitelinks, OHM admin_level, and polygon area into a single
+       *  importance score per OHM tile name. Sitelinks alone biases toward modern
+       *  successors (French Third Republic has fewer sitelinks than modern France
+       *  even though it WAS France for 70 years), and lets tiny-but-famous
+       *  modern entities (San Marino, Andorra) dominate big historical polities.
+       *  We log-cap sitelinks and weight area more heavily so visual heft wins
+       *  over mere notability. */
+      const scoreToSize = (score: number): number => {
+        if (score >= 180) return 17;
+        if (score >= 130) return 15;
+        if (score >= 80)  return 14;
+        if (score >= 40)  return 13;
         return 11;
+      };
+      const sitelinksScore = (sl: number): number => {
+        // log-capped: a country with 300 sitelinks scores roughly the same as one
+        // with 100. Caps the modern-bias.  0→0, 10→16, 50→27, 100→32, 300→40 (cap).
+        return sl <= 0 ? 0 : Math.min(40, Math.log10(sl + 1) * 16);
+      };
+      const adminLevelScore = (al: number): number => {
+        if (al <= 2) return 40;   // international or country
+        if (al === 3) return 20;  // state / 1st-level subdivision
+        return 0;                 // 4+ (district, county, etc.)
+      };
+      const areaToScore = (area: number): number => {
+        // area is in degrees². Russia ~3000, Bremen ~0.1. Log-scaled with a
+        // bigger range than sitelinks so visual size dominates. Tiny → ~0,
+        // small country (~10 deg²) → 75, continent (~3000) → 135.
+        return area <= 0 ? 0 : Math.max(0, Math.log10(area + 0.01) * 25 + 50);
       };
       // Read via ref — the surrounding useEffect has [] deps, so closures over
       // the prop would be frozen at first render.
@@ -1073,10 +1097,16 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       const fillPairs: (string | maplibregl.ExpressionSpecification)[] = [];
       const labelPairs: (string | maplibregl.ExpressionSpecification)[] = [];
       const textPairs: (string | maplibregl.ExpressionSpecification)[] = [];
-      // text-size & symbol-sort-key per OHM-tile name, driven by polity sitelinksCount.
-      // Higher sitelinks = bigger font + lower sort-key (wins label-collision).
-      const textSizePairs: (string | number)[] = [];
-      const textSortKeyPairs: (string | number)[] = [];
+      // text-size & symbol-sort-key per OHM-tile name, driven by a combined
+      // (sitelinks + admin_level + polygon area) importance score. Higher score
+      // = bigger font + lower sort-key (wins label-collision).
+      // We accumulate per-name signals across all rendered features (polygons +
+      // label centroids), then convert to pairs in a single pass after the loop.
+      const byNameSignal: Record<string, { sl: number; area: number; adminLevel: number }> = {};
+      // Track the wikidata QIDs each name resolves to so we can pool area +
+      // sitelinks across name variants sharing a QID (e.g. "Italy" polygon +
+      // "Kingdom of Italy" label both tagged Q172579).
+      const qidsByName: Record<string, Set<string>> = {};
       // Bake the palette's fill-opacity into colors so the paint layer can run at
       // opacity 1.0 (avoids tile-seam darkening).
       const paletteOpacity = POLITY_PALETTES[polityPaletteRef.current]?.fillOpacity ?? 0.22;
@@ -1100,37 +1130,6 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       // gets a color, regardless of whether we have a local feature for it. The local DB is
       // only consulted to suppress redundant stars and (on click) to skip the live fetch.
       const qidMap = ohmQidMapRef.current;
-      // ── Diagnostic: log Haiti-related features once per session ──
-      const debugSubstr = ((window as unknown as { __ohmDebugName?: string }).__ohmDebugName ?? 'haiti').toLowerCase();
-      const debugFlag = window as unknown as { __ohmDebugFiredFor?: string };
-      if (debugFlag.__ohmDebugFiredFor !== debugSubstr && rendered.length > 0) {
-        const hits = rendered.filter((f) => {
-          const n = ((f.properties?.name_en ?? f.properties?.name ?? '') as string).toLowerCase();
-          return n.includes(debugSubstr);
-        });
-        if (hits.length > 0) {
-          debugFlag.__ohmDebugFiredFor = debugSubstr;
-          // eslint-disable-next-line no-console
-          console.log(`[OHM diag "${debugSubstr}"] qidMap entries: ${Object.keys(qidMap).length}; rendered features:`,
-            hits.map((f) => {
-              const osmIdRaw = Number(f.properties?.osm_id);
-              const osmId = Math.abs(osmIdRaw);
-              const qid = osmId ? qidMap[osmId] : undefined;
-              return {
-                layer: f.layer.id,
-                name: f.properties?.name_en ?? f.properties?.name,
-                osm_id_raw: osmIdRaw,
-                osm_id_abs: osmId,
-                qid_from_map: qid ?? '(none)',
-                start_date: f.properties?.start_date,
-                end_date: f.properties?.end_date,
-                admin_level: f.properties?.admin_level,
-                type: f.properties?.type,
-              };
-            }),
-          );
-        }
-      }
       // Dedupe sets are SEPARATE for match vs text-suffix-stripping. A name only
       // counts as "matched" once we've actually found a QID match for it, so a
       // label node with no wikidata processed first doesn't poison the slot
@@ -1150,6 +1149,40 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           if (fullName !== displayName) textPairs.push(fullName, displayName);
         }
 
+        // Accumulate importance signals per name across ALL features (polygons
+        // contribute area, label nodes contribute admin_level, QID-matched
+        // features contribute sitelinks). Done for both matched and unmatched
+        // names so admin_level/area boost unmatched polities too.
+        const sig = byNameSignal[fullName] ?? { sl: 0, area: 0, adminLevel: 99 };
+        const absOsmIdEarly = Math.abs(Number(f.properties?.osm_id));
+        if (absOsmIdEarly) {
+          const qEarly = qidMap[absOsmIdEarly];
+          if (qEarly) {
+            const qset = qidsByName[fullName] ?? new Set<string>();
+            qset.add(qEarly);
+            qidsByName[fullName] = qset;
+          }
+        }
+        const tileAdminLvl = Number(f.properties?.admin_level);
+        if (!Number.isNaN(tileAdminLvl)) {
+          sig.adminLevel = Math.min(sig.adminLevel, tileAdminLvl);
+        } else if (f.layer?.id === 'ohm-labels') {
+          // ohm-labels' source layer is `place_points_centroids` filtered to
+          // `type=country`, so every feature there IS country-level even when
+          // the tile omits an explicit admin_level. Treat as level 2.
+          sig.adminLevel = Math.min(sig.adminLevel, 2);
+        }
+        const geom = f.geometry;
+        if (geom?.type === 'Polygon') {
+          const ring = (geom as GeoJSON.Polygon).coordinates[0];
+          if (ring?.length) sig.area += ringArea(ring);
+        } else if (geom?.type === 'MultiPolygon') {
+          for (const polyRings of (geom as GeoJSON.MultiPolygon).coordinates) {
+            if (polyRings[0]?.length) sig.area += ringArea(polyRings[0]);
+          }
+        }
+        byNameSignal[fullName] = sig;
+
         // Match attempt — skip only if we've already colored this name.
         if (matchedNames.has(fullName)) continue;
 
@@ -1168,9 +1201,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           // doubling effective alpha along the seam.
           fillPairs.push(fullName, bakeAlpha(color, paletteOpacity));
           labelPairs.push(fullName, '#eeeeee');
-          const sl = sitelinksByQid[wikidataQid] ?? 0;
-          textSizePairs.push(fullName, sitelinksToSize(sl));
-          textSortKeyPairs.push(fullName, -sl);
+          sig.sl = sitelinksByQid[wikidataQid] ?? 0;
           const polityId = polityIdByQid[wikidataQid];
           if (polityId) matchedPolityIds.add(polityId);
         }
@@ -1196,9 +1227,16 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         ? (['match', nameExpr, ...haloPairs, '#000000'] as unknown as maplibregl.ExpressionSpecification)
         : '#000000';
       // Label text: mapped names strip date suffix; unmapped fall back to raw tile name.
-      const labelText = textPairs.length > 0
+      const baseLabelText = textPairs.length > 0
         ? (['match', nameExpr, ...textPairs, nameExpr] as unknown as maplibregl.ExpressionSpecification)
         : nameExpr;
+      // When the user picks a non-English language, prefer OHM's per-language
+      // name tag (e.g. name:de, name:fr) and fall back to the English-based
+      // labelText if that field is missing on the feature.
+      const lang = selectedLangRef.current;
+      const labelText = lang && lang !== 'en'
+        ? (['coalesce', ['get', `name:${lang}`], baseLabelText] as unknown as maplibregl.ExpressionSpecification)
+        : baseLabelText;
 
       if (map.getLayer('ohm-fills')) {
         map.setPaintProperty('ohm-fills', 'fill-color', fillColor);
@@ -1209,6 +1247,44 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       }
       // ohm-borders uses land_ohm_lines which has no name_en — keep uniform gray.
       // The fill polygons provide per-territory coloring.
+      // Build text-size + symbol-sort-key from the combined importance score per name.
+      const textSizePairs: (string | number)[] = [];
+      const textSortKeyPairs: (string | number)[] = [];
+      // OHM tags the same entity with the same wikidata QID across multiple
+      // features (e.g. a label node "Kingdom of Italy" + a polygon "Italy", both
+      // tagged Q172579). Pool area + sitelinks by QID so label-only features
+      // inherit their polygon counterpart's signals.
+      const byQidArea: Record<string, number> = {};
+      const byQidSl: Record<string, number> = {};
+      for (const [n, s] of Object.entries(byNameSignal)) {
+        const qset = qidsByName[n];
+        if (!qset) continue;
+        for (const q of qset) {
+          if (s.area > (byQidArea[q] ?? 0)) byQidArea[q] = s.area;
+          const dbSl = sitelinksByQid[q];
+          if (dbSl !== undefined && dbSl > (byQidSl[q] ?? 0)) byQidSl[q] = dbSl;
+        }
+      }
+      for (const [name, sig] of Object.entries(byNameSignal)) {
+        const qset = qidsByName[name];
+        let effectiveArea = sig.area;
+        let effectiveSl = sig.sl;
+        if (qset) {
+          for (const q of qset) {
+            const qa = byQidArea[q];
+            if (qa !== undefined && qa > effectiveArea) effectiveArea = qa;
+            const qs = byQidSl[q];
+            if (qs !== undefined && qs > effectiveSl) effectiveSl = qs;
+          }
+        }
+        const slScore = sitelinksScore(effectiveSl);
+        const adminScore = adminLevelScore(sig.adminLevel);
+        const areaScore = areaToScore(effectiveArea);
+        const total = slScore + adminScore + areaScore;
+        const size = scoreToSize(total);
+        textSizePairs.push(name, size);
+        textSortKeyPairs.push(name, -total);
+      }
       const textSizeExpr = textSizePairs.length > 0
         ? (['match', nameExpr, ...textSizePairs, 13] as unknown as maplibregl.ExpressionSpecification)
         : 13;
@@ -1332,6 +1408,12 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
   useEffect(() => {
     rebuildColorsRef.current();
   }, [polityPalette]);
+
+  // Re-run rebuildColors when the UI language changes, so OHM labels switch
+  // to the matching `name:<lang>` tag (with English fallback).
+  useEffect(() => {
+    rebuildColorsRef.current();
+  }, [selectedLang]);
 
   // Re-run rebuildColors when the timeline year changes — parent-cascade color
   // is year-gated (a polity may have one parent at 1820 and a different one at

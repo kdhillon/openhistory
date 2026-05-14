@@ -72,6 +72,11 @@ async def require_write_secret(x_write_secret: Optional[str] = Header(default=No
     if WRITE_SECRET and x_write_secret != WRITE_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
 
+# OHM/OSM allowlist us by User-Agent containing "openhistory" — keep the
+# substring exact (lowercase) for every outbound HTTP request, especially
+# anything hitting *.openhistoricalmap.org/api/0.6/*.
+APP_USER_AGENT = "openhistory/1.0 (+https://openhistory.app/)"
+
 app = FastAPI(title="OurStory API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -528,7 +533,7 @@ async def patch_polity(polity_id: str, request: Request, _: None = Depends(requi
 def _wd_fetch(qid: str) -> dict:
     """Fetch a Wikidata entity via Special:EntityData."""
     url = f"https://www.wikidata.org/wiki/Special:EntityData/{qid}.json"
-    req = urllib.request.Request(url, headers={"User-Agent": "OpenHistory/1.0 (https://openhistory.app)"})
+    req = urllib.request.Request(url, headers={"User-Agent": APP_USER_AGENT})
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read())["entities"][qid]
 
@@ -620,7 +625,7 @@ def _wp_summary(title: str) -> tuple[str, str]:
     try:
         encoded = urllib.parse.quote(title.replace(" ", "_"))
         url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{encoded}"
-        req = urllib.request.Request(url, headers={"User-Agent": "OpenHistory/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": APP_USER_AGENT})
         with urllib.request.urlopen(req, timeout=8) as r:
             data = json.loads(r.read())
             return data.get("extract", ""), data.get("content_urls", {}).get("desktop", {}).get("page", "")
@@ -1737,7 +1742,7 @@ async def wikidata_proxy(request: Request):
     auth_header = request.headers.get("authorization", "")
     client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")
     req_headers = {
-        "User-Agent": "OpenHistory/1.0 (https://openhistory.app)",
+        "User-Agent": APP_USER_AGENT,
         "Accept": "application/json",
         "X-Forwarded-For": client_ip,
     }
@@ -1901,7 +1906,7 @@ async def oauth_callback(request: Request):
 
     req = urllib.request.Request(WM_TOKEN_URL, data=body, method="POST")
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
-    req.add_header("User-Agent", "OpenHistory/1.0 (https://openhistory.app)")
+    req.add_header("User-Agent", APP_USER_AGENT)
 
     try:
         with urllib.request.urlopen(req) as resp:
@@ -1957,7 +1962,7 @@ async def ohm_oauth_callback(request: Request):
 
     req = urllib.request.Request(OHM_TOKEN_URL, data=body, method="POST")
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
-    req.add_header("User-Agent", "OpenHistory/1.0 (https://openhistory.app)")
+    req.add_header("User-Agent", APP_USER_AGENT)
 
     loop = __import__("asyncio").get_event_loop()
     def _fetch():
@@ -2020,7 +2025,7 @@ async def ohm_create_label(request: Request):
         "Authorization": f"Bearer {token}",
         "Content-Type": "text/xml; charset=utf-8",
         "Accept": "text/plain, */*",
-        "User-Agent": "OpenHistory/1.0 (+https://openhistory.app; contact: kyle@openhistory.app)",
+        "User-Agent": APP_USER_AGENT,
     }
 
     loop = __import__("asyncio").get_event_loop()
@@ -2156,7 +2161,7 @@ async def ohm_update_element(request: Request):
 
     base_headers = {
         "Authorization": f"Bearer {token}",
-        "User-Agent": "OpenHistory/1.0 (+https://openhistory.app; contact: kyle@openhistory.app)",
+        "User-Agent": APP_USER_AGENT,
     }
     write_headers = {**base_headers, "Content-Type": "text/xml; charset=utf-8", "Accept": "text/plain, */*"}
     loop = asyncio.get_event_loop()
@@ -2374,7 +2379,7 @@ out ids tags;"""
         req = urllib.request.Request(
             "https://overpass-api.openhistoricalmap.org/api/interpreter",
             data=data,
-            headers={"User-Agent": "OpenHistory/1.0 (https://openhistory.app)"},
+            headers={"User-Agent": APP_USER_AGENT},
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=200) as resp:
@@ -2437,7 +2442,7 @@ out ids tags;"""
                 })
                 req = urllib.request.Request(
                     f"https://{lang}.wikipedia.org/w/api.php?{qs}",
-                    headers={"User-Agent": "OpenHistory/1.0 (https://openhistory.app)"},
+                    headers={"User-Agent": APP_USER_AGENT},
                 )
                 with urllib.request.urlopen(req, timeout=20) as r:
                     data = json.loads(r.read())
@@ -2519,7 +2524,7 @@ out tags;"""
         req = urllib.request.Request(
             "https://overpass-api.openhistoricalmap.org/api/interpreter",
             data=data,
-            headers={"User-Agent": "OpenHistory/1.0 (https://openhistory.app)"},
+            headers={"User-Agent": APP_USER_AGENT},
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=20) as resp:
@@ -2574,7 +2579,7 @@ async def oauth_refresh(request: Request):
 
     req = urllib.request.Request(WM_TOKEN_URL, data=body, method="POST")
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
-    req.add_header("User-Agent", "OpenHistory/1.0 (https://openhistory.app)")
+    req.add_header("User-Agent", APP_USER_AGENT)
 
     try:
         with urllib.request.urlopen(req) as resp:

@@ -79,7 +79,7 @@ function SectionHeader({ label, count }: { label: string; count: number }) {
 }
 
 export function UnlocatedEventsPanel({ eventFeatures, currentDateInt, stepSize, onSelectFeature }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const { active, recent } = useMemo(() => {
     const active: FeatureProperties[] = [];

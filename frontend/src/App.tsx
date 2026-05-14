@@ -740,6 +740,7 @@ export default function App() {
           polityPalette={polityPalette}
           ohmQidMap={ohmQidMap}
           maxAdminLevel={maxAdminLevel}
+          selectedLang={selectedLang}
         />
         <GlobalSearchPanel
           yearMin={currentYear}

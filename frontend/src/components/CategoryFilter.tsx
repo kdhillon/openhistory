@@ -242,8 +242,45 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
               <input type="checkbox" checked={showOhmAdmin} onChange={onToggleOhmAdmin} style={{ margin: 0 }} />
               <span style={styles.settingsCheckLabel}>Show OHM fills</span>
             </label>
-            <div style={{ ...styles.settingsRow, marginTop: 6 }} title="Filter OHM polygons and labels by admin_level. 2 = countries only. Higher values show finer subdivisions (states, counties, districts).">
-              <label style={styles.settingsLabel}>Show admin level ≤</label>
+            <div
+              style={{ ...styles.settingsRow, marginTop: 6 }}
+              title={
+                'OHM/OSM admin_level — political/administrative hierarchy of a boundary. Higher = finer subdivision.\n\n' +
+                '1 — Supranational union (e.g. EU, Holy Roman Empire)\n' +
+                '2 — Sovereign country (default)\n' +
+                '3 — Federated state member / dependent territory\n' +
+                '4 — State, province, or region (US states, German Länder)\n' +
+                '5 — Region / governorate / autonomous province\n' +
+                '6 — County or district\n' +
+                '7 — Sub-county / canton\n' +
+                '8 — City or municipality\n\n' +
+                'Coverage thins out at higher levels — most OHM data is concentrated at 2–4.'
+              }
+            >
+              <label style={styles.settingsLabel}>
+                Show admin level ≤
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 13,
+                    height: 13,
+                    marginLeft: 5,
+                    borderRadius: '50%',
+                    border: '1px solid rgba(0,0,0,0.35)',
+                    color: 'rgba(0,0,0,0.55)',
+                    fontSize: 9,
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    cursor: 'help',
+                    userSelect: 'none',
+                  }}
+                  aria-label="What is admin level?"
+                >
+                  ?
+                </span>
+              </label>
               <select
                 value={maxAdminLevel}
                 onChange={(e) => onMaxAdminLevelChange(Number(e.target.value))}

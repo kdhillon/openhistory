@@ -880,9 +880,15 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
         )
         : loading
           ? (
-            <div style={styles.imageLoader}>
-              <div style={styles.spinner} />
-            </div>
+            // Match the loaded-state layout exactly so nothing below shifts
+            // when the article resolves: same 200px image area + same toggle
+            // row (rendered as a placeholder div for height parity).
+            <>
+              <div style={styles.imageLoader}>
+                <div style={styles.spinner} />
+              </div>
+              <div style={styles.imageTogglePlaceholder} />
+            </>
           )
           : null
       }
@@ -1441,12 +1447,25 @@ const styles: Record<string, React.CSSProperties> = {
   },
   imageLoader: {
     width: '100%',
-    height: 240,
+    // Match the loaded image height (`height: 200` on the <img>) exactly so the
+    // body content doesn't shift up when the article resolves.
+    height: 200,
     flexShrink: 0,
     background: 'rgba(0,0,0,0.04)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Empty stand-in for the image-toggle button row in the loading state.
+  // Same dimensions and border as styles.imageToggle so swapping in the real
+  // button at article-resolve time doesn't change the layout height.
+  imageTogglePlaceholder: {
+    width: '100%',
+    // height = padding (4px top + 4px bottom) + font-size (9px) ≈ 17px; round
+    // up to 17 to match the rendered <button>.
+    height: 17,
+    borderBottom: '1px solid rgba(0,0,0,0.07)',
+    flexShrink: 0,
   },
   spinner: {
     width: 32,
