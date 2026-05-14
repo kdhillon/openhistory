@@ -764,7 +764,12 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           'text-max-width': 10,
           'text-optional': true,
           'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
-          visibility: ohmInitialVis,
+          // Initial visibility must consider showImperialTerritory: the apply
+          // effect that toggles this layer fires during the async load handler
+          // (before this addLayer runs) and silently no-ops, so a user who
+          // never touches the toggle would otherwise see imperial labels
+          // permanently visible regardless of the default.
+          visibility: (ohmInitialVis === 'visible' && showImperialTerritoryRef.current) ? 'visible' : 'none',
         },
         paint: {
           'text-color': '#bebebe',
@@ -1444,6 +1449,19 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
   useEffect(() => {
     rebuildColorsRef.current();
   }, [translationMap]);
+
+  // Re-run rebuildColors when the user sets/clears a per-polity color override
+  // from the InfoPanel picker. localStorage writes dispatch a custom event so
+  // we can react in the same tab (`storage` only fires cross-tab).
+  useEffect(() => {
+    const onChange = () => rebuildColorsRef.current();
+    window.addEventListener('oh-user-color-overrides-changed', onChange);
+    window.addEventListener('storage', onChange);
+    return () => {
+      window.removeEventListener('oh-user-color-overrides-changed', onChange);
+      window.removeEventListener('storage', onChange);
+    };
+  }, []);
 
   // Re-run rebuildColors when the timeline year changes — parent-cascade color
   // is year-gated (a polity may have one parent at 1820 and a different one at
