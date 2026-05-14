@@ -100,6 +100,46 @@ export function AboutPage({ onBack }: Props) {
 
         <hr style={styles.rule} />
 
+        <h2 style={styles.h2}>How Coloring Works</h2>
+
+        <h3 style={styles.h3}>Capital city as the base signal</h3>
+        <p style={styles.p}>
+          A polity's color is hashed from its <strong>capital city's Wikidata QID</strong>
+          (with the polity's name as a fallback when no capital is recorded). Two entities
+          centred on the same city share a color — so <strong>Spain</strong>,{' '}
+          <strong>Spanish Empire</strong>, and the <strong>Crown of Castile</strong> all
+          share Madrid and render in the same color.
+        </p>
+
+        <h3 style={styles.h3}>Children inherit their parent's color</h3>
+        <p style={styles.p}>
+          Most polities are part of a larger umbrella entity at some point in their lifetime —
+          Saxony was part of the German Confederation 1815-1866, then part of the German Empire
+          1871-1918.
+        </p>
+        <p style={styles.p}>
+          When you scrub the timeline to a year where a polity has an active parent, the child
+          renders in the <strong>parent's color</strong> instead of its own. So all German
+          Confederation members at 1820 — Saxony, Hesse, Hanover, Württemberg, etc. — render
+          in one shared color (the Confederation's), making the political grouping visible at
+          a glance.
+        </p>
+
+        <h3 style={styles.h3}>Where parent links come from</h3>
+        <p style={styles.p}>
+          Parent relationships are read from Wikidata, using five properties combined: <code>P150</code>{' '}
+          (contains administrative entity), <code>P361</code> (part of), <code>P131</code>{' '}
+          (located in administrative entity), <code>P17</code> (country), and <code>P127</code>{' '}
+          (owned by). Each link's year range is intersected with both the parent's and child's
+          own lifetimes so the relationship is temporally accurate.
+        </p>
+        <p style={styles.p}>
+          More technical detail in{' '}
+          <a style={styles.a} href="https://github.com/kdhillon/openhistory/blob/main/docs/polity-parent-coloring.md" target="_blank" rel="noreferrer">docs/polity-parent-coloring.md</a>.
+        </p>
+
+        <hr style={styles.rule} />
+
         <h2 style={styles.h2}>License</h2>
         <p style={styles.p}>
           OpenHistory is fully open source under the MIT license. The code, pipeline, and data
@@ -116,7 +156,7 @@ export function AboutPage({ onBack }: Props) {
 
         <h2 style={styles.h2}>Issues &amp; Contributions</h2>
         <p style={styles.p}>
-          Found a data error or have a feature idea? Open an issue or pull request on{' '}
+          Found a bug or have a feature idea? Open an issue or pull request on{' '}
           <a style={styles.a} href="https://github.com/kdhillon/openhistory/issues" target="_blank" rel="noreferrer">GitHub</a>.
         </p>
 

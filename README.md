@@ -208,4 +208,4 @@ Time-bounded political entities — historically specific ("French First Republi
 - **Territory boundaries** — CC0 (OpenHistoricalMap contributors)
 - **Basemap tiles** — © [OpenFreeMap](https://openfreemap.org)
 
-Found a data error or have an idea? Open an issue or pull request on [GitHub](https://github.com/kdhillon/openhistory/issues).
+Found a bug or have an idea? Open an issue or pull request on [GitHub](https://github.com/kdhillon/openhistory/issues).
