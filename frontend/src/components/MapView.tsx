@@ -460,9 +460,9 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         'text-field': ['get', 'title'],
         // Events bumped 20% over locations (war stays the most prominent).
         'text-size': ['case',
-          ['==', ['get', 'primaryCategory'], 'war'], 18,
-          ['==', ['get', 'featureType'], 'event'], 14,
-          12,
+          ['==', ['get', 'primaryCategory'], 'war'], 14,
+          ['==', ['get', 'featureType'], 'event'], 11,
+          10,
         ],
         'text-offset': [0, 1.2],
         'text-anchor': 'top',
@@ -532,7 +532,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         layout: {
           visibility: hbInitialVis,
           'text-field': ['coalesce', ['get', 'polityName'], ['get', 'hbName']],
-          'text-size': 12,
+          'text-size': 10,
           'text-max-width': 10,
           'text-optional': true,
           'text-font': ['Open Sans Italic', 'Arial Unicode MS Regular'],
@@ -662,7 +662,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         ] as maplibregl.FilterSpecification,
         layout: {
           'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']],
-          'text-size': 13,
+          'text-size': 10,
           'symbol-sort-key': 0,  // initialized so rebuildColors can setLayoutProperty later
           'text-max-width': 10,
           'text-optional': true,
@@ -688,7 +688,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         filter: OHM_ADMIN_FILTER,
         layout: {
           'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']],
-          'text-size': 13,
+          'text-size': 10,
           'symbol-sort-key': 0,  // initialized so rebuildColors can setLayoutProperty later
           'text-max-width': 8,
           'text-optional': true,
@@ -729,7 +729,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           ['<=', ['coalesce', ['get', '_minZoom'], 2], ['zoom']],
           ['!', ['coalesce', ['get', '_hasTerritory'], false]],
         ] as maplibregl.FilterSpecification,
-        layout: { ...labelLayout, 'text-offset': [0, 1.6], 'text-size': 13 },
+        layout: { ...labelLayout, 'text-offset': [0, 1.6], 'text-size': 10 },
         paint: labelPaint,
       });
 
@@ -750,7 +750,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
           'text-field': ['coalesce', ['get', '_capitalLabel'], ''],
-          'text-size': 11,
+          'text-size': 9,
           'text-offset': [0, 1.2],
           'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
           'text-optional': true,
@@ -810,11 +810,11 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           // Bigger labels for more globally significant polities.
           'text-size': [
             'step', ['coalesce', ['get', 'sitelinksCount'], 0],
-            11,
-            10, 13,
-            25, 14,
-            60, 15,
-            120, 17,
+            9,
+            10, 10,
+            25, 11,
+            60, 12,
+            120, 14,
           ],
           'text-allow-overlap': true,
           'text-ignore-placement': true,
@@ -1040,11 +1040,11 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
        *  We log-cap sitelinks and weight area more heavily so visual heft wins
        *  over mere notability. */
       const scoreToSize = (score: number): number => {
-        if (score >= 180) return 17;
-        if (score >= 130) return 15;
-        if (score >= 80)  return 14;
-        if (score >= 40)  return 13;
-        return 11;
+        if (score >= 180) return 14;
+        if (score >= 130) return 12;
+        if (score >= 80)  return 11;
+        if (score >= 40)  return 10;
+        return 9;
       };
       const sitelinksScore = (sl: number): number => {
         // log-capped: a country with 300 sitelinks scores roughly the same as one
@@ -1309,8 +1309,8 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         textSortKeyPairs.push(name, -total);
       }
       const textSizeExpr = textSizePairs.length > 0
-        ? (['match', nameExpr, ...textSizePairs, 13] as unknown as maplibregl.ExpressionSpecification)
-        : 13;
+        ? (['match', nameExpr, ...textSizePairs, 10] as unknown as maplibregl.ExpressionSpecification)
+        : 10;
       const textSortKeyExpr = textSortKeyPairs.length > 0
         ? (['match', nameExpr, ...textSortKeyPairs, 0] as unknown as maplibregl.ExpressionSpecification)
         : 0;
