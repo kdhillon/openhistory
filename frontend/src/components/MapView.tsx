@@ -359,6 +359,12 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
   maxAdminLevelRef.current = maxAdminLevel;
   const selectedLangRef = useRef(selectedLang);
   selectedLangRef.current = selectedLang;
+  // translationMap is consumed inside rebuildColors, which lives in a
+  // useEffect with empty deps — so without a ref, every invocation would
+  // see the initial empty object. Keep the ref synced each render so
+  // OHM-label translations refresh as the batch fetch fills the map.
+  const translationMapRef = useRef<Record<string, string>>({});
+  translationMapRef.current = translationMap;
   const onOhmTerritoryClickRef = useRef(onOhmTerritoryClick);
   onOhmTerritoryClickRef.current = onOhmTerritoryClick;
   const [showModernBorders, setShowModernBorders] = useState(false);
@@ -1225,7 +1231,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           // QID-keyed Wikidata lookup is our broader-coverage path. The match
           // expression below takes precedence over the date-suffix-strip pairs
           // for non-English language sessions.
-          const wdTranslation = translationMap?.[wikidataQid];
+          const wdTranslation = translationMapRef.current?.[wikidataQid];
           if (wdTranslation && wdTranslation !== fullName) {
             wdTextPairs.push(fullName, wdTranslation);
           }
@@ -1362,7 +1368,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           let localizedName = displayName;
           if (lang && lang !== 'en') {
             const ohmLangName = f.properties?.[`name:${lang}`] as string | undefined;
-            const wdLangName = wikidataQid ? translationMap?.[wikidataQid] : undefined;
+            const wdLangName = wikidataQid ? translationMapRef.current?.[wikidataQid] : undefined;
             if (ohmLangName) {
               localizedName = stripDisplay(ohmLangName);
             } else if (wdLangName) {
@@ -1461,6 +1467,15 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
   useEffect(() => {
     rebuildColorsRef.current();
   }, [selectedLang]);
+
+  // Re-run rebuildColors when the translation batch finishes (or refreshes).
+  // Without this, the Wikidata-keyed fallback for ohm-labels and the
+  // polity-centroid translated names would stay stuck at whatever
+  // translationMap snapshot was active when the rebuildColors closure was
+  // first captured — i.e. the empty {} from initial mount.
+  useEffect(() => {
+    rebuildColorsRef.current();
+  }, [translationMap]);
 
   // Re-run rebuildColors when the timeline year changes — parent-cascade color
   // is year-gated (a polity may have one parent at 1820 and a different one at

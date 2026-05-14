@@ -304,13 +304,14 @@ export async function fetchEntityTranslations(
   const batches: string[][] = [];
   for (let i = 0; i < need.length; i += BATCH) batches.push(need.slice(i, i + BATCH));
 
-  // Concurrency picked to amortize Wikidata's per-call latency (~300-500ms)
-  // without tripping its rate limiter. With cache + retry below, PARALLEL=6
-  // sustains ~10-15 req/sec which Wikidata accepts cleanly; back off to
-  // ROUND_DELAY=0 because the parallelism alone paces us. If 429s reappear
-  // in practice, lower PARALLEL or restore a small delay.
-  const PARALLEL = 6;
-  const ROUND_DELAY_MS = 0;
+  // Pacing notes:
+  // - Wikidata's anonymous rate limit is roughly 200 req/min. Sustained
+  //   client-side throughput maxes out around ~3 req/s before 429s kick in.
+  // - We start at PARALLEL=3 + 300ms inter-round delay (~3 req/s avg). If we
+  //   start seeing 429s, the adaptive throttle below bumps the round delay
+  //   for the rest of the run so we don't keep hammering.
+  const PARALLEL = 3;
+  let roundDelayMs = 300;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   let nRateLimited = 0;
@@ -318,6 +319,8 @@ export async function fetchEntityTranslations(
   console.log(`[i18n batch ${lang}] starting fetch: ${need.length} qids in ${batches.length} batches of ${BATCH}, parallel=${PARALLEL}`);
 
   for (let i = 0; i < batches.length; i += PARALLEL) {
+    // Track 429s for this round so we can adapt the throttle below.
+    let roundRateLimitedHits = 0;
     await Promise.all(
       batches.slice(i, i + PARALLEL).map(async (batch) => {
         try {
@@ -333,6 +336,7 @@ export async function fetchEntityTranslations(
           // Retry once on 429 with the server's Retry-After (capped at 3s).
           if (res.status === 429) {
             nRateLimited++;
+            roundRateLimitedHits++;
             const retryAfter = res.headers.get('Retry-After');
             const waitMs = Math.min(3000, Math.max(500, Number(retryAfter) * 1000 || 1000));
             await sleep(waitMs);
@@ -350,7 +354,13 @@ export async function fetchEntityTranslations(
         } catch { /* skip failed batch */ }
       }),
     );
-    if (i + PARALLEL < batches.length && ROUND_DELAY_MS > 0) await sleep(ROUND_DELAY_MS);
+    // Adaptive throttle: any 429 this round → permanently bump the delay so
+    // the rest of the run is slower. Caps at 2s so we don't grind to a halt.
+    if (roundRateLimitedHits > 0 && roundDelayMs < 2000) {
+      roundDelayMs = Math.min(2000, roundDelayMs + 500);
+      console.warn(`[i18n batch ${lang}] hit 429 — slowing inter-round delay to ${roundDelayMs}ms`);
+    }
+    if (i + PARALLEL < batches.length) await sleep(roundDelayMs);
   }
   // Persist the whole accumulated cache for this language back to localStorage
   // so subsequent reloads pick polity labels up instantly.
