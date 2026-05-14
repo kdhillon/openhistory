@@ -66,8 +66,7 @@ def upsert_locations(conn, location_records: list[dict], pipeline_run: str = "")
             %(founded_year)s, %(founded_is_fuzzy)s, %(dissolved_year)s,
             %(wikidata_qid)s, %(slug)s, %(location_type)s, %(p31_qids)s, %(data_version)s, %(pipeline_run)s
         )
-        ON CONFLICT (slug) DO UPDATE SET
-            wikidata_qid      = COALESCE(EXCLUDED.wikidata_qid, locations.wikidata_qid),
+        ON CONFLICT (wikidata_qid) DO UPDATE SET
             name              = EXCLUDED.name,
             wikipedia_summary = COALESCE(EXCLUDED.wikipedia_summary, locations.wikipedia_summary),
             wikipedia_url     = COALESCE(EXCLUDED.wikipedia_url, locations.wikipedia_url),
@@ -157,8 +156,7 @@ def upsert_events(
             %(location_level)s, %(lon)s, %(lat)s, %(location_wikidata_qid)s, %(location_name)s,
             %(categories)s, %(p31_qids)s, %(part_of_qids)s, %(wikidata_qid)s, %(slug)s, %(data_version)s, %(pipeline_run)s
         )
-        ON CONFLICT (slug) DO UPDATE SET
-            wikidata_qid          = COALESCE(EXCLUDED.wikidata_qid, events.wikidata_qid),
+        ON CONFLICT (wikidata_qid) DO UPDATE SET
             wikipedia_summary     = COALESCE(EXCLUDED.wikipedia_summary, events.wikipedia_summary),
             month_start           = COALESCE(EXCLUDED.month_start, events.month_start),
             day_start             = COALESCE(EXCLUDED.day_start, events.day_start),

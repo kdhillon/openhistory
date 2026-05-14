@@ -1,0 +1,218 @@
+{
+  "runs": {
+    "1883": {
+      "added": 51,
+      "after": 75,
+      "before": 24,
+      "ran_at": "2026-05-14T06:09:31.462668+00:00",
+      "status": "ok"
+    },
+    "1884": {
+      "added": 106,
+      "after": 139,
+      "before": 33,
+      "ran_at": "2026-05-14T06:04:44.194361+00:00",
+      "status": "ok"
+    },
+    "1885": {
+      "added": 81,
+      "after": 106,
+      "before": 25,
+      "ran_at": "2026-05-14T05:54:23.997812+00:00",
+      "status": "ok"
+    },
+    "1886": {
+      "added": 86,
+      "after": 118,
+      "before": 32,
+      "ran_at": "2026-05-14T05:50:29.572657+00:00",
+      "status": "ok"
+    },
+    "1887": {
+      "added": 1,
+      "after": 29,
+      "before": 28,
+      "ran_at": "2026-05-14T05:48:56.310806+00:00",
+      "status": "partial",
+      "throttled_categories": "?",
+      "warnings": [
+        "(suspected throttle: only +1 event added \u2014 flagged manually for retry)"
+      ]
+    },
+    "1888": {
+      "added": 119,
+      "after": 142,
+      "before": 23,
+      "ran_at": "2026-05-14T05:31:31.876297+00:00",
+      "status": "ok"
+    },
+    "1889": {
+      "added": 81,
+      "after": 111,
+      "before": 30,
+      "ran_at": "2026-05-14T05:24:25.172400+00:00",
+      "status": "ok"
+    },
+    "1890": {
+      "added": 81,
+      "after": 116,
+      "before": 35,
+      "ran_at": "2026-05-14T05:22:37.231256+00:00",
+      "status": "ok"
+    },
+    "1891": {
+      "added": 78,
+      "after": 107,
+      "before": 29,
+      "ran_at": "2026-05-14T05:21:06.914533+00:00",
+      "status": "ok"
+    },
+    "1892": {
+      "added": 148,
+      "after": 174,
+      "before": 26,
+      "ran_at": "2026-05-14T05:19:09.123469+00:00",
+      "status": "ok"
+    },
+    "1893": {
+      "added": 76,
+      "after": 109,
+      "before": 33,
+      "ran_at": "2026-05-14T05:16:57.046452+00:00",
+      "status": "ok"
+    },
+    "1894": {
+      "before": 30,
+      "error": "records, pipeline_run=run_tag)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py\", line 399, in load_all\n    loaded_qids = upsert_locations(conn, location_records, pipeline_run)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py\", line 110, in upsert_locations\n    cur.execute(sql, row)\npsycopg2.errors.UniqueViolation: duplicate key value violates unique constraint \"locations_wikidata_qid_key\"\nDETAIL:  Key (wikidata_qid)=(Q623329) already exists.",
+      "phase": "pipeline",
+      "ran_at": "2026-05-14T05:15:25.933747+00:00",
+      "status": "failed"
+    },
+    "1895": {
+      "before": 28,
+      "error": "l(events, city_records, pipeline_run=run_tag)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py\", line 403, in load_all\n    loaded, skipped = upsert_events(conn, events, pipeline_run)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py\", line 259, in upsert_events\n    cur.execute(sql, row)\npsycopg2.errors.UniqueViolation: duplicate key value violates unique constraint \"events_wikidata_qid_key\"\nDETAIL:  Key (wikidata_qid)=(Q717373) already exists.",
+      "phase": "pipeline",
+      "ran_at": "2026-05-14T05:13:50.595293+00:00",
+      "status": "failed"
+    },
+    "1896": {
+      "added": 163,
+      "after": 193,
+      "before": 30,
+      "ran_at": "2026-05-14T05:12:24.893459+00:00",
+      "status": "ok"
+    },
+    "1897": {
+      "added": 77,
+      "after": 103,
+      "before": 26,
+      "ran_at": "2026-05-14T05:10:33.423179+00:00",
+      "status": "ok"
+    },
+    "1898": {
+      "added": 133,
+      "after": 175,
+      "before": 42,
+      "ran_at": "2026-05-14T05:09:02.916339+00:00",
+      "status": "ok"
+    },
+    "1899": {
+      "added": 123,
+      "after": 164,
+      "before": 41,
+      "ran_at": "2026-05-14T05:07:14.174766+00:00",
+      "status": "ok"
+    },
+    "1900": {
+      "before": 37,
+      "error": "ecords, pipeline_run=run_tag)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py\", line 399, in load_all\n    loaded_qids = upsert_locations(conn, location_records, pipeline_run)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py\", line 110, in upsert_locations\n    cur.execute(sql, row)\npsycopg2.errors.UniqueViolation: duplicate key value violates unique constraint \"locations_wikidata_qid_key\"\nDETAIL:  Key (wikidata_qid)=(Q2604022) already exists.",
+      "phase": "pipeline",
+      "ran_at": "2026-05-14T05:05:26.703284+00:00",
+      "status": "failed"
+    },
+    "1901": {
+      "added": 86,
+      "after": 113,
+      "before": 27,
+      "ran_at": "2026-05-14T05:04:03.839317+00:00",
+      "status": "ok"
+    },
+    "1902": {
+      "added": 102,
+      "after": 126,
+      "before": 24,
+      "ran_at": "2026-05-14T05:02:34.268768+00:00",
+      "status": "ok"
+    },
+    "1903": {
+      "added": 88,
+      "after": 125,
+      "before": 37,
+      "ran_at": "2026-05-14T05:01:02.886360+00:00",
+      "status": "ok"
+    },
+    "1904": {
+      "before": 44,
+      "error": "records, pipeline_run=run_tag)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py\", line 399, in load_all\n    loaded_qids = upsert_locations(conn, location_records, pipeline_run)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py\", line 110, in upsert_locations\n    cur.execute(sql, row)\npsycopg2.errors.UniqueViolation: duplicate key value violates unique constraint \"locations_wikidata_qid_key\"\nDETAIL:  Key (wikidata_qid)=(Q623329) already exists.",
+      "phase": "pipeline",
+      "ran_at": "2026-05-14T04:59:31.331827+00:00",
+      "status": "failed"
+    },
+    "1905": {
+      "added": 87,
+      "after": 129,
+      "before": 42,
+      "ran_at": "2026-05-14T04:58:07.665606+00:00",
+      "status": "ok"
+    },
+    "1906": {
+      "added": 114,
+      "after": 155,
+      "before": 41,
+      "ran_at": "2026-05-14T04:56:30.529778+00:00",
+      "status": "ok"
+    },
+    "1907": {
+      "added": 86,
+      "after": 139,
+      "before": 53,
+      "ran_at": "2026-05-14T04:54:16.500488+00:00",
+      "status": "ok"
+    },
+    "1908": {
+      "added": 158,
+      "after": 204,
+      "before": 46,
+      "ran_at": "2026-05-14T04:47:46.177531+00:00",
+      "status": "ok"
+    },
+    "1909": {
+      "added": 67,
+      "after": 119,
+      "before": 52,
+      "ran_at": "2026-05-14T04:45:55.172330+00:00",
+      "status": "ok"
+    },
+    "1910": {
+      "added": 125,
+      "after": 174,
+      "before": 49,
+      "ran_at": "2026-05-14T04:44:20.426819+00:00",
+      "status": "ok"
+    },
+    "1911": {
+      "added": 123,
+      "after": 185,
+      "before": 62,
+      "ran_at": "2026-05-14T04:42:37.364577+00:00",
+      "status": "ok"
+    },
+    "1912": {
+      "added": 200,
+      "after": 260,
+      "before": 60,
+      "ran_at": "2026-05-14T04:40:46.105991+00:00",
+      "status": "ok"
+    }
+  }
+}
