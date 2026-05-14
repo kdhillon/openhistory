@@ -314,9 +314,14 @@ export default function App() {
   const geojsonRef = useRef<GeoJSON.FeatureCollection>(geojson);
   geojsonRef.current = geojson;
 
+  // Tracks the in-flight Wikidata batch — surfaces a "Translating labels"
+  // entry in the bottom-right status indicator so users see progress instead
+  // of thinking the language switch did nothing.
+  const [translatingLabels, setTranslatingLabels] = useState(false);
+
   // Fetch polity name translations whenever language or polity data changes
   useEffect(() => {
-    if (selectedLang === 'en') { setTranslationMap({}); return; }
+    if (selectedLang === 'en') { setTranslationMap({}); setTranslatingLabels(false); return; }
     const seen = new Set<string>();
     for (const f of geojson.features) {
       const p = f.properties as { featureType?: string; wikidataQid?: string; partOfResolved?: string | Array<{ qid?: string }> };
@@ -330,10 +335,16 @@ export default function App() {
       }
     }
     const qids = [...seen];
+    // Clear the old map immediately so a DE→FR switch doesn't leave stale
+    // German labels rendering until the French batch resolves — labels flash
+    // back to English first, then fill in as the batch completes (or instantly
+    // if localStorage already has this language cached).
+    setTranslationMap({});
+    setTranslatingLabels(true);
     let cancelled = false;
-    fetchEntityTranslations(qids, selectedLang).then((map) => {
-      if (!cancelled) setTranslationMap(map);
-    });
+    fetchEntityTranslations(qids, selectedLang)
+      .then((map) => { if (!cancelled) setTranslationMap(map); })
+      .finally(() => { if (!cancelled) setTranslatingLabels(false); });
     return () => { cancelled = true; };
   }, [selectedLang, geojson]);
 
@@ -772,6 +783,7 @@ export default function App() {
           if (eventsLoading) items.push('Events');
           if (territoriesLoading) items.push('Territories');
           if (ohmQidMapLoading) items.push('OHM QID Map');
+          if (translatingLabels) items.push('Translating labels');
           if (items.length === 0) return null;
           return (
             // Fixed (viewport-relative) so it's above the InfoPanel (zIndex 90),
