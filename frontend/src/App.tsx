@@ -123,6 +123,7 @@ export default function App() {
     new Set(EVENT_CATEGORIES as Category[]),
   );
   const [showBorders, setShowBorders] = useState(true);
+  const [showLabels, setShowLabels] = useState(true);
   const [showOtherPolities, setShowOtherPolities] = useState(true);
   const [showTerritoryLabels, setShowTerritoryLabels] = useState(false);
   const [showRecentEvents, setShowRecentEvents] = useState(false);
@@ -413,7 +414,17 @@ export default function App() {
     });
   }, []);
 
-  const handleToggleBorders = useCallback(() => setShowBorders((v) => !v), []);
+  // The chip toggles both border lines and polygon fills together — they're presented
+  // as one "Borders" affordance in the chip row. (Settings popover still exposes each
+  // individually for finer control.)
+  const handleToggleBorders = useCallback(() => {
+    setShowBorders((v) => {
+      const next = !v;
+      setShowOhmAdmin(next);
+      return next;
+    });
+  }, []);
+  const handleToggleLabels = useCallback(() => setShowLabels((v) => !v), []);
   const handleToggleOtherPolities = useCallback(() => setShowOtherPolities((v) => !v), []);
   const handleToggleTerritoryLabels = useCallback(() => setShowTerritoryLabels((v) => !v), []);
   const handleToggleRecentEvents = useCallback(() => setShowRecentEvents((v) => !v), []);
@@ -604,12 +615,12 @@ export default function App() {
         <MobileTopBar
           activeCategories={activeCategories}
           onToggle={handleToggleCategory}
+          showLabels={showLabels}
+          onToggleLabels={handleToggleLabels}
           showBorders={showBorders}
           onToggleBorders={handleToggleBorders}
           showOtherPolities={showOtherPolities}
           onToggleOtherPolities={handleToggleOtherPolities}
-          showOhmAdmin={showOhmAdmin}
-          onToggleOhmAdmin={handleToggleOhmAdmin}
           onOpenAbout={() => navigate('/about')}
           selectedLang={selectedLang}
           onLangChange={handleLangChange}
@@ -625,6 +636,8 @@ export default function App() {
         <CategoryFilter
           activeCategories={activeCategories}
           onToggle={handleToggleCategory}
+          showLabels={showLabels}
+          onToggleLabels={handleToggleLabels}
           showBorders={showBorders}
           onToggleBorders={handleToggleBorders}
           showOtherPolities={showOtherPolities}
@@ -704,6 +717,7 @@ export default function App() {
           stepSize={timeline.stepSize}
           activeCategories={activeCategories}
           showBorders={showBorders}
+          showLabels={showLabels}
           showOtherPolities={showOtherPolities}
           showTerritoryLabels={showTerritoryLabels}
           onSelectFeature={handleSelectFeature}

@@ -15,13 +15,28 @@ export function AboutPage({ onBack }: Props) {
 
         <h1 style={styles.h1}>OpenHistory</h1>
         <p style={styles.lead}>
-          An open-source interactive atlas of human history. Scroll through history and learn
-          the story of humankind.
+          An open-source interactive atlas of human history.
         </p>
 
         <hr style={styles.rule} />
 
         <h2 style={styles.h2}>Data Sources</h2>
+
+        <h3 style={styles.h3}>Territory Boundaries — OpenHistoricalMap</h3>
+        <p style={styles.p}>
+          Territory boundaries (the shaded regions on the map) come from{' '}
+          <a style={styles.a} href="https://www.openhistoricalmap.org" target="_blank" rel="noreferrer">OpenHistoricalMap</a>{' '}
+          (OHM), a community-driven project that maps historical boundaries with day-level precision (CC0).
+          A territory is linked to a polity when its OHM relation carries a{' '}
+          <code>wikidata=Q…</code> tag pointing at the matching Wikidata entity — when that link
+          exists, the boundary, the label, and the polity card all refer to the same entity, and
+          colors propagate across the parent hierarchy.
+        </p>
+
+        <p style={styles.p}>
+          Anyone can contribute boundary edits directly on the OHM website, and they will appear here
+          automatically. See below for how to tag a territory's polity link from inside OpenHistory.
+        </p>
 
         <h3 style={styles.h3}>Events, Locations &amp; Polities — Wikipedia / Wikidata</h3>
         <p style={styles.p}>
@@ -37,20 +52,6 @@ export function AboutPage({ onBack }: Props) {
           <li><strong>Polities</strong> — kingdoms, empires, republics, colonies, viceroyalties, indigenous nations, peoples, and other political entities. They may have founding and dissolution dates and a capital, and can be assigned to a territory.</li>
         </ul>
 
-        <h3 style={styles.h3}>Territory Boundaries — OpenHistoricalMap</h3>
-        <p style={styles.p}>
-          Territory boundaries (the shaded regions on the map) come from{' '}
-          <a style={styles.a} href="https://www.openhistoricalmap.org" target="_blank" rel="noreferrer">OpenHistoricalMap</a>{' '}
-          (OHM), a community-driven project that maps historical boundaries with day-level precision (CC0).
-          Territory labels can be linked to a polity in our database — when linked, the label and the
-          polity marker refer to the same entity.
-        </p>
-
-        <p style={styles.p}>
-          Anyone can contribute boundary edits directly on the OHM website, and they will appear here
-          automatically. See below for instructions on how to link territories to polities.
-        </p>
-
         <hr style={styles.rule} />
 
         <h2 style={styles.h2}>Contributing Data</h2>
@@ -65,43 +66,41 @@ export function AboutPage({ onBack }: Props) {
           log in and submit a correction.
         </p>
 
-        <h3 style={styles.h3}>Mapping Territories to Polities</h3>
+        <h3 style={styles.h3}>Tagging Territories with their Polity</h3>
         <p style={styles.p}>
-          Territory polygons and polities are linked by name-matching — but many territories
-          haven't been matched yet and appear in <strong>grey</strong> on the map.
-          You can help by mapping a grey territory to its polity:
+          A territory appears in <strong>grey</strong> when its OHM boundary isn't yet tagged
+          with a Wikidata QID. The fix lives on OpenHistoricalMap itself — add a{' '}
+          <code>wikidata=Q…</code> tag to the relation and OpenHistory will pick it up on the
+          next tile refresh. Steps:
         </p>
         <ol style={{ ...styles.ul, paddingLeft: 26 }}>
-          <li>Click on a grey territory label on the map</li>
-          <li>A panel will open — type the name of the corresponding polity</li>
-          <li>Select the correct polity from the search results</li>
+          <li>Find the territory on{' '}
+            <a style={styles.a} href="https://www.openhistoricalmap.org" target="_blank" rel="noreferrer">openhistoricalmap.org</a>{' '}
+            and open it in the iD editor
+          </li>
+          <li>Look up the matching Wikidata entity (e.g. on{' '}
+            <a style={styles.a} href="https://www.wikidata.org" target="_blank" rel="noreferrer">wikidata.org</a>) to get its Q-ID
+          </li>
+          <li>Add a <code>wikidata</code> tag with that Q-ID to the OHM relation, and save</li>
         </ol>
         <p style={styles.p}>
-          No account required. Territory mappings are saved to the OpenHistory database and
-          apply immediately.
+          You'll need a free{' '}
+          <a style={styles.a} href="https://www.openhistoricalmap.org/user/new" target="_blank" rel="noreferrer">OpenHistoricalMap account</a>{' '}
+          (OSM-style login). An in-app one-click tagging flow is planned but not live yet.
         </p>
 
         <h3 style={styles.h3}>Editing Territory Boundaries</h3>
         <p style={styles.p}>
-          Territory polygon shapes can be edited directly from the map. Click <strong>Edit Borders ✎</strong>{' '}
-          in the top bar to enter the territory editor. In this mode:
-        </p>
-        <ul style={styles.ul}>
-          <li>Drag any vertex to reshape a boundary</li>
-          <li>Hover over an edge and click (or right-click) to insert a new vertex</li>
-          <li>Right-click a vertex to delete it; or click to select it, then press Delete</li>
-          <li>Press <strong>Ctrl+Z</strong> to undo any change</li>
-          <li>Draw entirely new territory polygons with the <strong>+</strong> button</li>
-        </ul>
-        <p style={styles.p}>
-          Shared borders between adjacent territories move together — editing one side
-          automatically updates the neighbouring polygon. Changes are saved to the OpenHistory
-          database. No account required.
+          Boundary <em>shapes</em> (where a territory's edges lie) are edited on OpenHistoricalMap
+          itself — they're not stored in OpenHistory. Open the territory on{' '}
+          <a style={styles.a} href="https://www.openhistoricalmap.org" target="_blank" rel="noreferrer">openhistoricalmap.org</a>{' '}
+          in OHM's iD editor and adjust the polygon vertices. Edits propagate to OpenHistory on
+          OHM's next tile refresh.
         </p>
 
         <hr style={styles.rule} />
 
-        <h2 style={styles.h2}>Open Source</h2>
+        <h2 style={styles.h2}>License</h2>
         <p style={styles.p}>
           OpenHistory is fully open source under the MIT license. The code, pipeline, and data
           schema are all public.
@@ -142,7 +141,10 @@ export function AboutPage({ onBack }: Props) {
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
-    minHeight: '100vh',
+    // body has overflow:hidden globally (for the map view), so the About page
+    // needs its own scroll container — height:100vh + overflow-y:auto.
+    height: '100vh',
+    overflowY: 'auto',
     background: '#f8f9fa',
     display: 'flex',
     justifyContent: 'center',

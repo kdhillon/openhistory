@@ -29,6 +29,8 @@ interface Props {
   onToggle: (cat: Category) => void;
   showBorders: boolean;
   onToggleBorders: () => void;
+  showLabels: boolean;
+  onToggleLabels: () => void;
   showOtherPolities: boolean;
   onToggleOtherPolities: () => void;
   showTerritoryLabels: boolean;
@@ -159,9 +161,9 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
   );
 }
 
-export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onEditTerritory, editorMode, territorySource, getOhmEditUrl, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin, polityPalette, onPolityPaletteChange, maxAdminLevel, onMaxAdminLevelChange }: Props) {
+export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showLabels, onToggleLabels, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onEditTerritory, editorMode, territorySource, getOhmEditUrl, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin, polityPalette, onPolityPaletteChange, maxAdminLevel, onMaxAdminLevelChange }: Props) {
+  const labelsColor = '#90A4AE';
   const bordersColor = '#607D8B';
-  const ohmPolygonsColor = '#4CAF50';
   const otherPolitiesColor = '#9C27B0';
   const [settingsOpen, setSettingsOpen] = useState(false);
   const gearRef = useRef<HTMLButtonElement>(null);
@@ -186,7 +188,9 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
     <div style={styles.bar}>
       {/* Row 1: wordmark + nav buttons */}
       <div style={styles.row}>
-        <button onClick={onOpenAbout} title="About OpenHistory" style={styles.infoBtn}>i</button>
+        <button onClick={onOpenAbout} title="About OpenHistory" style={styles.logoBtn}>
+          <img src="/favicon.svg" alt="" width={24} height={24} style={{ display: 'block' }} />
+        </button>
         <div style={styles.wordmark}>OpenHistory</div>
         <div style={{ flex: 1 }} />
         {territorySource === 'ohm' ? (
@@ -308,6 +312,20 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
 
       {/* Row 2: polity toggles + events + locations */}
       <div style={styles.row}>
+        {/* Labels toggle */}
+        <button
+          onClick={onToggleLabels}
+          style={{
+            ...styles.chip,
+            background: showLabels ? `${labelsColor}22` : 'transparent',
+            borderColor: showLabels ? `${labelsColor}88` : 'rgba(0,0,0,0.15)',
+            color: showLabels ? '#202122' : '#9a9a9a',
+          }}
+          title="OHM country labels + polity centroid labels"
+        >
+          <span style={{ ...styles.dot, background: labelsColor, opacity: showLabels ? 1 : 0.4 }} />
+          Labels
+        </button>
         {/* Borders toggle */}
         <button
           onClick={onToggleBorders}
@@ -321,20 +339,6 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
         >
           <span style={{ ...styles.dot, background: bordersColor, opacity: showBorders ? 1 : 0.4 }} />
           Borders
-        </button>
-        {/* Polygons toggle */}
-        <button
-          onClick={onToggleOhmAdmin}
-          style={{
-            ...styles.chip,
-            background: showOhmAdmin ? `${ohmPolygonsColor}22` : 'transparent',
-            borderColor: showOhmAdmin ? `${ohmPolygonsColor}88` : 'rgba(0,0,0,0.15)',
-            color: showOhmAdmin ? '#202122' : '#9a9a9a',
-          }}
-          title="ohm_admin boundaries from OpenHistoricalMap, admin level 2"
-        >
-          <span style={{ ...styles.dot, background: ohmPolygonsColor, opacity: showOhmAdmin ? 1 : 0.4 }} />
-          Polygons
         </button>
         {/* Other Polities toggle */}
         <button
@@ -366,10 +370,10 @@ interface MobileTopBarProps {
   onToggle: (cat: Category) => void;
   showBorders: boolean;
   onToggleBorders: () => void;
+  showLabels: boolean;
+  onToggleLabels: () => void;
   showOtherPolities: boolean;
   onToggleOtherPolities: () => void;
-  showOhmAdmin: boolean;
-  onToggleOhmAdmin: () => void;
   onOpenAbout: () => void;
   selectedLang: string;
   onLangChange: (lang: string) => void;
@@ -385,22 +389,24 @@ interface MobileTopBarProps {
 export function MobileTopBar({
   activeCategories, onToggle,
   showBorders, onToggleBorders,
+  showLabels, onToggleLabels,
   showOtherPolities, onToggleOtherPolities,
-  showOhmAdmin, onToggleOhmAdmin,
   onOpenAbout, selectedLang, onLangChange,
   stepSize, stepOptions, onSetStepSize,
   playbackSpeed, onSetSpeed,
   showRecentEvents, onToggleRecentEvents,
 }: MobileTopBarProps) {
+  const labelsColor = '#90A4AE';
   const bordersColor = '#607D8B';
-  const ohmPolygonsColor = '#4CAF50';
   const otherPolitiesColor = '#9C27B0';
   const [sheetOpen, setSheetOpen] = useState(false);
 
   return (
     <>
       <div style={mb.bar}>
-        <button onClick={onOpenAbout} title="About OpenHistory" style={mb.infoBtn}>i</button>
+        <button onClick={onOpenAbout} title="About OpenHistory" style={mb.logoBtn}>
+          <img src="/favicon.svg" alt="" width={22} height={22} style={{ display: 'block' }} />
+        </button>
         <div style={mb.wordmark}>OpenHistory</div>
         <div style={{ flex: 1 }} />
         <button
@@ -429,16 +435,16 @@ export function MobileTopBar({
               <div style={mb.sectionLabel}>Layers</div>
               <div style={mb.chipRow}>
                 <button
+                  onClick={onToggleLabels}
+                  style={{ ...mb.chip, background: showLabels ? `${labelsColor}22` : 'transparent', borderColor: showLabels ? `${labelsColor}88` : 'rgba(0,0,0,0.15)', color: showLabels ? '#202122' : '#9a9a9a' }}
+                >
+                  <span style={{ ...mb.dot, background: labelsColor, opacity: showLabels ? 1 : 0.4 }} />Labels
+                </button>
+                <button
                   onClick={onToggleBorders}
                   style={{ ...mb.chip, background: showBorders ? `${bordersColor}22` : 'transparent', borderColor: showBorders ? `${bordersColor}88` : 'rgba(0,0,0,0.15)', color: showBorders ? '#202122' : '#9a9a9a' }}
                 >
                   <span style={{ ...mb.dot, background: bordersColor, opacity: showBorders ? 1 : 0.4 }} />Borders
-                </button>
-                <button
-                  onClick={onToggleOhmAdmin}
-                  style={{ ...mb.chip, background: showOhmAdmin ? `${ohmPolygonsColor}22` : 'transparent', borderColor: showOhmAdmin ? `${ohmPolygonsColor}88` : 'rgba(0,0,0,0.15)', color: showOhmAdmin ? '#202122' : '#9a9a9a' }}
-                >
-                  <span style={{ ...mb.dot, background: ohmPolygonsColor, opacity: showOhmAdmin ? 1 : 0.4 }} />Polygons
                 </button>
                 <button
                   onClick={onToggleOtherPolities}
@@ -534,8 +540,19 @@ const mb: Record<string, React.CSSProperties> = {
     padding: 0,
     lineHeight: 1,
   },
+  logoBtn: {
+    border: 'none',
+    background: 'transparent',
+    padding: 0,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    lineHeight: 0,
+  },
   wordmark: {
-    fontSize: 17,
+    fontSize: 19,
     fontWeight: 700,
     letterSpacing: '-0.02em',
     color: '#202122',
@@ -656,8 +673,19 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 0,
     lineHeight: 1,
   },
+  logoBtn: {
+    border: 'none',
+    background: 'transparent',
+    padding: 0,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    lineHeight: 0,
+  },
   wordmark: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: 700,
     letterSpacing: '-0.02em',
     color: '#202122',

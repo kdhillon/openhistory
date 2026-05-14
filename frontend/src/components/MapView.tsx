@@ -261,6 +261,8 @@ interface Props {
   showOhm?: boolean;
   /** Show OHM admin fill polygons (boundaries layer from ohm_admin tileset) */
   showOhmAdmin?: boolean;
+  /** Show OHM labels (country centroids + admin centroids + our polity centroid labels) */
+  showLabels?: boolean;
   /** Polity color palette — 'polity-type' uses CATEGORY_COLORS; others assign one of a small palette per polity */
   polityPalette?: PaletteId;
   /** osm_id → Wikidata QID lookup served by our backend (proxied Overpass query, 5-min TTL). */
@@ -318,7 +320,7 @@ interface HoveredLabel {
   y: number;
 }
 
-export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize, activeCategories, showBorders, showOtherPolities, showTerritoryLabels = false, onSelectFeature, zoomRequest, fitBoundsRequest, hiddenNations, suppressedPolityIds, polityIdsWithTerritory, onUnmatchedTerritoryClick, onUnlinkPolygon, majorEventFilter, onMapReady, editorMode, territorySource = 'hb', onOhmTerritoryClick, onOhmMatchedPolityIds, showRecentEvents = false, showOhm = true, showOhmAdmin = false, polityPalette = 'polity-type', ohmQidMap = {}, maxAdminLevel = 2 }: Props) {
+export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize, activeCategories, showBorders, showOtherPolities, showTerritoryLabels = false, onSelectFeature, zoomRequest, fitBoundsRequest, hiddenNations, suppressedPolityIds, polityIdsWithTerritory, onUnmatchedTerritoryClick, onUnlinkPolygon, majorEventFilter, onMapReady, editorMode, territorySource = 'hb', onOhmTerritoryClick, onOhmMatchedPolityIds, showRecentEvents = false, showOhm = true, showOhmAdmin = false, polityPalette = 'polity-type', ohmQidMap = {}, maxAdminLevel = 2, showLabels = true }: Props) {
   const translationMap = useTranslations();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
@@ -446,17 +448,31 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
 
       const labelLayout = {
         'text-field': ['get', 'title'],
-        'text-size': ['case', ['==', ['get', 'primaryCategory'], 'war'], 13, 12],
+        // Events bumped 20% over locations (war stays the most prominent).
+        'text-size': ['case',
+          ['==', ['get', 'primaryCategory'], 'war'], 18,
+          ['==', ['get', 'featureType'], 'event'], 14,
+          12,
+        ],
         'text-offset': [0, 1.2],
         'text-anchor': 'top',
         'text-max-width': 12,
         'text-optional': true,
+        // Events get plain bold (more prominent than location labels), other
+        // features (regions, cities) stay plain italic. Both font stacks are
+        // among the few the OpenFreeMap font CDN actually serves.
+        'text-font': [
+          'case',
+          ['==', ['get', 'featureType'], 'event'],
+          ['literal', ['Noto Sans Bold', 'Arial Unicode MS Regular']],
+          ['literal', ['Noto Sans Italic', 'Arial Unicode MS Regular']],
+        ],
       };
 
       const labelPaint = {
         'text-color': '#ffffff',
-        'text-halo-color': 'rgba(0,0,0,0.75)',
-        'text-halo-width': 1.5,
+        'text-halo-color': '#000000',
+        'text-halo-width': 1.0,
         'text-opacity': ['number', ['get', '_labelOpacity'], 1.0],
       };
 
@@ -590,14 +606,25 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         layout: { visibility: ohmInitialVis },
         paint: { 'line-color': '#90A4AE', 'line-width': 1.8, 'line-opacity': 1 },
       });
-      // Fill polygons from ohm_admin — drawn on top of border lines
+      // Fill polygons from ohm_admin — drawn on top of border lines.
+      // `fill-sort-key` forces a deterministic render order. Primary key is
+      // admin_level (broader polities render below finer subdivisions); within
+      // the same admin level, osm_id (mod 10000 to stay in float-safe range)
+      // breaks ties — same value in every tile, so the order doesn't flip
+      // across tile boundaries.
       map.addLayer({
         id: 'ohm-fills',
         type: 'fill',
         source: 'ohm-admin',
         'source-layer': OHM_FILLS_LAYER,
         filter: OHM_ADMIN_FILTER,
-        layout: { visibility: ohmAdminInitialVis },
+        layout: {
+          visibility: ohmAdminInitialVis,
+          'fill-sort-key': ['+',
+            ['*', ['coalesce', ['get', 'admin_level'], 0], 10000],
+            ['%', ['abs', ['coalesce', ['get', 'osm_id'], 0]], 10000],
+          ],
+        },
         paint: { 'fill-color': '#78909C', 'fill-opacity': 0.22 },
       });
       // Thin polygon outline from ohm_admin (on top of fills)
@@ -626,6 +653,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         layout: {
           'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']],
           'text-size': 13,
+          'symbol-sort-key': 0,  // initialized so rebuildColors can setLayoutProperty later
           'text-max-width': 10,
           'text-optional': true,
           'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
@@ -651,6 +679,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         layout: {
           'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']],
           'text-size': 13,
+          'symbol-sort-key': 0,  // initialized so rebuildColors can setLayoutProperty later
           'text-max-width': 8,
           'text-optional': true,
           'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
@@ -766,7 +795,17 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         source: 'polity-centroid-src',
         layout: {
           'text-field': ['get', 'title'],
-          'text-size': 13,
+          // Bigger labels for more globally significant polities (driven by Wikipedia
+          // language-edition count). Tiers match the OHM-tile size scale.
+          // Bigger labels for more globally significant polities.
+          'text-size': [
+            'step', ['coalesce', ['get', 'sitelinksCount'], 0],
+            11,
+            10, 13,
+            25, 14,
+            60, 15,
+            120, 17,
+          ],
           'text-allow-overlap': true,
           'text-ignore-placement': true,
           'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
@@ -853,14 +892,24 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', hbVis);
       }
       if (map.getLayer('labels-territory')) map.setLayoutProperty('labels-territory', 'visibility', hbLabelVis);
-      // Polity centroid labels: visible when territory labels toggle is OFF (regardless of source)
-      const centroidVis = !showTerritoryLabels ? 'visible' : 'none';
-      if (map.getLayer('polity-centroid-labels')) map.setLayoutProperty('polity-centroid-labels', 'visibility', centroidVis);
-      // OHM border lines (from 'ohm' tileset) — controlled by showBorders
+      // OHM border lines (from 'ohm' tileset) — controlled by showBorders.
+      // Labels are a separate toggle so users can turn off lines without losing
+      // place names (and vice versa).
       const ohmBorderVis = showBorders ? 'visible' : 'none';
-      for (const id of ['ohm-borders', 'ohm-borders-1', 'ohm-labels', 'ohm-labels-small']) {
+      for (const id of ['ohm-borders', 'ohm-borders-1']) {
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', ohmBorderVis);
       }
+      // OHM labels (country centroids + admin centroids) + our derived
+      // polity-centroid-labels — controlled by showLabels.
+      // polity-centroid-labels has an additional gate: the HB-territory-labels
+      // toggle (showTerritoryLabels) preempts it, since the two label sources
+      // would otherwise overlap.
+      const labelVis = showLabels ? 'visible' : 'none';
+      for (const id of ['ohm-labels', 'ohm-labels-small']) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', labelVis);
+      }
+      const centroidVis = (!showTerritoryLabels && showLabels) ? 'visible' : 'none';
+      if (map.getLayer('polity-centroid-labels')) map.setLayoutProperty('polity-centroid-labels', 'visibility', centroidVis);
       // OHM polygon fills + outlines (from 'ohm_admin' tileset) — controlled by showOhmAdmin
       const ohmAdminVis = showOhmAdmin ? 'visible' : 'none';
       for (const id of ['ohm-fills', 'ohm-polygon-borders']) {
@@ -869,7 +918,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
     };
     if (map.isStyleLoaded()) apply();
     else map.once('load', apply);
-  }, [territorySource, showBorders, showTerritoryLabels, showOhm, showOhmAdmin]);
+  }, [territorySource, showBorders, showTerritoryLabels, showOhm, showOhmAdmin, showLabels]);
 
   // Update OHM temporal filter on every year tick
   useEffect(() => {
@@ -944,6 +993,11 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       // cascade fallback (so e.g. Fascist Italy can inherit Kingdom of Italy's
       // color via shared "Rome" when its own Wikidata record has no parent link).
       const polityByCapital: Record<string, PolityForColor[]> = {};
+      // QID → sitelinksCount — drives label text-size and symbol-sort-key on OHM tile
+      // layers so globally significant polities (Roman Empire, China, etc.) get
+      // larger labels and win label-collision battles. Kept as a side-map since
+      // sitelinksCount isn't used by the color cascade itself.
+      const sitelinksByQid: Record<string, number> = {};
       for (const f of geojsonRef.current.features) {
         const p = f.properties as FeatureProperties;
         if (!p.wikidataQid) continue;
@@ -963,8 +1017,21 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
             const key = p.capitalName.toLowerCase();
             (polityByCapital[key] ??= []).push(pfc);
           }
+          if (typeof p.sitelinksCount === 'number') {
+            sitelinksByQid[p.wikidataQid] = p.sitelinksCount;
+          }
         }
       }
+      /** Map sitelinks count to a label font size. Bigger = more globally significant.
+       *  Increases over the legacy 13px default are roughly halved so the typography
+       *  stays calm at high zoom. */
+      const sitelinksToSize = (sl: number): number => {
+        if (sl >= 120) return 17;
+        if (sl >= 60)  return 15;
+        if (sl >= 25)  return 14;
+        if (sl >= 10)  return 13;
+        return 11;
+      };
       // Read via ref — the surrounding useEffect has [] deps, so closures over
       // the prop would be frozen at first render.
       const currentYear = decodeDate(currentDateIntRef.current).year;
@@ -1006,6 +1073,22 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       const fillPairs: (string | maplibregl.ExpressionSpecification)[] = [];
       const labelPairs: (string | maplibregl.ExpressionSpecification)[] = [];
       const textPairs: (string | maplibregl.ExpressionSpecification)[] = [];
+      // text-size & symbol-sort-key per OHM-tile name, driven by polity sitelinksCount.
+      // Higher sitelinks = bigger font + lower sort-key (wins label-collision).
+      const textSizePairs: (string | number)[] = [];
+      const textSortKeyPairs: (string | number)[] = [];
+      // Bake the palette's fill-opacity into colors so the paint layer can run at
+      // opacity 1.0 (avoids tile-seam darkening).
+      const paletteOpacity = POLITY_PALETTES[polityPaletteRef.current]?.fillOpacity ?? 0.22;
+      const bakeAlpha = (hex: string, a: number): string => {
+        const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex.trim());
+        if (!m) return hex;
+        const r = parseInt(m[1], 16);
+        const g = parseInt(m[2], 16);
+        const b = parseInt(m[3], 16);
+        return `rgba(${r}, ${g}, ${b}, ${a})`;
+      };
+      const FALLBACK_FILL = bakeAlpha('#78909C', paletteOpacity);
 
       // Strip trailing " (YYYY)" / " (YYYY-YYYY)" / " (YYYY-present)" date suffixes
       // from OHM display names so the labels read cleanly on the map.
@@ -1079,8 +1162,15 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           const polity: PolityForColor = polityByQid[wikidataQid] ?? { qid: wikidataQid };
           const color = getPolityColorAtYear(polity, currentYear, polityPaletteRef.current, resolveByQid, findCapitalSibling);
           matchedNames.add(fullName);
-          fillPairs.push(fullName, color);
+          // Bake the palette's fill-opacity into the color so we can render the
+          // fill at opacity 1.0 on the paint side. Avoids the dark-seam artifact
+          // where a polygon clipped across tile boundaries overpaints itself,
+          // doubling effective alpha along the seam.
+          fillPairs.push(fullName, bakeAlpha(color, paletteOpacity));
           labelPairs.push(fullName, '#eeeeee');
+          const sl = sitelinksByQid[wikidataQid] ?? 0;
+          textSizePairs.push(fullName, sitelinksToSize(sl));
+          textSortKeyPairs.push(fullName, -sl);
           const polityId = polityIdByQid[wikidataQid];
           if (polityId) matchedPolityIds.add(polityId);
         }
@@ -1088,8 +1178,8 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
 
       const nameExpr = ['coalesce', ['get', 'name_en'], ['get', 'name']] as unknown as maplibregl.ExpressionSpecification;
       const fillColor = fillPairs.length > 0
-        ? (['match', nameExpr, ...fillPairs, '#78909C'] as unknown as maplibregl.ExpressionSpecification)
-        : '#78909C';
+        ? (['match', nameExpr, ...fillPairs, FALLBACK_FILL] as unknown as maplibregl.ExpressionSpecification)
+        : FALLBACK_FILL;
       // Unmapped polity label color — ~20% lighter than the original #9e9e9e
       // so the gray text reads as visually lighter without changing stroke weight.
       const UNMAPPED_LABEL_COLOR = '#bebebe';
@@ -1112,18 +1202,26 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
 
       if (map.getLayer('ohm-fills')) {
         map.setPaintProperty('ohm-fills', 'fill-color', fillColor);
-        // Palettes carry their own preferred fill opacity (pastels/earth-tones need
-        // more coverage to read; saturated/default stay airy).
-        const palette = POLITY_PALETTES[polityPaletteRef.current];
-        map.setPaintProperty('ohm-fills', 'fill-opacity', palette?.fillOpacity ?? 0.22);
+        // Alpha is baked into each fill color above. Run the paint at opacity 1
+        // so polygons clipped across tile seams overpaint identically rather
+        // than multiplying their alpha.
+        map.setPaintProperty('ohm-fills', 'fill-opacity', 1);
       }
       // ohm-borders uses land_ohm_lines which has no name_en — keep uniform gray.
       // The fill polygons provide per-territory coloring.
+      const textSizeExpr = textSizePairs.length > 0
+        ? (['match', nameExpr, ...textSizePairs, 13] as unknown as maplibregl.ExpressionSpecification)
+        : 13;
+      const textSortKeyExpr = textSortKeyPairs.length > 0
+        ? (['match', nameExpr, ...textSortKeyPairs, 0] as unknown as maplibregl.ExpressionSpecification)
+        : 0;
       for (const id of ['ohm-labels', 'ohm-labels-small']) {
         if (map.getLayer(id)) {
           map.setPaintProperty(id, 'text-color', labelColor);
           map.setPaintProperty(id, 'text-halo-color', labelHaloColor);
           map.setLayoutProperty(id, 'text-field', labelText);
+          map.setLayoutProperty(id, 'text-size', textSizeExpr);
+          map.setLayoutProperty(id, 'symbol-sort-key', textSortKeyExpr);
         }
       }
 
@@ -1133,10 +1231,10 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       const centroidSrc = map.getSource('polity-centroid-src') as GeoJSONSource | undefined;
       if (centroidSrc) {
         const labelRendered = rendered.filter((f) => f.layer.id === 'ohm-labels' || f.layer.id === 'ohm-labels-small');
-        const byKey: Record<string, { area: number; centroid: [number, number]; name: string; mapped: boolean; polityId: string | null }> = {};
+        const byKey: Record<string, { area: number; centroid: [number, number]; name: string; mapped: boolean; polityId: string | null; sitelinks: number }> = {};
         // byKey now also tracks the source OHM osm_id+type so a click on the centroid
         // label can attach OHM context (for direct API edits from InfoPanel).
-        const byKey2: Record<string, { area: number; centroid: [number, number]; name: string; mapped: boolean; polityId: string | null; osmId: number | null; osmType: 'node' | 'relation' | null }> = byKey as never;
+        const byKey2: Record<string, { area: number; centroid: [number, number]; name: string; mapped: boolean; polityId: string | null; osmId: number | null; osmType: 'node' | 'relation' | null; sitelinks: number }> = byKey as never;
         for (const f of labelRendered) {
           const fullName = (f.properties?.name_en ?? f.properties?.name ?? '') as string;
           if (!fullName) continue;
@@ -1145,6 +1243,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           const osmId = Math.abs(osmIdRaw);
           const wikidataQid = osmId ? qidMap[osmId] : undefined;
           const polityId = wikidataQid ? (polityIdByQid[wikidataQid] ?? null) : null;
+          const sitelinks = wikidataQid ? (sitelinksByQid[wikidataQid] ?? 0) : 0;
           // 'Mapped' (white label) means OHM has a wikidata tag, even if our DB doesn't know it.
           const isMapped = !!wikidataQid;
           const key = polityId ?? (wikidataQid ? `qid::${wikidataQid}` : `ohm::${fullName}`);
@@ -1159,7 +1258,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
             if (!r[0]?.length) continue;
             const a = ringArea(r[0]);
             if (!byKey2[key] || a > byKey2[key].area) {
-              byKey2[key] = { area: a, centroid: ringCentroid(r[0]), name: displayName, mapped: isMapped, polityId, osmId: osmId || null, osmType };
+              byKey2[key] = { area: a, centroid: ringCentroid(r[0]), name: displayName, mapped: isMapped, polityId, osmId: osmId || null, osmType, sitelinks };
             }
           }
         }
@@ -1173,6 +1272,8 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
             // Carry through so click handler can attach OHM context to the opened feature.
             _ohmOsmId: v.osmId,
             _ohmOsmType: v.osmType,
+            // sitelinksCount drives the centroid label's text-size.
+            sitelinksCount: v.sitelinks,
           },
         }));
         centroidSrc.setData({ type: 'FeatureCollection', features: centroidFeatures });
