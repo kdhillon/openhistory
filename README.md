@@ -32,7 +32,6 @@ This project is under active development. The core map, data pipeline, and deplo
 - **Deployment** — frontend + backend on [Railway](https://railway.app), auto-migrations on deploy
 - **Mobile layout** — compact single-row top bar and two-row timeline bottom bar for screens < 640px
 - **OHM territories** — OpenHistoricalMap boundaries via Overpass API, day-level precision, linked to polities via Wikidata QIDs
-- **Stories** — guided narrative mode: beat-by-beat story playback synchronized to the timeline
 - **Data loaded** — 21,695 events · 6,432 locations · 10,043 polities (incl. ancient empires) · coverage: 601 BCE–2025
 
 ### To Do

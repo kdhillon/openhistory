@@ -17,14 +17,11 @@ import { WelcomeModal, shouldShowWelcome } from './components/WelcomeModal';
 import { MajorEventsPanel } from './components/MajorEventsPanel';
 import { UnlocatedEventsPanel } from './components/UnlocatedEventsPanel';
 import { UnlocatedPolitiesPanel } from './components/UnlocatedPolitiesPanel';
-import { StoryPanel } from './components/StoryPanel';
-import { StoryBrowserModal } from './components/StoryBrowserModal';
 import { OhmLabelConfirmModal } from './components/OhmLabelConfirmModal';
 import { GlobalSearchPanel } from './components/GlobalSearchPanel';
 import type { SearchPolityResult, SearchEventResult } from './lib/api';
 import { extractOhmTokenFromHash, getOhmToken, clearOhmToken, createOhmLabel } from './lib/ohmApi';
-import { useTimeline, encodeDate, decodeDate, STEP_YEAR, STEP_DAY } from './hooks/useTimeline';
-import { useStory } from './hooks/useStory';
+import { useTimeline, encodeDate, decodeDate, STEP_YEAR } from './hooks/useTimeline';
 import { useEventSource } from './hooks/useEventSource';
 import { useTerritoriesSource } from './hooks/useTerritoriesSource';
 import { useOhmQidMap } from './hooks/useOhmQidMap';
@@ -96,7 +93,6 @@ export default function App() {
   const [currentPath, setCurrentPath] = useState(() => window.location.pathname);
 
   const timeline = useTimeline();
-  const { story, beatIndex, setBeatIndex, currentBeat, currentBeatEvent, beatEvents, beatCenters, loadStory, exitStory } = useStory();
   const currentYear = decodeDate(timeline.currentDateInt).year;
 
   // Debounce year for API calls — UI renders at full speed but DB requests only
@@ -163,7 +159,6 @@ export default function App() {
   const [hiddenFeatureIds, setHiddenFeatureIds] = useState<Set<string>>(new Set());
   // Territory editor
   const [editorMode, setEditorMode] = useState(false);
-  const [storyBrowserOpen, setStoryBrowserOpen] = useState(false);
   const [mapInstance, setMapInstance] = useState<MaplibreMap | null>(null);
   // Wikipedia language + polity label translations
   const [selectedLang, setSelectedLang] = useState(() => localStorage.getItem('oh_lang') ?? 'en');
@@ -534,48 +529,6 @@ export default function App() {
     }
   }, [handleNavigateToFeature, timeline]);
 
-  const handleStartStory = useCallback(async (slug: string) => {
-    setSelectedFeature(null);
-    timeline.setStepSize(STEP_DAY);
-    const result = await loadStory(slug);
-    if (!result) return;
-    const firstBeat = result.story.beats[0];
-    if (firstBeat?.event_qid) {
-      const feature = result.beatEvents.get(firstBeat.event_qid);
-      if (feature) handleNavigateToFeature(feature, result.beatCenters.get(firstBeat.event_qid));
-    }
-  }, [loadStory, handleNavigateToFeature, timeline]);
-
-  const handleStoryBeatNavigate = useCallback((index: number, targetBeatEvents: typeof beatEvents, targetBeatCenters: typeof beatCenters) => {
-    if (!story) return;
-    const beat = story.beats[index];
-    if (!beat?.event_qid) return;
-    const feature = targetBeatEvents.get(beat.event_qid);
-    if (feature) handleNavigateToFeature(feature, targetBeatCenters.get(beat.event_qid));
-  }, [story, handleNavigateToFeature]);
-
-  const handleNextBeat = useCallback(() => {
-    if (!story) return;
-    const next = Math.min(beatIndex + 1, story.beats.length - 1);
-    if (next === beatIndex) return;
-    setBeatIndex(next);
-    handleStoryBeatNavigate(next, beatEvents, beatCenters);
-  }, [story, beatIndex, setBeatIndex, beatEvents, beatCenters, handleStoryBeatNavigate]);
-
-  const handlePrevBeat = useCallback(() => {
-    if (!story) return;
-    const prev = Math.max(beatIndex - 1, 0);
-    if (prev === beatIndex) return;
-    setBeatIndex(prev);
-    handleStoryBeatNavigate(prev, beatEvents, beatCenters);
-  }, [story, beatIndex, setBeatIndex, beatEvents, beatCenters, handleStoryBeatNavigate]);
-
-  const handleJumpToBeat = useCallback((index: number) => {
-    if (!story) return;
-    setBeatIndex(index);
-    handleStoryBeatNavigate(index, beatEvents, beatCenters);
-  }, [story, setBeatIndex, beatEvents, beatCenters, handleStoryBeatNavigate]);
-
   const handleDataExplorerFeatureUpdated = useCallback((featureId: string, updates: Partial<FeatureProperties>) => {
     setOverrideMap((om) => {
       const existing = om.get(featureId);
@@ -658,7 +611,6 @@ export default function App() {
           showOhmAdmin={showOhmAdmin}
           onToggleOhmAdmin={handleToggleOhmAdmin}
           onOpenAbout={() => navigate('/about')}
-          onOpenStories={() => setStoryBrowserOpen(true)}
           selectedLang={selectedLang}
           onLangChange={handleLangChange}
           stepSize={timeline.stepSize}
@@ -681,7 +633,6 @@ export default function App() {
           onToggleTerritoryLabels={handleToggleTerritoryLabels}
           onOpenAbout={() => navigate('/about')}
           onOpenData={() => navigate('/data')}
-          onOpenStories={() => setStoryBrowserOpen(true)}
           onEditTerritory={() => setEditorMode((v) => !v)}
           getOhmEditUrl={() => {
             const zoom = localStorage.getItem('oh-map-zoom') ?? '5';
@@ -807,59 +758,37 @@ export default function App() {
         })()}
       </div>
 
-      {story ? (
-        <StoryPanel
-          story={story}
-          beatIndex={beatIndex}
-          currentBeat={currentBeat}
-          currentBeatEvent={currentBeatEvent}
-          onNext={handleNextBeat}
-          onPrev={handlePrevBeat}
-          onJumpToBeat={handleJumpToBeat}
-          onExit={exitStory}
-          isMobile={isMobile}
-        />
-      ) : (
-        <InfoPanel
-          feature={selectedFeature}
-          stack={stack}
-          onClose={handleClosePanel}
-          geojson={geojson}
-          onNavigateToFeature={handleNavigateToFeature}
-          wikiAuth={wikiAuth}
-          onAuth={setWikiAuth}
-          onFeatureUpdated={handleFeatureUpdated}
-          hiddenNations={hiddenNations}
-          onToggleHiddenNation={handleToggleHiddenNation}
-          onHideFeature={handleHideFeature}
-          selectedLang={selectedLang}
-          onStartStory={handleStartStory}
-          isMobile={isMobile}
-          currentDateInt={timeline.currentDateInt}
-          isOhmMapped={
-            selectedFeature?.featureType === 'polity'
-              ? ohmMatchedPolityIds.has(selectedFeature.id)
-              : false
-          }
-          onEditOhm={(ctx) => setOhmMappingTarget({
-            ohmName: ctx.name,
-            ohmWikidataQid: ctx.currentQid,
-            yearStart: ctx.yearStart,
-            yearEnd: ctx.yearEnd,
-            osmType: ctx.osmType,
-            osmId: ctx.osmId,
-          })}
-          // onAddToOhm hidden — OHM API writes are blocked by Cloudflare on our backend.
-          // Re-enable when we have a working path (iD editor deep-link, whitelisted IP, etc.).
-        />
-      )}
-
-      {storyBrowserOpen && (
-        <StoryBrowserModal
-          onClose={() => setStoryBrowserOpen(false)}
-          onStartStory={handleStartStory}
-        />
-      )}
+      <InfoPanel
+        feature={selectedFeature}
+        stack={stack}
+        onClose={handleClosePanel}
+        geojson={geojson}
+        onNavigateToFeature={handleNavigateToFeature}
+        wikiAuth={wikiAuth}
+        onAuth={setWikiAuth}
+        onFeatureUpdated={handleFeatureUpdated}
+        hiddenNations={hiddenNations}
+        onToggleHiddenNation={handleToggleHiddenNation}
+        onHideFeature={handleHideFeature}
+        selectedLang={selectedLang}
+        isMobile={isMobile}
+        currentDateInt={timeline.currentDateInt}
+        isOhmMapped={
+          selectedFeature?.featureType === 'polity'
+            ? ohmMatchedPolityIds.has(selectedFeature.id)
+            : false
+        }
+        onEditOhm={(ctx) => setOhmMappingTarget({
+          ohmName: ctx.name,
+          ohmWikidataQid: ctx.currentQid,
+          yearStart: ctx.yearStart,
+          yearEnd: ctx.yearEnd,
+          osmType: ctx.osmType,
+          osmId: ctx.osmId,
+        })}
+        // onAddToOhm hidden — OHM API writes are blocked by Cloudflare on our backend.
+        // Re-enable when we have a working path (iD editor deep-link, whitelisted IP, etc.).
+      />
 
       {isMobile ? (
         <MobileTimelineBar
