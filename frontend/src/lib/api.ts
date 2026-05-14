@@ -300,6 +300,7 @@ export interface SearchEventResult {
   locationName: string;
   summary: string;
   sitelinksCount: number | null;
+  wikidataQid: string | null;
 }
 
 export interface SearchResponse {

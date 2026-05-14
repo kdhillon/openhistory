@@ -1057,7 +1057,7 @@ def search_features(q: str, year_min: int, year_max: int, request: Request, limi
             """
             SELECT e.id, e.slug, e.title, e.year_start, e.year_end,
                    e.categories, e.location_name, e.sitelinks_count,
-                   e.wikipedia_summary
+                   e.wikipedia_summary, e.wikidata_qid
             FROM events e
             WHERE e.manually_hidden = FALSE
               AND LOWER(e.title) LIKE %(raw)s
@@ -1099,6 +1099,7 @@ def search_features(q: str, year_min: int, year_max: int, request: Request, limi
             "locationName": r["location_name"] or "",
             "summary": (r["wikipedia_summary"] or "")[:140],
             "sitelinksCount": r["sitelinks_count"],
+            "wikidataQid": r["wikidata_qid"],
         } for r in event_rows]
 
         total = len(polities) + len(events)

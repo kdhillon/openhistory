@@ -12,6 +12,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { searchAll } from '../lib/api';
 import type { SearchPolityResult, SearchEventResult } from '../lib/api';
+import { useTranslations } from '../lib/TranslationContext';
 import { CATEGORY_COLORS } from '../theme/categories';
 import type { Category } from '../types';
 
@@ -259,6 +260,8 @@ function PolityRow({ p, formatRange, onClick }: {
   onClick: () => void;
 }) {
   const color = CATEGORY_COLORS[p.polityType as Category] ?? CATEGORY_COLORS.other ?? '#607D8B';
+  const translationMap = useTranslations();
+  const displayTitle = (p.wikidataQid && translationMap?.[p.wikidataQid]) || p.title;
   return (
     <div
       onClick={onClick}
@@ -278,7 +281,7 @@ function PolityRow({ p, formatRange, onClick }: {
       }} />
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {p.title}
+          {displayTitle}
         </div>
         <div style={{ fontSize: 11, color: '#778' }}>
           {formatRange(p.yearStart, p.yearEnd)} · {p.polityType}
@@ -294,6 +297,8 @@ function EventRow({ e, formatRange, onClick }: {
   onClick: () => void;
 }) {
   const color = CATEGORY_COLORS[e.primaryCategory as Category] ?? '#9E9E9E';
+  const translationMap = useTranslations();
+  const displayTitle = (e.wikidataQid && translationMap?.[e.wikidataQid]) || e.title;
   return (
     <div
       onClick={onClick}
@@ -313,7 +318,7 @@ function EventRow({ e, formatRange, onClick }: {
       }} />
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {e.title}
+          {displayTitle}
         </div>
         <div style={{ fontSize: 11, color: '#778' }}>
           {formatRange(e.yearStart, e.yearEnd)}

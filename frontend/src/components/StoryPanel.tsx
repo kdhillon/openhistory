@@ -1,5 +1,6 @@
 import type { Story, StoryBeat, FeatureProperties } from '../types';
 import { encodeDate, displayDate, STEP_DAY, STEP_MONTH, STEP_YEAR } from '../hooks/useTimeline';
+import { useTranslations } from '../lib/TranslationContext';
 
 const DETAIL_LEVEL_LABELS: Record<string, string> = {
   elementary: 'Elementary',
@@ -38,6 +39,7 @@ function formatBeatDate(beat: StoryBeat, event: FeatureProperties | null): strin
 }
 
 export function StoryPanel({ story, beatIndex, currentBeat, currentBeatEvent, onNext, onPrev, onJumpToBeat, onExit, isMobile }: Props) {
+  const translationMap = useTranslations();
   if (!currentBeat) return null;
 
   const isFirst = beatIndex === 0;
@@ -92,7 +94,7 @@ export function StoryPanel({ story, beatIndex, currentBeat, currentBeatEvent, on
             rel="noopener noreferrer"
             style={styles.eventSubtitle}
           >
-            {currentBeatEvent.title} ↗
+            {(currentBeatEvent.wikidataQid && translationMap?.[currentBeatEvent.wikidataQid]) || currentBeatEvent.title} ↗
           </a>
         )}
         <p style={styles.narrative}>{currentBeat.narrative_text}</p>

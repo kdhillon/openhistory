@@ -1861,7 +1861,26 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       return [{ ...f, properties: { ...f.properties, ...extraProps } }];
     });
 
-    source.setData({ type: 'FeatureCollection', features: visible });
+    // Apply translated titles to events + locations on the way out. Polities
+    // already have `title` overwritten above (line ~1794), but events and
+    // locations don't go through that branch — so the map labels stay
+    // English until we patch them here. translationMap[qid] is the label in
+    // the user's selected language; we overwrite `title` so the existing
+    // `['get', 'title']` text-field expression picks it up without touching
+    // every label layer.
+    const hasTranslations = translationMap && Object.keys(translationMap).length > 0;
+    const localized = hasTranslations
+      ? visible.map((f) => {
+          const p = f.properties as FeatureProperties;
+          if (p.featureType === 'polity') return f;  // already handled above
+          const qid = p.wikidataQid;
+          const t = qid ? translationMap[qid] : undefined;
+          if (!t) return f;
+          return { ...f, properties: { ...f.properties, title: t } };
+        })
+      : visible;
+
+    source.setData({ type: 'FeatureCollection', features: localized });
 
     // Territory fill layer — time-filter by yearStart/yearEnd (HB mode only)
     const terrSource = map.getSource('territories') as GeoJSONSource | undefined;
