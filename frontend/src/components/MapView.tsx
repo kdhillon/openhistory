@@ -1311,6 +1311,9 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         // byKey now also tracks the source OHM osm_id+type so a click on the centroid
         // label can attach OHM context (for direct API edits from InfoPanel).
         const byKey2: Record<string, { area: number; centroid: [number, number]; name: string; mapped: boolean; polityId: string | null; osmId: number | null; osmType: 'node' | 'relation' | null; sitelinks: number }> = byKey as never;
+        // Translation source counters for the diag log below.
+        const lang = selectedLangRef.current;
+        let nFromOhmLang = 0, nFromTranslationMap = 0, nFromEnglish = 0;
         for (const f of labelRendered) {
           const fullName = (f.properties?.name_en ?? f.properties?.name ?? '') as string;
           if (!fullName) continue;
@@ -1322,6 +1325,26 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           const sitelinks = wikidataQid ? (sitelinksByQid[wikidataQid] ?? 0) : 0;
           // 'Mapped' (white label) means OHM has a wikidata tag, even if our DB doesn't know it.
           const isMapped = !!wikidataQid;
+          // Resolve the localized label for this polity. Priority:
+          //   1. OHM tile property `name:<lang>` — community-curated, often
+          //      historical-accurate (e.g. "Heiliges Römisches Reich")
+          //   2. Wikidata translation map keyed by the polity's QID — broader
+          //      coverage than OHM
+          //   3. English fallback (stripDisplay of name_en / name)
+          let localizedName = displayName;
+          if (lang && lang !== 'en') {
+            const ohmLangName = f.properties?.[`name:${lang}`] as string | undefined;
+            const wdLangName = wikidataQid ? translationMap?.[wikidataQid] : undefined;
+            if (ohmLangName) {
+              localizedName = stripDisplay(ohmLangName);
+              nFromOhmLang++;
+            } else if (wdLangName) {
+              localizedName = wdLangName;
+              nFromTranslationMap++;
+            } else {
+              nFromEnglish++;
+            }
+          }
           const key = polityId ?? (wikidataQid ? `qid::${wikidataQid}` : `ohm::${fullName}`);
           // Label features in ohm-labels/ohm-labels-small are nodes; in ohm-fills they'd be relations.
           const osmType: 'node' | 'relation' = osmIdRaw < 0 ? 'relation' : 'node';
@@ -1334,9 +1357,12 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
             if (!r[0]?.length) continue;
             const a = ringArea(r[0]);
             if (!byKey2[key] || a > byKey2[key].area) {
-              byKey2[key] = { area: a, centroid: ringCentroid(r[0]), name: displayName, mapped: isMapped, polityId, osmId: osmId || null, osmType, sitelinks };
+              byKey2[key] = { area: a, centroid: ringCentroid(r[0]), name: localizedName, mapped: isMapped, polityId, osmId: osmId || null, osmType, sitelinks };
             }
           }
+        }
+        if (lang && lang !== 'en') {
+          console.log(`[i18n centroids/${lang}] ohm-lang=${nFromOhmLang} wikidata=${nFromTranslationMap} english-fallback=${nFromEnglish} (total=${labelRendered.length})`);
         }
         const centroidFeatures: GeoJSON.Feature[] = Object.values(byKey2).map((v) => ({
           type: 'Feature' as const,
