@@ -237,21 +237,73 @@ async function _searchViaWikipedia(query: string): Promise<EntityResult[]> {
 
 // ── Batch polity label translations ────────────────────────────────────────
 
+// In-memory cache for batch translation results keyed by `${qid}|${lang}`.
+// Backed by localStorage so map polity-centroid labels appear instantly on
+// reload without re-hitting Wikidata. Empty string ⇒ "confirmed no label
+// in this language" — also cached so we never refetch known-misses.
+const _batchTranslationCache = new Map<string, string>();
+const _lsHydratedLangs = new Set<string>();
+
+function _lsKey(lang: string): string { return `oh_wd_labels_${lang}`; }
+
+function _hydrateFromLocalStorage(lang: string): void {
+  if (_lsHydratedLangs.has(lang)) return;
+  _lsHydratedLangs.add(lang);
+  try {
+    const raw = localStorage.getItem(_lsKey(lang));
+    if (!raw) return;
+    const obj = JSON.parse(raw) as Record<string, string>;
+    for (const [qid, label] of Object.entries(obj)) {
+      _batchTranslationCache.set(`${qid}|${lang}`, label);
+    }
+  } catch { /* corrupt entry — ignore */ }
+}
+
+function _persistToLocalStorage(lang: string): void {
+  try {
+    const out: Record<string, string> = {};
+    const suffix = `|${lang}`;
+    for (const [key, val] of _batchTranslationCache.entries()) {
+      if (key.endsWith(suffix)) out[key.slice(0, -suffix.length)] = val;
+    }
+    localStorage.setItem(_lsKey(lang), JSON.stringify(out));
+  } catch { /* quota exceeded or unavailable — ignore */ }
+}
+
 export async function fetchEntityTranslations(
   qids: string[],
   lang: string,
 ): Promise<Record<string, string>> {
   if (lang === 'en' || qids.length === 0) return {};
 
+  _hydrateFromLocalStorage(lang);
+
   const valid = qids.filter((q) => /^Q\d+$/.test(q));
   const result: Record<string, string> = {};
+
+  // Pull anything already cached, fetch only the rest.
+  const need: string[] = [];
+  for (const q of valid) {
+    const cached = _batchTranslationCache.get(`${q}|${lang}`);
+    if (cached !== undefined) {
+      if (cached) result[q] = cached;     // empty string ⇒ confirmed-no-label, don't refetch
+    } else {
+      need.push(q);
+    }
+  }
+  if (need.length === 0) return result;
+
   const BATCH = 50;
-
   const batches: string[][] = [];
-  for (let i = 0; i < valid.length; i += BATCH) batches.push(valid.slice(i, i + BATCH));
+  for (let i = 0; i < need.length; i += BATCH) batches.push(need.slice(i, i + BATCH));
 
-  // Run up to 8 parallel batches at a time
-  const PARALLEL = 8;
+  // Modest concurrency + inter-round delay to stay under Wikidata's per-IP
+  // rate limit. 26 rounds * 2 batches * 250ms = ~13s for a full 10k-polity
+  // language switch, which is fine for a background load.
+  const PARALLEL = 2;
+  const ROUND_DELAY_MS = 250;
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
   for (let i = 0; i < batches.length; i += PARALLEL) {
     await Promise.all(
       batches.slice(i, i + PARALLEL).map(async (batch) => {
@@ -264,15 +316,27 @@ export async function fetchEntityTranslations(
             format: 'json',
             origin: '*',
           });
-          const data = await fetch(`https://www.wikidata.org/w/api.php?${params}`).then((r) => r.json());
+          const res = await fetch(`https://www.wikidata.org/w/api.php?${params}`);
+          if (!res.ok) {
+            if (res.status === 429) console.warn(`[i18n batch] HTTP 429 — Wikidata rate-limited (will retry on next round)`);
+            return;
+          }
+          const data = await res.json();
           for (const [qid, entity] of Object.entries(data.entities ?? {})) {
             const label = (entity as Record<string, unknown> & { labels?: Record<string, { value: string }> }).labels?.[lang]?.value;
+            // Cache empty string as "no label in this lang" so we never refetch.
+            _batchTranslationCache.set(`${qid}|${lang}`, label ?? '');
             if (label) result[qid] = label;
           }
         } catch { /* skip failed batch */ }
       }),
     );
+    // Don't sleep after the final round.
+    if (i + PARALLEL < batches.length) await sleep(ROUND_DELAY_MS);
   }
+  // Persist the whole accumulated cache for this language back to localStorage
+  // so subsequent reloads pick polity labels up instantly.
+  _persistToLocalStorage(lang);
   return result;
 }
 
@@ -285,11 +349,21 @@ export interface TranslatedArticle {
   hasArticle: boolean;
 }
 
+// Per-(qid, lang) cache for single-article translations. Keys are
+// `${qid}|${lang}`. A `null` cached value means "confirmed no result" so
+// repeat clicks don't refetch.
+const _articleTranslationCache = new Map<string, TranslatedArticle | null>();
+
 export async function fetchArticleInLanguage(
   wikidataQid: string,
   lang: string,
 ): Promise<TranslatedArticle | null> {
   if (lang === 'en') return null; // caller handles English natively
+
+  const cacheKey = `${wikidataQid}|${lang}`;
+  if (_articleTranslationCache.has(cacheKey)) {
+    return _articleTranslationCache.get(cacheKey) ?? null;
+  }
 
   const tag = `[i18n ${wikidataQid}/${lang}]`;
   try {
@@ -307,9 +381,19 @@ export async function fetchArticleInLanguage(
       origin: '*',
     });
     const wdUrl = `https://www.wikidata.org/w/api.php?${params}`;
-    const wdRes = await fetch(wdUrl);
+    // One retry on 429 with a Retry-After-aware delay. Wikidata typically
+    // returns 1–5s on this header; we cap the wait at 5s to avoid lockup.
+    let wdRes = await fetch(wdUrl);
+    if (wdRes.status === 429) {
+      const retryAfterRaw = wdRes.headers.get('Retry-After');
+      const waitMs = Math.min(5000, Math.max(500, Number(retryAfterRaw) * 1000 || 1500));
+      console.warn(`${tag} 429 — retrying in ${waitMs}ms`);
+      await new Promise((r) => setTimeout(r, waitMs));
+      wdRes = await fetch(wdUrl);
+    }
     if (!wdRes.ok) {
       console.warn(`${tag} wbgetentities failed: HTTP ${wdRes.status}`);
+      // Don't cache the failure — let the user retry on next click.
       return null;
     }
     const wdData = await wdRes.json();
@@ -326,7 +410,9 @@ export async function fetchArticleInLanguage(
     if (!sitelink) {
       // No Wikipedia article in this language — return label-only stub so the
       // panel can still show the translated title.
-      return label ? { title: label, wikiTitle: '', summary: '', hasArticle: false } : null;
+      const labelOnly = label ? { title: label, wikiTitle: '', summary: '', hasArticle: false as const } : null;
+      _articleTranslationCache.set(cacheKey, labelOnly);
+      return labelOnly;
     }
 
     // 2. Fetch Wikipedia summary from the target language edition
@@ -335,16 +421,20 @@ export async function fetchArticleInLanguage(
     const wpRes = await fetch(wpUrl);
     if (!wpRes.ok) {
       console.warn(`${tag} summary fetch failed: HTTP ${wpRes.status} on ${wpUrl}`);
-      return { title: label ?? sitelink.title, wikiTitle: sitelink.title, summary: '', hasArticle: false };
+      const stub = { title: label ?? sitelink.title, wikiTitle: sitelink.title, summary: '', hasArticle: false as const };
+      _articleTranslationCache.set(cacheKey, stub);
+      return stub;
     }
     const wpData = await wpRes.json();
 
-    return {
+    const article: TranslatedArticle = {
       title: wpData.title ?? label ?? sitelink.title,
       wikiTitle: sitelink.title,
       summary: wpData.extract ?? '',
       hasArticle: true,
     };
+    _articleTranslationCache.set(cacheKey, article);
+    return article;
   } catch (e) {
     console.warn(`${tag} threw:`, e);
     return null;
