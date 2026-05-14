@@ -28,6 +28,10 @@ from fastapi.middleware.gzip import GZipMiddleware
 import psycopg2
 import psycopg2.extras
 from posthog import Posthog
+try:
+    import redis as redis_lib  # type: ignore
+except ImportError:
+    redis_lib = None  # type: ignore
 
 from pipeline.polity_parents import fetch_parents
 
@@ -40,12 +44,18 @@ WRITE_SECRET = os.environ.get("WRITE_SECRET")
 POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY", "")
 POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com")
 
+# Optional Redis cache for Wikidata label translations (and other read-mostly
+# external lookups in the future). When REDIS_URL is unset, the cache helpers
+# below short-circuit so the server still works in local dev without Redis.
+REDIS_URL = os.environ.get("REDIS_URL", "")
+
 posthog_client: Optional[Posthog] = None
+redis_client = None  # type: ignore[var-annotated]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global posthog_client
+    global posthog_client, redis_client
     if POSTHOG_API_KEY:
         posthog_client = Posthog(
             project_api_key=POSTHOG_API_KEY,
@@ -53,9 +63,22 @@ async def lifespan(app: FastAPI):
             enable_exception_autocapture=True,
         )
         atexit.register(posthog_client.shutdown)
+    if REDIS_URL and redis_lib is not None:
+        try:
+            redis_client = redis_lib.Redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5)
+            redis_client.ping()  # fail fast if URL is wrong
+            print(f"[redis] connected to {REDIS_URL.split('@')[-1]}", flush=True)
+        except Exception as e:
+            print(f"[redis] connection failed, caching disabled: {e}", flush=True)
+            redis_client = None
     yield
     if posthog_client:
         posthog_client.flush()
+    if redis_client is not None:
+        try:
+            redis_client.close()
+        except Exception:
+            pass
 
 
 def _capture(event: str, properties: dict, request: Optional[Request] = None) -> None:
@@ -2830,6 +2853,150 @@ out tags;"""
         })
 
     return {"query": name, "count": len(matches), "matches": matches}
+
+
+@app.post("/api/wikidata-labels")
+async def wikidata_labels(request: Request):
+    """
+    Resolve Wikidata labels for many entities in a given language, with
+    Redis-backed caching keyed by (lang, qid). First-time fetches go to
+    Wikidata's wbgetentities API; subsequent calls (same qid + lang) are
+    served from cache. Used by the frontend to translate map labels,
+    search results, and panel titles without each client hitting
+    Wikidata's per-IP rate limits.
+
+    Body: { qids: ["Q1", "Q2", ...], lang: "de" }
+    Response: {
+        labels: { "Q1": "Eins", "Q2": "" },   # empty = confirmed no label
+        fromCache: N,
+        fromWikidata: N,
+        durationMs: N,
+    }
+    """
+    t_start = datetime.now(timezone.utc)
+    body = await request.json()
+    qids_in = body.get("qids") or []
+    lang = (body.get("lang") or "").strip()
+    if not lang or not isinstance(qids_in, list):
+        raise HTTPException(400, "qids (list) and lang required")
+    if lang == "en":
+        return {"labels": {}, "fromCache": 0, "fromWikidata": 0, "durationMs": 0}
+
+    valid = sorted({q for q in qids_in if isinstance(q, str) and re.match(r"^Q\d+$", q)})
+    if not valid:
+        return {"labels": {}, "fromCache": 0, "fromWikidata": 0, "durationMs": 0}
+    if len(valid) > 50000:
+        raise HTTPException(400, "max 50000 qids per request")
+
+    labels: dict = {}
+    need: list = []
+    n_from_cache = 0
+
+    # 1. Try cache. Empty-string sentinel ⇒ confirmed no label, still a hit.
+    if redis_client is not None:
+        keys = [f"wdlabel:{lang}:{q}" for q in valid]
+        try:
+            values = redis_client.mget(keys)
+        except Exception as e:
+            print(f"[wd-labels] redis mget failed: {e}", flush=True)
+            values = [None] * len(keys)
+        for q, v in zip(valid, values):
+            if v is not None:
+                if v:
+                    labels[q] = v
+                n_from_cache += 1
+            else:
+                need.append(q)
+    else:
+        need = list(valid)
+
+    # 2. Fetch misses from Wikidata in batches. Backend doesn't have per-IP
+    # rate limits in the same way browsers do (no preflight, no CORS), but
+    # Wikidata still throttles aggressive clients — keep concurrency modest.
+    n_from_wd = 0
+    n_rate_limited = 0
+    BATCH = 50
+    PARALLEL = 3
+    INTER_ROUND_SLEEP_S = 0.2
+
+    async def fetch_batch(batch: list) -> dict:
+        nonlocal n_rate_limited
+        params = urllib.parse.urlencode({
+            "action": "wbgetentities",
+            "ids": "|".join(batch),
+            "props": "labels",
+            "languages": lang,
+            "format": "json",
+        })
+        url = f"https://www.wikidata.org/w/api.php?{params}"
+        def _do_fetch():
+            req = urllib.request.Request(url, headers={"User-Agent": APP_USER_AGENT})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read())
+        loop = asyncio.get_event_loop()
+        try:
+            data = await loop.run_in_executor(None, _do_fetch)
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                n_rate_limited += 1
+                ra = e.headers.get("Retry-After") if hasattr(e, "headers") else None
+                wait = min(3.0, max(0.5, float(ra) if ra else 1.0))
+                await asyncio.sleep(wait)
+                try:
+                    data = await loop.run_in_executor(None, _do_fetch)
+                except Exception:
+                    return {q: "" for q in batch}
+            else:
+                return {q: "" for q in batch}
+        except Exception:
+            return {q: "" for q in batch}
+
+        out = {}
+        for qid in batch:
+            entity = (data.get("entities") or {}).get(qid) or {}
+            label = ((entity.get("labels") or {}).get(lang) or {}).get("value") or ""
+            out[qid] = label
+        return out
+
+    batches = [need[i:i + BATCH] for i in range(0, len(need), BATCH)]
+    redis_writes = {}
+    for i in range(0, len(batches), PARALLEL):
+        results = await asyncio.gather(*[fetch_batch(b) for b in batches[i:i + PARALLEL]])
+        for res in results:
+            for qid, label in res.items():
+                n_from_wd += 1
+                if label:
+                    labels[qid] = label
+                redis_writes[f"wdlabel:{lang}:{qid}"] = label
+        if i + PARALLEL < len(batches):
+            await asyncio.sleep(INTER_ROUND_SLEEP_S)
+
+    # 3. Cache the new labels (30-day TTL — labels evolve slowly).
+    if redis_client is not None and redis_writes:
+        try:
+            pipe = redis_client.pipeline()
+            for k, v in redis_writes.items():
+                pipe.set(k, v, ex=60 * 60 * 24 * 30)
+            pipe.execute()
+        except Exception as e:
+            print(f"[wd-labels] redis pipeline write failed: {e}", flush=True)
+
+    duration_ms = int((datetime.now(timezone.utc) - t_start).total_seconds() * 1000)
+    _capture("wikidata_labels_fetched", {
+        "lang": lang,
+        "qid_count": len(valid),
+        "from_cache": n_from_cache,
+        "from_wikidata": n_from_wd,
+        "rate_limited": n_rate_limited,
+        "duration_ms": duration_ms,
+    }, request)
+
+    return {
+        "labels": labels,
+        "fromCache": n_from_cache,
+        "fromWikidata": n_from_wd,
+        "durationMs": duration_ms,
+    }
 
 
 @app.post("/api/oauth/refresh")

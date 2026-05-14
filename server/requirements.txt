@@ -3,3 +3,4 @@ uvicorn[standard]==0.32.1
 psycopg2-binary==2.9.10
 anthropic>=0.40.0
 posthog>=3.0.0
+redis>=5.0.0

@@ -270,6 +270,8 @@ function _persistToLocalStorage(lang: string): void {
   } catch { /* quota exceeded or unavailable — ignore */ }
 }
 
+const I18N_API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
+
 export async function fetchEntityTranslations(
   qids: string[],
   lang: string,
@@ -282,91 +284,67 @@ export async function fetchEntityTranslations(
   const valid = qids.filter((q) => /^Q\d+$/.test(q));
   const result: Record<string, string> = {};
 
-  // Pull anything already cached, fetch only the rest.
-  let nFromCache = 0;
+  // 1. Per-client cache (in-memory + localStorage hydrated above). Anything
+  //    we already know — including confirmed-no-label sentinels — is served
+  //    from here without a network call.
+  let nFromLocal = 0;
   const need: string[] = [];
   for (const q of valid) {
     const cached = _batchTranslationCache.get(`${q}|${lang}`);
     if (cached !== undefined) {
-      if (cached) result[q] = cached;     // empty string ⇒ confirmed-no-label, don't refetch
-      nFromCache++;
+      if (cached) result[q] = cached;     // '' ⇒ confirmed-no-label, valid hit
+      nFromLocal++;
     } else {
       need.push(q);
     }
   }
-  const tHydrate = performance.now() - t0;
   if (need.length === 0) {
-    console.log(`[i18n batch ${lang}] ${nFromCache}/${valid.length} from cache (${tHydrate.toFixed(0)}ms), no fetch needed`);
+    const ms = performance.now() - t0;
+    console.log(`[i18n batch ${lang}] ${nFromLocal}/${valid.length} from local cache (${ms.toFixed(0)}ms), no network`);
     return result;
   }
 
-  const BATCH = 50;
-  const batches: string[][] = [];
-  for (let i = 0; i < need.length; i += BATCH) batches.push(need.slice(i, i + BATCH));
-
-  // Pacing notes:
-  // - Wikidata's anonymous rate limit is roughly 200 req/min. Sustained
-  //   client-side throughput maxes out around ~3 req/s before 429s kick in.
-  // - We start at PARALLEL=3 + 300ms inter-round delay (~3 req/s avg). If we
-  //   start seeing 429s, the adaptive throttle below bumps the round delay
-  //   for the rest of the run so we don't keep hammering.
-  const PARALLEL = 3;
-  let roundDelayMs = 300;
-  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-  let nRateLimited = 0;
-  let nFetched = 0;
-  console.log(`[i18n batch ${lang}] starting fetch: ${need.length} qids in ${batches.length} batches of ${BATCH}, parallel=${PARALLEL}`);
-
-  for (let i = 0; i < batches.length; i += PARALLEL) {
-    // Track 429s for this round so we can adapt the throttle below.
-    let roundRateLimitedHits = 0;
-    await Promise.all(
-      batches.slice(i, i + PARALLEL).map(async (batch) => {
-        try {
-          const params = new URLSearchParams({
-            action: 'wbgetentities',
-            ids: batch.join('|'),
-            props: 'labels',
-            languages: lang,
-            format: 'json',
-            origin: '*',
-          });
-          let res = await fetch(`https://www.wikidata.org/w/api.php?${params}`);
-          // Retry once on 429 with the server's Retry-After (capped at 3s).
-          if (res.status === 429) {
-            nRateLimited++;
-            roundRateLimitedHits++;
-            const retryAfter = res.headers.get('Retry-After');
-            const waitMs = Math.min(3000, Math.max(500, Number(retryAfter) * 1000 || 1000));
-            await sleep(waitMs);
-            res = await fetch(`https://www.wikidata.org/w/api.php?${params}`);
-          }
-          if (!res.ok) return;
-          const data = await res.json();
-          for (const [qid, entity] of Object.entries(data.entities ?? {})) {
-            const label = (entity as Record<string, unknown> & { labels?: Record<string, { value: string }> }).labels?.[lang]?.value;
-            // Cache empty string as "no label in this lang" so we never refetch.
-            _batchTranslationCache.set(`${qid}|${lang}`, label ?? '');
-            if (label) result[qid] = label;
-            nFetched++;
-          }
-        } catch { /* skip failed batch */ }
-      }),
-    );
-    // Adaptive throttle: any 429 this round → permanently bump the delay so
-    // the rest of the run is slower. Caps at 2s so we don't grind to a halt.
-    if (roundRateLimitedHits > 0 && roundDelayMs < 2000) {
-      roundDelayMs = Math.min(2000, roundDelayMs + 500);
-      console.warn(`[i18n batch ${lang}] hit 429 — slowing inter-round delay to ${roundDelayMs}ms`);
+  // 2. Server-side proxy with shared Redis cache. The backend keeps a global
+  //    label cache so the first user to ask for a (lang, qid) pair pays the
+  //    Wikidata cost and every other user gets it from us. We send up to
+  //    ~5000 qids per call to keep request size reasonable.
+  const CHUNK = 5000;
+  let nFromServer = 0;
+  let nFromServerCache = 0;
+  let nFromServerWikidata = 0;
+  for (let i = 0; i < need.length; i += CHUNK) {
+    const chunk = need.slice(i, i + CHUNK);
+    try {
+      const res = await fetch(`${I18N_API_BASE}/wikidata-labels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qids: chunk, lang }),
+      });
+      if (!res.ok) {
+        console.warn(`[i18n batch ${lang}] server returned HTTP ${res.status} — skipping this chunk`);
+        continue;
+      }
+      const data = await res.json() as { labels: Record<string, string>; fromCache?: number; fromWikidata?: number };
+      // The endpoint omits empty strings from `labels`, so any qid we asked
+      // about that isn't in the response is a "confirmed no label" — cache it
+      // as an empty string locally so we never re-request it for this lang.
+      for (const q of chunk) {
+        const label = data.labels?.[q] ?? '';
+        _batchTranslationCache.set(`${q}|${lang}`, label);
+        if (label) result[q] = label;
+        nFromServer++;
+      }
+      nFromServerCache += data.fromCache ?? 0;
+      nFromServerWikidata += data.fromWikidata ?? 0;
+    } catch (e) {
+      console.warn(`[i18n batch ${lang}] server fetch threw:`, e);
     }
-    if (i + PARALLEL < batches.length) await sleep(roundDelayMs);
   }
-  // Persist the whole accumulated cache for this language back to localStorage
-  // so subsequent reloads pick polity labels up instantly.
+
+  // 3. Persist what we got back to localStorage so reloads are instant.
   _persistToLocalStorage(lang);
   const totalMs = performance.now() - t0;
-  console.log(`[i18n batch ${lang}] done in ${(totalMs / 1000).toFixed(1)}s: ${nFromCache} from cache + ${nFetched} fetched (${nRateLimited} retries on 429)`);
+  console.log(`[i18n batch ${lang}] done in ${(totalMs / 1000).toFixed(1)}s: ${nFromLocal} local + ${nFromServer} via server (${nFromServerCache} server-cache + ${nFromServerWikidata} fresh Wikidata)`);
   return result;
 }
 
