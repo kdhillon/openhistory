@@ -81,8 +81,9 @@ export function PendingChangesPanel({ onPublishSuccess, isMobile = false }: Prop
 
   const wrap: React.CSSProperties = {
     position: 'fixed',
-    bottom: (isMobile ? 90 : 64) + 8,
-    left: 8,
+    top: isMobile ? 56 : 78,
+    left: '50%',
+    transform: 'translateX(-50%)',
     zIndex: 110,
     background: '#1e2433',
     color: '#e8eaf0',
@@ -106,7 +107,7 @@ export function PendingChangesPanel({ onPublishSuccess, isMobile = false }: Prop
           title="Review and publish your queued OHM tag edits"
         >
           <span style={{
-            background: '#2a5a3a', color: '#e8eaf0', borderRadius: 10,
+            background: '#4caf50', color: '#0f1a14', borderRadius: 10,
             padding: '1px 8px', fontSize: 11, fontWeight: 700,
           }}>{edits.length}</span>
           Pending OHM edits ▴
@@ -174,10 +175,10 @@ export function PendingChangesPanel({ onPublishSuccess, isMobile = false }: Prop
           onClick={handlePublish}
           disabled={publishing}
           style={{
-            background: publishing ? '#223' : '#2a5a3a',
-            color: publishing ? '#556' : '#e8eaf0',
+            background: publishing ? '#223' : '#4caf50',
+            color: publishing ? '#556' : '#0f1a14',
             border: 'none', borderRadius: 4, padding: '6px 14px',
-            fontSize: 12, fontWeight: 600, cursor: publishing ? 'default' : 'pointer',
+            fontSize: 12, fontWeight: 700, cursor: publishing ? 'default' : 'pointer',
             fontFamily: 'inherit',
           }}
           title={signedIn
