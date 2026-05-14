@@ -2354,6 +2354,230 @@ async def ohm_update_element(request: Request):
     }
 
 
+@app.post("/api/ohm/update-elements")
+async def ohm_update_elements(request: Request):
+    """
+    Bundled version of /api/ohm/update-element: applies multiple tag edits
+    in a single OSM changeset so OHM's changeset list doesn't get spammed
+    with one-element-per-edit changesets.
+
+    Body: {
+        "accessToken": "<OHM OAuth2 token>",
+        "comment": "...",                     // changeset comment (one for all)
+        "edits": [
+            {"osmType": "relation"|"node"|"way", "osmId": N,
+             "setTags": {"wikidata": "Q…", "wikipedia": "en:…"}},
+            ...
+        ]
+    }
+
+    Pipeline (all under /api/0.6/changeset/* — what OHM's WAF allows):
+      1. Batched Overpass fetch for every element's current version/tags/geometry
+      2. PUT  /api/0.6/changeset/create
+      3. POST /api/0.6/changeset/{id}/upload   ← one <osmChange><modify>…N…</modify>
+      4. PUT  /api/0.6/changeset/{id}/close
+    """
+    import xml.etree.ElementTree as ET
+
+    body = await request.json()
+    token = body.get("accessToken")
+    comment = body.get("comment") or "Wikidata/Wikipedia tagging via OpenHistory"
+    edits_in = body.get("edits") or []
+
+    if not token:
+        raise HTTPException(400, "accessToken required")
+    if not isinstance(edits_in, list) or not edits_in:
+        raise HTTPException(400, "edits must be a non-empty array")
+    if len(edits_in) > 100:
+        raise HTTPException(400, "max 100 edits per changeset (got {})".format(len(edits_in)))
+
+    # Normalize + validate input. Allow only the three OSM element types and
+    # require setTags to be a non-empty dict of str→str on every entry.
+    normalized: list[dict] = []
+    for i, e in enumerate(edits_in):
+        ot, oi, tags = e.get("osmType"), e.get("osmId"), e.get("setTags")
+        if ot not in ("relation", "node", "way"):
+            raise HTTPException(400, f"edits[{i}].osmType must be relation|node|way")
+        if not oi:
+            raise HTTPException(400, f"edits[{i}].osmId required")
+        if not isinstance(tags, dict) or not tags:
+            raise HTTPException(400, f"edits[{i}].setTags must be a non-empty object")
+        normalized.append({"osmType": ot, "osmId": int(oi), "setTags": tags})
+
+    base_headers = {"Authorization": f"Bearer {token}", "User-Agent": APP_USER_AGENT}
+    write_headers = {**base_headers, "Content-Type": "text/xml; charset=utf-8", "Accept": "text/plain, */*"}
+    loop = asyncio.get_event_loop()
+
+    # Step 1: one Overpass query for every element across all three types so
+    # we have current version/tags/members/nodes/lat-lon to send back.
+    rel_ids = sorted({e["osmId"] for e in normalized if e["osmType"] == "relation"})
+    way_ids = sorted({e["osmId"] for e in normalized if e["osmType"] == "way"})
+    node_ids = sorted({e["osmId"] for e in normalized if e["osmType"] == "node"})
+    parts = []
+    if rel_ids:  parts.append(f"relation(id:{','.join(map(str, rel_ids))});")
+    if way_ids:  parts.append(f"way(id:{','.join(map(str, way_ids))});")
+    if node_ids: parts.append(f"node(id:{','.join(map(str, node_ids))});")
+    overpass_query = f"[out:json][timeout:30];({''.join(parts)});out meta;"
+
+    def _fetch_elements():
+        data = urllib.parse.urlencode({"data": overpass_query}).encode()
+        req = urllib.request.Request(
+            "https://overpass-api.openhistoricalmap.org/api/interpreter",
+            data=data,
+            headers={"User-Agent": base_headers["User-Agent"]},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return json.loads(resp.read())
+
+    try:
+        op_data = await loop.run_in_executor(None, _fetch_elements)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode()
+        print(f"[ohm] batch overpass failed: {e.code} {detail}", flush=True)
+        raise HTTPException(e.code, f"Failed to read elements: {detail}")
+
+    # Index Overpass response by (type, id) for fast per-edit lookup.
+    by_key: dict[tuple[str, int], dict] = {}
+    for el in (op_data.get("elements") or []):
+        by_key[(el.get("type", ""), int(el.get("id", 0)))] = el
+
+    missing = [(e["osmType"], e["osmId"]) for e in normalized if (e["osmType"], e["osmId"]) not in by_key]
+    if missing:
+        raise HTTPException(404, f"Elements not found in OHM: {missing[:5]}")
+
+    # Step 2: create one changeset for the whole batch.
+    changeset_xml = (
+        '<osm><changeset>'
+        f'<tag k="comment" v="{_xml_escape(comment)}"/>'
+        '<tag k="created_by" v="OpenHistory/1.0"/>'
+        '</changeset></osm>'
+    )
+
+    def _create_changeset():
+        req = urllib.request.Request(
+            f"{OHM_API_BASE}/changeset/create",
+            data=changeset_xml.encode(),
+            headers=write_headers,
+            method="PUT",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.read().decode().strip()
+
+    try:
+        changeset_id = await loop.run_in_executor(None, _create_changeset)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode()
+        print(f"[ohm] changeset create (batch) failed: {e.code} {detail}", flush=True)
+        raise HTTPException(e.code, f"Failed to create changeset: {detail}")
+
+    # Step 3: build a single <osmChange><modify>…N elements…</modify></osmChange>
+    # and POST it to the changeset upload endpoint.
+    osm_change = ET.Element("osmChange", {"version": "0.6", "generator": "OpenHistory/1.0"})
+    modify = ET.SubElement(osm_change, "modify")
+    for edit in normalized:
+        el = by_key[(edit["osmType"], edit["osmId"])]
+        version = el.get("version")
+        if version is None:
+            raise HTTPException(502, f"Overpass missing version for {edit['osmType']}/{edit['osmId']}")
+        element = ET.SubElement(modify, edit["osmType"], {
+            "id": str(edit["osmId"]),
+            "version": str(version),
+            "changeset": str(changeset_id),
+        })
+        if edit["osmType"] == "node":
+            if el.get("lat") is not None: element.set("lat", str(el["lat"]))
+            if el.get("lon") is not None: element.set("lon", str(el["lon"]))
+        elif edit["osmType"] == "way":
+            for nd_id in (el.get("nodes") or []):
+                ET.SubElement(element, "nd", {"ref": str(nd_id)})
+        elif edit["osmType"] == "relation":
+            for m in (el.get("members") or []):
+                ET.SubElement(element, "member", {
+                    "type": m.get("type", ""),
+                    "ref": str(m.get("ref", "")),
+                    "role": m.get("role", "") or "",
+                })
+        merged_tags = dict(el.get("tags") or {})
+        for k, v in edit["setTags"].items():
+            if isinstance(k, str) and isinstance(v, str):
+                merged_tags[k] = v
+        for k, v in merged_tags.items():
+            ET.SubElement(element, "tag", {"k": k, "v": v})
+
+    diff_xml = ET.tostring(osm_change, encoding="utf-8")
+
+    def _upload_diff():
+        req = urllib.request.Request(
+            f"{OHM_API_BASE}/changeset/{changeset_id}/upload",
+            data=diff_xml,
+            headers=write_headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.read().decode()
+
+    try:
+        diff_result_xml = await loop.run_in_executor(None, _upload_diff)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode()
+        print(f"[ohm] batch upload failed: {e.code} {detail}", flush=True)
+        try:
+            await loop.run_in_executor(None, lambda: urllib.request.urlopen(
+                urllib.request.Request(
+                    f"{OHM_API_BASE}/changeset/{changeset_id}/close",
+                    headers=write_headers, method="PUT"
+                ), timeout=10))
+        except Exception:
+            pass
+        raise HTTPException(e.code, f"Failed to upload diff for batch: {detail}")
+
+    # Step 4: close the changeset.
+    def _close_changeset():
+        req = urllib.request.Request(
+            f"{OHM_API_BASE}/changeset/{changeset_id}/close",
+            headers=write_headers,
+            method="PUT",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.status
+
+    try:
+        await loop.run_in_executor(None, _close_changeset)
+    except urllib.error.HTTPError:
+        pass  # auto-closes after 1h
+
+    # Parse <diffResult> for per-edit new_version values.
+    results = []
+    try:
+        diff_root = ET.fromstring(diff_result_xml)
+        by_old_id = {(c.tag, c.get("old_id")): c for c in diff_root}
+        for edit in normalized:
+            child = by_old_id.get((edit["osmType"], str(edit["osmId"])))
+            new_version = child.get("new_version") if child is not None else None
+            results.append({
+                "osmType": edit["osmType"],
+                "osmId": edit["osmId"],
+                "newVersion": int(new_version) if new_version and new_version.isdigit() else None,
+            })
+    except ET.ParseError:
+        results = [{"osmType": e["osmType"], "osmId": e["osmId"], "newVersion": None} for e in normalized]
+
+    # Bust the qid-map cache so the next request reflects the new tags.
+    _OHM_QID_CACHE["fetched_at"] = None
+
+    _capture("ohm_elements_batch_updated", {
+        "count": len(normalized),
+        "types": sorted({e["osmType"] for e in normalized}),
+    }, request)
+
+    return {
+        "changesetId": int(changeset_id),
+        "count": len(results),
+        "results": results,
+    }
+
+
 # In-memory cache for the OHM relation → Wikidata QID mapping.
 # A single Overpass query covers every admin boundary in OHM that carries a wikidata tag.
 # Cached for OHM_QID_CACHE_TTL seconds; clients may force a refresh with ?force=true.

@@ -25,6 +25,8 @@ import { useTimeline, encodeDate, decodeDate, STEP_YEAR } from './hooks/useTimel
 import { useEventSource } from './hooks/useEventSource';
 import { useTerritoriesSource } from './hooks/useTerritoriesSource';
 import { useOhmQidMap } from './hooks/useOhmQidMap';
+import { usePendingOhmEdits } from './lib/pendingOhmEdits';
+import { PendingChangesPanel } from './components/PendingChangesPanel';
 import type { FeatureProperties, Category } from './types';
 import type { StackInfo, ZoomRequest } from './components/MapView';
 import { EVENT_CATEGORIES, POLITY_CATEGORIES } from './theme/categories';
@@ -112,7 +114,18 @@ export default function App() {
     useTerritoriesSource({ currentYear: debouncedYear, stepSize: timeline.stepSize, source: 'hb' });
 
   // OHM osm_id → wikidata QID lookup (server-cached, 5-min TTL). Joins tile features to polities.
-  const { map: ohmQidMap, isLoading: ohmQidMapLoading } = useOhmQidMap();
+  const { map: ohmQidMapRaw, refresh: refreshOhmQidMap, isLoading: ohmQidMapLoading } = useOhmQidMap();
+
+  // Pending OHM edits (queued in localStorage). Merge their osm_id → QID
+  // pairs into the effective qidMap so polygons recolor immediately on queue,
+  // before the user publishes and OHM's tile cache catches up.
+  const pendingEdits = usePendingOhmEdits();
+  const ohmQidMap = useMemo(() => {
+    if (pendingEdits.length === 0) return ohmQidMapRaw;
+    const merged: Record<number, string> = { ...ohmQidMapRaw };
+    for (const e of pendingEdits) merged[e.osmId] = e.polityQid;
+    return merged;
+  }, [ohmQidMapRaw, pendingEdits]);
 
   // Map of id → patched feature for manual edits (applied on top of base features)
   const [overrideMap, setOverrideMap] = useState<Map<string, GeoJSON.Feature>>(new Map());
@@ -748,6 +761,10 @@ export default function App() {
           isMobile={isMobile}
           onSelectPolity={handleSelectSearchPolity}
           onSelectEvent={handleSelectSearchEvent}
+        />
+        <PendingChangesPanel
+          isMobile={isMobile}
+          onPublishSuccess={refreshOhmQidMap}
         />
         {(() => {
           const items: string[] = [];

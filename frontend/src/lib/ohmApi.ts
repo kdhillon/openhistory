@@ -92,6 +92,45 @@ export async function updateOhmElement(params: UpdateElementParams): Promise<Upd
   return res.json();
 }
 
+export interface UpdateElementsParams {
+  token: string;
+  comment?: string;
+  edits: Array<{
+    osmType: 'relation' | 'node' | 'way';
+    osmId: number;
+    setTags: Record<string, string>;
+  }>;
+}
+
+export interface UpdateElementsResult {
+  changesetId: number;
+  count: number;
+  results: Array<{
+    osmType: 'relation' | 'node' | 'way';
+    osmId: number;
+    newVersion: number | null;
+  }>;
+}
+
+/**
+ * Bundle multiple OHM tag edits into a single OSM changeset. Used by the
+ * pending-changes panel to publish all queued edits at once, avoiding
+ * changeset-list spam on OHM.
+ */
+export async function updateOhmElements(params: UpdateElementsParams): Promise<UpdateElementsResult> {
+  const { token, comment, edits } = params;
+  const res = await fetch(`${API_BASE}/ohm/update-elements`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accessToken: token, comment, edits }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OHM batch update failed (${res.status}): ${text.slice(0, 300)}`);
+  }
+  return res.json();
+}
+
 /**
  * Create a place=country node on OHM via our backend proxy.
  * Backend uses the user's OAuth Bearer token to authenticate to OHM.

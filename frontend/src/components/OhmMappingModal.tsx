@@ -4,7 +4,8 @@ import { importPolityFromWikidata } from '../lib/api';
 import { searchEntities } from '../lib/wikidataApi';
 import type { EntityResult } from '../lib/wikidataApi';
 import { stripPolityTypeWords } from '../lib/polityNames';
-import { getOhmToken, updateOhmElement } from '../lib/ohmApi';
+import { getOhmToken } from '../lib/ohmApi';
+import { addPendingEdit } from '../lib/pendingOhmEdits';
 
 const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
@@ -41,7 +42,7 @@ function btnStyle(bg: string, disabled = false): React.CSSProperties {
 export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, osmType, osmId, polities, onClose, onPolityImported }: Props) {
   const [query, setQuery]               = useState(() => stripPolityTypeWords(ohmName));
   const [selectedId, setSelectedId]     = useState<string | null>(null);
-  const [status, setStatus]             = useState<'idle' | 'updating' | 'updated' | 'opened' | 'error'>('idle');
+  const [status, setStatus]             = useState<'idle' | 'queued' | 'opened' | 'error'>('idle');
   const [errorMsg, setErrorMsg]         = useState<string | null>(null);
   const [ohmToken, setOhmToken] = useState<string | null>(() => getOhmToken());
 
@@ -87,10 +88,10 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
     return () => { cancelled = true; };
   }, [query, wdOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Push the polity's wikidata (and wikipedia) tag onto the OHM element via our
-  // backend, which proxies the OSM API write under the user's OAuth token.
-  // OHM allowlists requests with `User-Agent: openhistory/*` past their CF rule.
-  async function handleUpdateOhm(polity?: FeatureProperties) {
+  // Queue the polity's wikidata (and wikipedia) tag for later publish. The
+  // user reviews all queued edits in the pending-changes panel and publishes
+  // them as a single OSM changeset — keeps OHM's changeset list tidy.
+  function handleQueueEdit(polity?: FeatureProperties) {
     const p = polity ?? polities.find((x) => x.id === selectedId);
     if (!p) return;
     const qid = p.wikidataQid;
@@ -99,29 +100,21 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
       setErrorMsg(`${p.title} has no Wikidata QID in our database — pick a different polity or import one from Wikipedia below.`);
       return;
     }
-    if (!ohmToken) {
-      handleSignInToOhm();
-      return;
-    }
-    setStatus('updating');
     setErrorMsg(null);
     const tags: Record<string, string> = { wikidata: qid };
     if (p.wikipediaTitle) {
       tags.wikipedia = `en:${p.wikipediaTitle}`;
     }
-    try {
-      await updateOhmElement({
-        token: ohmToken,
-        osmType,
-        osmId,
-        setTags: tags,
-        comment: `Link to ${p.title} (${qid}) via OpenHistory`,
-      });
-      setStatus('updated');
-    } catch (e) {
-      setStatus('error');
-      setErrorMsg((e as Error).message);
-    }
+    addPendingEdit({
+      osmType,
+      osmId,
+      setTags: tags,
+      displayName: p.title,
+      polityQid: qid,
+      comment: `Link to ${p.title} (${qid}) via OpenHistory`,
+      addedAt: Date.now(),
+    });
+    setStatus('queued');
   }
 
   // Fallback path: copy the polity's wikidata QID to the clipboard and deep-link
@@ -221,7 +214,7 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
     boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
     display: 'flex', flexDirection: 'column', gap: 14,
     position: 'relative',
-    ...((status === 'updated' || status === 'opened')
+    ...((status === 'queued' || status === 'opened')
       ? { height: 'auto' }
       : { height: 'calc(100vh - 120px)', maxHeight: 780 }),
     overflow: 'hidden',
@@ -257,15 +250,15 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
           {ohmWikidataQid ? (
             <div style={{ fontSize: 11, color: '#778', marginTop: 6 }}>OHM already has <code>{ohmWikidataQid}</code> — confirm it matches the polity you want, or pick a replacement below.</div>
           ) : (
-            <div style={{ fontSize: 11, color: '#778', marginTop: 6 }}>This element has no Wikidata tag in OHM. Pick the matching polity; pressing the button will add <code>wikidata=Q…</code> (and <code>wikipedia=…</code> when available) directly on OHM.</div>
+            <div style={{ fontSize: 11, color: '#778', marginTop: 6 }}>This element has no Wikidata tag in OHM. Pick the matching polity to queue a <code>wikidata=Q…</code> (and <code>wikipedia=…</code>) tag edit. Pending edits get bundled into a single OHM changeset when you publish.</div>
           )}
         </div>
 
-        {status === 'updated' ? (
+        {status === 'queued' ? (
           <div style={{ textAlign: 'center', padding: '14px 4px' }}>
-            <div style={{ color: '#66bb6a', fontSize: 15, marginBottom: 8 }}>✓ OHM updated</div>
+            <div style={{ color: '#66bb6a', fontSize: 15, marginBottom: 8 }}>✓ Added to pending changes</div>
             <div style={{ color: '#8899bb', fontSize: 12, lineHeight: 1.5, marginBottom: 12 }}>
-              Tag pushed to <code>{osmType}/{osmId}</code>. The polygon will recolor once OHM's tile cache refreshes (usually within a few minutes).
+              Queued tag edit on <code>{osmType}/{osmId}</code>. Review and publish all your pending edits as a single OHM changeset from the badge at the bottom of the screen.
             </div>
             <button onClick={onClose} style={btnStyle('#3a4560')}>Close</button>
           </div>
@@ -304,7 +297,7 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
                   <div
                     key={p.id}
                     onClick={() => setSelectedId(p.id)}
-                    onDoubleClick={() => { setSelectedId(p.id); if (ohmToken) handleUpdateOhm(p); else handleSignInToOhm(); }}
+                    onDoubleClick={() => { setSelectedId(p.id); handleQueueEdit(p); }}
                     style={{
                       padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #1e2a3e',
                       background: p.id === selectedId ? '#2a3a5a' : 'transparent',
@@ -401,38 +394,29 @@ export function OhmMappingModal({ ohmName, ohmWikidataQid, yearStart, yearEnd, o
             )}
 
             {/* Footer buttons. Two write paths:
-                  (a) "Update OHM →" — direct OSM API write via our backend (OAuth required).
-                  (b) "Open in editor" — deep-link to OHM's iD editor with the element
-                      pre-selected and the QID copied to clipboard, for users who don't
-                      want to sign in. */}
+                  (a) "Add to pending" — queues the edit locally; user reviews +
+                      publishes the full batch as a single OSM changeset from the
+                      pending-changes panel (no OAuth needed yet).
+                  (b) "Open in editor" — deep-link to OHM's iD editor for users
+                      who'd rather edit on OHM directly. */}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
               <button onClick={onClose} style={btnStyle('#3a4560')}>Cancel</button>
               <button
                 onClick={() => handleOpenInOhm()}
                 disabled={!selectedId}
                 style={btnStyle('#2d3a55', !selectedId)}
-                title="Copy QID and open OHM's iD editor on this element (always works)"
+                title="Copy QID and open OHM's iD editor on this element"
               >
                 Open in editor
               </button>
-              {ohmToken ? (
-                <button
-                  onClick={() => handleUpdateOhm()}
-                  disabled={!selectedId || status === 'updating'}
-                  style={btnStyle('#2a5a3a', !selectedId || status === 'updating')}
-                  title="Push wikidata/wikipedia tags directly via the OSM API"
-                >
-                  {status === 'updating' ? 'Updating…' : 'Update OHM →'}
-                </button>
-              ) : (
-                <button
-                  onClick={handleSignInToOhm}
-                  style={btnStyle('#2a5a3a')}
-                  title="Sign in to OpenHistoricalMap to publish your tag edit directly"
-                >
-                  Sign in to OHM →
-                </button>
-              )}
+              <button
+                onClick={() => handleQueueEdit()}
+                disabled={!selectedId}
+                style={btnStyle('#2a5a3a', !selectedId)}
+                title="Queue this tag edit. Review and publish all pending edits together as a single OHM changeset."
+              >
+                Add to pending →
+              </button>
             </div>
           </>
         )}
