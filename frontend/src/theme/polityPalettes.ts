@@ -1,7 +1,7 @@
 import { CATEGORY_COLORS } from './categories';
 import type { PolityType } from '../types';
 
-export type PaletteId = 'polity-type' | 'muted-classic' | 'saturated-retro' | 'retro' | 'earth-tones';
+export type PaletteId = 'polity-type' | 'muted-classic' | 'saturated-retro' | 'retro' | 'earth-tones' | 'none';
 
 export const POLITY_PALETTES: Record<PaletteId, { label: string; colors: string[]; fillOpacity: number }> = {
   // Pastels and earth tones are quieter — they read better at higher opacity.
@@ -11,6 +11,10 @@ export const POLITY_PALETTES: Record<PaletteId, { label: string; colors: string[
   'saturated-retro': { label: 'Saturated retro',          colors: ['#C9536E', '#ED7B2F', '#D9A92E', '#2A9D8F', '#2E86C1', '#9B5DE5', '#5BB377'],                       fillOpacity: 0.4 },
   'retro':           { label: 'Retro',                    colors: ['#C9536E', '#ED7B2F', '#D9A92E', '#2A9D8F', '#2E86C1', '#9B5DE5', '#5BB377'],                       fillOpacity: 0.25 },
   'earth-tones':     { label: 'Earth tones',              colors: ['#C97B63', '#D9A05B', '#B4A269', '#8FA6A0', '#7C95B1', '#B58FA8', '#7B8B5C'],                       fillOpacity: 0.6 },
+  // Blank fill — keeps borders + labels but renders no polygon coloring.
+  // fillOpacity: 0 turns the baked rgba alpha to zero, so the ohm-fills layer
+  // is effectively invisible while ohm-borders / ohm-polygon-borders stay.
+  'none':            { label: 'None (borders only)',      colors: [],                                                                                                  fillOpacity: 0 },
 };
 
 export const DEFAULT_PALETTE_ID: PaletteId = 'saturated-retro';
