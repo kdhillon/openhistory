@@ -291,36 +291,50 @@ export async function fetchArticleInLanguage(
 ): Promise<TranslatedArticle | null> {
   if (lang === 'en') return null; // caller handles English natively
 
+  const tag = `[i18n ${wikidataQid}/${lang}]`;
   try {
-    // 1. Fetch Wikidata label + sitelink for this language
+    // 1. Fetch Wikidata label + sitelink for this language. `sitefilter` is the
+    // correct Wikidata API param name — `sitelinkfilter` is silently ignored
+    // (Wikidata returns a warning and sends ALL sitelinks, which still works
+    // but bloats the response).
     const params = new URLSearchParams({
       action: 'wbgetentities',
       ids: wikidataQid,
       props: 'labels|sitelinks',
       languages: lang,
-      sitelinkfilter: `${lang}wiki`,
+      sitefilter: `${lang}wiki`,
       format: 'json',
       origin: '*',
     });
-    const wdRes = await fetch(`https://www.wikidata.org/w/api.php?${params}`);
-    if (!wdRes.ok) return null;
+    const wdUrl = `https://www.wikidata.org/w/api.php?${params}`;
+    const wdRes = await fetch(wdUrl);
+    if (!wdRes.ok) {
+      console.warn(`${tag} wbgetentities failed: HTTP ${wdRes.status}`);
+      return null;
+    }
     const wdData = await wdRes.json();
-
     const entity = wdData.entities?.[wikidataQid];
-    if (!entity) return null;
+    if (!entity) {
+      console.warn(`${tag} wbgetentities: no entity in response`, wdData);
+      return null;
+    }
 
     const label = entity.labels?.[lang]?.value as string | undefined;
     const sitelink = entity.sitelinks?.[`${lang}wiki`] as { title: string } | undefined;
+    console.log(`${tag} wbgetentities ok — label=${label ?? '∅'} sitelink=${sitelink?.title ?? '∅'}`);
 
     if (!sitelink) {
-      // No Wikipedia article in this language — return label only if available
+      // No Wikipedia article in this language — return label-only stub so the
+      // panel can still show the translated title.
       return label ? { title: label, wikiTitle: '', summary: '', hasArticle: false } : null;
     }
 
     // 2. Fetch Wikipedia summary from the target language edition
     const title = encodeURIComponent(sitelink.title.replace(/ /g, '_'));
-    const wpRes = await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${title}`);
+    const wpUrl = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${title}`;
+    const wpRes = await fetch(wpUrl);
     if (!wpRes.ok) {
+      console.warn(`${tag} summary fetch failed: HTTP ${wpRes.status} on ${wpUrl}`);
       return { title: label ?? sitelink.title, wikiTitle: sitelink.title, summary: '', hasArticle: false };
     }
     const wpData = await wpRes.json();
@@ -331,7 +345,8 @@ export async function fetchArticleInLanguage(
       summary: wpData.extract ?? '',
       hasArticle: true,
     };
-  } catch {
+  } catch (e) {
+    console.warn(`${tag} threw:`, e);
     return null;
   }
 }
