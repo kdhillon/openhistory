@@ -26,6 +26,11 @@ export function PendingChangesPanel({ onPublishSuccess, isMobile = false }: Prop
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signedIn, setSignedIn] = useState<boolean>(() => Boolean(getOhmToken()));
+  // Holds the changeset id from the last successful publish — surfaces the
+  // success modal that links to the OHM changeset and reminds the user
+  // about the tile-cache delay before edits show up in OpenHistory.
+  const [publishedChangesetId, setPublishedChangesetId] = useState<number | null>(null);
+  const [publishedCount, setPublishedCount] = useState(0);
 
   // Cross-tab + same-tab token sync (mirrors the modal's approach).
   // Refresh on storage event + focus + 1s poll so an OAuth completion in
@@ -42,7 +47,8 @@ export function PendingChangesPanel({ onPublishSuccess, isMobile = false }: Prop
     };
   }, []);
 
-  if (edits.length === 0) return null;
+  // Render nothing only when there's no pending work AND no success modal to show.
+  if (edits.length === 0 && publishedChangesetId == null) return null;
 
   async function handlePublish() {
     setError(null);
@@ -60,17 +66,20 @@ export function PendingChangesPanel({ onPublishSuccess, isMobile = false }: Prop
       return;
     }
     setPublishing(true);
+    const count = edits.length;
     try {
       const comment = edits.length === 1
         ? edits[0].comment
         : `Wikidata/Wikipedia tagging via OpenHistory (${edits.length} edits: ${edits.slice(0, 5).map((e) => e.displayName).join(', ')}${edits.length > 5 ? '…' : ''})`;
-      await updateOhmElements({
+      const result = await updateOhmElements({
         token,
         comment,
         edits: edits.map((e) => ({ osmType: e.osmType, osmId: e.osmId, setTags: e.setTags })),
       });
       clearPendingEdits();
       setOpen(false);
+      setPublishedCount(count);
+      setPublishedChangesetId(result.changesetId);
       onPublishSuccess?.();
     } catch (e) {
       setError((e as Error).message);
@@ -93,6 +102,70 @@ export function PendingChangesPanel({ onPublishSuccess, isMobile = false }: Prop
     maxWidth: 360,
     width: open ? 360 : 'auto',
   };
+
+  // Success modal — shown right after a publish completes. Centered overlay,
+  // covers the panel until dismissed. Surfaces the OHM changeset link and the
+  // 30-minute tile-cache reminder.
+  if (publishedChangesetId != null) {
+    const overlay: React.CSSProperties = {
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000,
+    };
+    const card: React.CSSProperties = {
+      background: '#1e2433', color: '#e8eaf0', borderRadius: 10,
+      width: 440, maxWidth: '95vw', padding: '22px 24px 18px',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.6)', fontFamily: 'inherit',
+      display: 'flex', flexDirection: 'column', gap: 14,
+    };
+    const csUrl = `https://www.openhistoricalmap.org/changeset/${publishedChangesetId}`;
+    return (
+      <div style={overlay} onClick={(e) => { if (e.target === e.currentTarget) setPublishedChangesetId(null); }}>
+        <div style={card}>
+          <div style={{ fontSize: 18, fontWeight: 600, color: '#4caf50' }}>
+            ✓ Published to OpenHistoricalMap
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.55, color: '#cdd5e3' }}>
+            {publishedCount === 1
+              ? '1 tag edit was submitted as a single OHM changeset.'
+              : `${publishedCount} tag edits were bundled into a single OHM changeset.`}
+            {' '}You can view, comment on, or revert it on OHM:
+          </div>
+          <a
+            href={csUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              fontSize: 13, color: '#7ec6f5', textDecoration: 'none',
+              padding: '8px 10px', background: '#11172a',
+              border: '1px solid #2a3450', borderRadius: 6,
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              wordBreak: 'break-all',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+            onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
+          >
+            {csUrl}
+          </a>
+          <div style={{ fontSize: 12, lineHeight: 1.55, color: '#8899bb' }}>
+            Please wait ~30 minutes for your changes to be visible in OpenHistory.app —
+            OHM's vector-tile cache refreshes on its own schedule.
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+            <button
+              onClick={() => setPublishedChangesetId(null)}
+              style={{
+                background: '#3a4560', color: '#e8eaf0',
+                border: 'none', borderRadius: 4, padding: '7px 16px',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!open) {
     return (
