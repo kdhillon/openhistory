@@ -1097,6 +1097,9 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       const fillPairs: (string | maplibregl.ExpressionSpecification)[] = [];
       const labelPairs: (string | maplibregl.ExpressionSpecification)[] = [];
       const textPairs: (string | maplibregl.ExpressionSpecification)[] = [];
+      // Per-feature Wikidata translations keyed on the OHM tile's name_en —
+      // wired into the labelText expression below when selectedLang !== 'en'.
+      const wdTextPairs: (string | maplibregl.ExpressionSpecification)[] = [];
       // text-size & symbol-sort-key per OHM-tile name, driven by a combined
       // (sitelinks + admin_level + polygon area) importance score. Higher score
       // = bigger font + lower sort-key (wins label-collision).
@@ -1204,6 +1207,15 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           sig.sl = sitelinksByQid[wikidataQid] ?? 0;
           const polityId = polityIdByQid[wikidataQid];
           if (polityId) matchedPolityIds.add(polityId);
+          // Build name-keyed Wikidata translation pairs for the label text-field.
+          // OHM tile schema doesn't expose every language (`name:de` etc.) so a
+          // QID-keyed Wikidata lookup is our broader-coverage path. The match
+          // expression below takes precedence over the date-suffix-strip pairs
+          // for non-English language sessions.
+          const wdTranslation = translationMap?.[wikidataQid];
+          if (wdTranslation && wdTranslation !== fullName) {
+            wdTextPairs.push(fullName, wdTranslation);
+          }
         }
       }
 
@@ -1230,12 +1242,19 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       const baseLabelText = textPairs.length > 0
         ? (['match', nameExpr, ...textPairs, nameExpr] as unknown as maplibregl.ExpressionSpecification)
         : nameExpr;
-      // When the user picks a non-English language, prefer OHM's per-language
-      // name tag (e.g. name:de, name:fr) and fall back to the English-based
-      // labelText if that field is missing on the feature.
+      // When the user picks a non-English language, resolve the label as:
+      //   1. OHM tile's own `name:<lang>` tag — when curated, usually best
+      //   2. Wikidata translation matched on the feature's English name —
+      //      broader coverage than OHM
+      //   3. The English-based baseLabelText (stripped date-suffix or raw)
+      // This logs in the centroid path too; the label-source diag from
+      // [i18n centroids/<lang>] shows how often (1) vs (2) actually win.
       const lang = selectedLangRef.current;
+      const wdTextMatch = wdTextPairs.length > 0
+        ? (['match', nameExpr, ...wdTextPairs, baseLabelText] as unknown as maplibregl.ExpressionSpecification)
+        : baseLabelText;
       const labelText = lang && lang !== 'en'
-        ? (['coalesce', ['get', `name:${lang}`], baseLabelText] as unknown as maplibregl.ExpressionSpecification)
+        ? (['coalesce', ['get', `name:${lang}`], wdTextMatch] as unknown as maplibregl.ExpressionSpecification)
         : baseLabelText;
 
       if (map.getLayer('ohm-fills')) {
