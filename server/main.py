@@ -2408,16 +2408,18 @@ async def ohm_update_elements(request: Request):
     write_headers = {**base_headers, "Content-Type": "text/xml; charset=utf-8", "Accept": "text/plain, */*"}
     loop = asyncio.get_event_loop()
 
-    # Step 1: one Overpass query for every element across all three types so
-    # we have current version/tags/members/nodes/lat-lon to send back.
-    rel_ids = sorted({e["osmId"] for e in normalized if e["osmType"] == "relation"})
-    way_ids = sorted({e["osmId"] for e in normalized if e["osmType"] == "way"})
-    node_ids = sorted({e["osmId"] for e in normalized if e["osmType"] == "node"})
-    parts = []
-    if rel_ids:  parts.append(f"relation(id:{','.join(map(str, rel_ids))});")
-    if way_ids:  parts.append(f"way(id:{','.join(map(str, way_ids))});")
-    if node_ids: parts.append(f"node(id:{','.join(map(str, node_ids))});")
-    overpass_query = f"[out:json][timeout:30];({''.join(parts)});out meta;"
+    # Step 1: one Overpass query for every element. We query all THREE OSM
+    # types for every id because the client's `osmType` can be wrong —
+    # centroid-label features on the frontend carry an osm_id that points at
+    # the underlying relation but get tagged 'node' by the tile renderer's
+    # sign convention. Single-element endpoint does the same thing.
+    all_ids = sorted({e["osmId"] for e in normalized})
+    ids_csv = ",".join(str(i) for i in all_ids)
+    overpass_query = (
+        f"[out:json][timeout:30];"
+        f"(node(id:{ids_csv});way(id:{ids_csv});relation(id:{ids_csv}););"
+        f"out meta;"
+    )
 
     def _fetch_elements():
         data = urllib.parse.urlencode({"data": overpass_query}).encode()
@@ -2442,7 +2444,28 @@ async def ohm_update_elements(request: Request):
     for el in (op_data.get("elements") or []):
         by_key[(el.get("type", ""), int(el.get("id", 0)))] = el
 
-    missing = [(e["osmType"], e["osmId"]) for e in normalized if (e["osmType"], e["osmId"]) not in by_key]
+    # Resolve each edit to the (type, element) that actually exists in OHM.
+    # Prefer the requested type, then fall back to whichever single type exists
+    # for that id (relation > way > node priority). The actual_type replaces
+    # the client's claimed type for the rest of the pipeline.
+    resolved: list[dict] = []
+    missing: list[tuple[str, int]] = []
+    for edit in normalized:
+        req_type, oid = edit["osmType"], edit["osmId"]
+        chosen_type = None
+        for t in (req_type, "relation", "way", "node"):
+            if (t, oid) in by_key:
+                chosen_type = t
+                break
+        if chosen_type is None:
+            missing.append((req_type, oid))
+            continue
+        resolved.append({
+            "osmType": chosen_type,
+            "osmId": oid,
+            "setTags": edit["setTags"],
+            "element": by_key[(chosen_type, oid)],
+        })
     if missing:
         raise HTTPException(404, f"Elements not found in OHM: {missing[:5]}")
 
@@ -2475,23 +2498,25 @@ async def ohm_update_elements(request: Request):
     # and POST it to the changeset upload endpoint.
     osm_change = ET.Element("osmChange", {"version": "0.6", "generator": "OpenHistory/1.0"})
     modify = ET.SubElement(osm_change, "modify")
-    for edit in normalized:
-        el = by_key[(edit["osmType"], edit["osmId"])]
+    for edit in resolved:
+        el = edit["element"]
+        osm_type = edit["osmType"]
+        osm_id = edit["osmId"]
         version = el.get("version")
         if version is None:
-            raise HTTPException(502, f"Overpass missing version for {edit['osmType']}/{edit['osmId']}")
-        element = ET.SubElement(modify, edit["osmType"], {
-            "id": str(edit["osmId"]),
+            raise HTTPException(502, f"Overpass missing version for {osm_type}/{osm_id}")
+        element = ET.SubElement(modify, osm_type, {
+            "id": str(osm_id),
             "version": str(version),
             "changeset": str(changeset_id),
         })
-        if edit["osmType"] == "node":
+        if osm_type == "node":
             if el.get("lat") is not None: element.set("lat", str(el["lat"]))
             if el.get("lon") is not None: element.set("lon", str(el["lon"]))
-        elif edit["osmType"] == "way":
+        elif osm_type == "way":
             for nd_id in (el.get("nodes") or []):
                 ET.SubElement(element, "nd", {"ref": str(nd_id)})
-        elif edit["osmType"] == "relation":
+        elif osm_type == "relation":
             for m in (el.get("members") or []):
                 ET.SubElement(element, "member", {
                     "type": m.get("type", ""),
@@ -2547,12 +2572,14 @@ async def ohm_update_elements(request: Request):
     except urllib.error.HTTPError:
         pass  # auto-closes after 1h
 
-    # Parse <diffResult> for per-edit new_version values.
+    # Parse <diffResult> for per-edit new_version values. Use the *resolved*
+    # types (not the client's claimed types) since that's what we actually
+    # sent in the diff.
     results = []
     try:
         diff_root = ET.fromstring(diff_result_xml)
         by_old_id = {(c.tag, c.get("old_id")): c for c in diff_root}
-        for edit in normalized:
+        for edit in resolved:
             child = by_old_id.get((edit["osmType"], str(edit["osmId"])))
             new_version = child.get("new_version") if child is not None else None
             results.append({
@@ -2561,14 +2588,14 @@ async def ohm_update_elements(request: Request):
                 "newVersion": int(new_version) if new_version and new_version.isdigit() else None,
             })
     except ET.ParseError:
-        results = [{"osmType": e["osmType"], "osmId": e["osmId"], "newVersion": None} for e in normalized]
+        results = [{"osmType": e["osmType"], "osmId": e["osmId"], "newVersion": None} for e in resolved]
 
     # Bust the qid-map cache so the next request reflects the new tags.
     _OHM_QID_CACHE["fetched_at"] = None
 
     _capture("ohm_elements_batch_updated", {
-        "count": len(normalized),
-        "types": sorted({e["osmType"] for e in normalized}),
+        "count": len(resolved),
+        "types": sorted({e["osmType"] for e in resolved}),
     }, request)
 
     return {
