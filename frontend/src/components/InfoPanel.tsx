@@ -277,7 +277,6 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
   // Fetch translation when language or feature changes
   useEffect(() => {
     const qid = feature?.wikidataQid;
-    console.log(`[i18n] effect: qid=${qid ?? '∅'} lang=${selectedLang} title=${feature?.title ?? '∅'}`);
     if (!qid || selectedLang === 'en') {
       setTranslatedContent(null);
       return;
@@ -287,11 +286,9 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
     setTranslatedContent(null);
     fetchArticleInLanguage(qid, selectedLang).then((result) => {
       if (cancelled) return;
-      console.log(`[i18n] result for ${qid}/${selectedLang}:`, result);
       setTranslatedContent(result);
       setTranslating(false);
-    }).catch((e) => {
-      console.warn(`[i18n] fetch threw for ${qid}/${selectedLang}:`, e);
+    }).catch(() => {
       if (!cancelled) setTranslating(false);
     });
     return () => { cancelled = true; };

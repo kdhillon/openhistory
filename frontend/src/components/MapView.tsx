@@ -673,13 +673,17 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       // ohm-labels so users don't see size differences driven by OHM's tile schema
       // (which puts some entities in place_points_centroids and others in
       // land_ohm_centroids based on whether they have a place=country node).
+      // Require ['has', 'place'] so we only label entities OHM curators have
+      // explicitly tagged with a place= value (country / confederation / region / etc.).
+      // Drops "geometry-only" admin polygons like the Portuguese Empire, which carry
+      // admin_level=1 but no place= tag, so they render as fills only — not labels.
       map.addLayer({
         id: 'ohm-labels-small',
         type: 'symbol',
         source: 'ohm',
         'source-layer': 'land_ohm_centroids',
         minzoom: 3,
-        filter: OHM_ADMIN_FILTER,
+        filter: ['all', ['has', 'place'], ...(OHM_ADMIN_FILTER.slice(1) as maplibregl.ExpressionSpecification[])] as maplibregl.FilterSpecification,
         layout: {
           'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']],
           'text-size': 13,
@@ -943,8 +947,17 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       ['<=', ['get', 'start_decdate'], year],
       ['any', ['!', ['has', 'end_decdate']], ['>=', ['get', 'end_decdate'], year]],
     ] as maplibregl.FilterSpecification;
-    for (const id of ['ohm-fills', 'ohm-polygon-borders', 'ohm-labels-small']) {
+    for (const id of ['ohm-fills', 'ohm-polygon-borders']) {
       if (map.getLayer(id)) map.setFilter(id, adminTemporalFilter);
+    }
+    // ohm-labels-small additionally requires a `place` tag — so geometry-only
+    // admin polygons (e.g. Portuguese Empire, which has admin_level=1 but no
+    // place=) render as fills without a label, while curated entities like
+    // German Confederation (place=confederation) still get their label.
+    if (map.getLayer('ohm-labels-small')) {
+      map.setFilter('ohm-labels-small', ['all', ['has', 'place'],
+        ...(adminTemporalFilter.slice(1) as maplibregl.ExpressionSpecification[]),
+      ] as maplibregl.FilterSpecification);
     }
     // Border lines: level 1 always (when shown), levels 2..cap rendered via ohm-borders.
     if (map.getLayer('ohm-borders-1')) map.setFilter('ohm-borders-1', ['all',
@@ -1247,8 +1260,6 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       //   2. Wikidata translation matched on the feature's English name —
       //      broader coverage than OHM
       //   3. The English-based baseLabelText (stripped date-suffix or raw)
-      // This logs in the centroid path too; the label-source diag from
-      // [i18n centroids/<lang>] shows how often (1) vs (2) actually win.
       const lang = selectedLangRef.current;
       const wdTextMatch = wdTextPairs.length > 0
         ? (['match', nameExpr, ...wdTextPairs, baseLabelText] as unknown as maplibregl.ExpressionSpecification)
@@ -1330,9 +1341,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         // byKey now also tracks the source OHM osm_id+type so a click on the centroid
         // label can attach OHM context (for direct API edits from InfoPanel).
         const byKey2: Record<string, { area: number; centroid: [number, number]; name: string; mapped: boolean; polityId: string | null; osmId: number | null; osmType: 'node' | 'relation' | null; sitelinks: number }> = byKey as never;
-        // Translation source counters for the diag log below.
         const lang = selectedLangRef.current;
-        let nFromOhmLang = 0, nFromTranslationMap = 0, nFromEnglish = 0;
         for (const f of labelRendered) {
           const fullName = (f.properties?.name_en ?? f.properties?.name ?? '') as string;
           if (!fullName) continue;
@@ -1356,12 +1365,8 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
             const wdLangName = wikidataQid ? translationMap?.[wikidataQid] : undefined;
             if (ohmLangName) {
               localizedName = stripDisplay(ohmLangName);
-              nFromOhmLang++;
             } else if (wdLangName) {
               localizedName = wdLangName;
-              nFromTranslationMap++;
-            } else {
-              nFromEnglish++;
             }
           }
           const key = polityId ?? (wikidataQid ? `qid::${wikidataQid}` : `ohm::${fullName}`);
@@ -1379,9 +1384,6 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
               byKey2[key] = { area: a, centroid: ringCentroid(r[0]), name: localizedName, mapped: isMapped, polityId, osmId: osmId || null, osmType, sitelinks };
             }
           }
-        }
-        if (lang && lang !== 'en') {
-          console.log(`[i18n centroids/${lang}] ohm-lang=${nFromOhmLang} wikidata=${nFromTranslationMap} english-fallback=${nFromEnglish} (total=${labelRendered.length})`);
         }
         const centroidFeatures: GeoJSON.Feature[] = Object.values(byKey2).map((v) => ({
           type: 'Feature' as const,

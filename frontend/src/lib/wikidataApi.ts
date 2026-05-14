@@ -278,31 +278,44 @@ export async function fetchEntityTranslations(
 
   _hydrateFromLocalStorage(lang);
 
+  const t0 = performance.now();
   const valid = qids.filter((q) => /^Q\d+$/.test(q));
   const result: Record<string, string> = {};
 
   // Pull anything already cached, fetch only the rest.
+  let nFromCache = 0;
   const need: string[] = [];
   for (const q of valid) {
     const cached = _batchTranslationCache.get(`${q}|${lang}`);
     if (cached !== undefined) {
       if (cached) result[q] = cached;     // empty string ⇒ confirmed-no-label, don't refetch
+      nFromCache++;
     } else {
       need.push(q);
     }
   }
-  if (need.length === 0) return result;
+  const tHydrate = performance.now() - t0;
+  if (need.length === 0) {
+    console.log(`[i18n batch ${lang}] ${nFromCache}/${valid.length} from cache (${tHydrate.toFixed(0)}ms), no fetch needed`);
+    return result;
+  }
 
   const BATCH = 50;
   const batches: string[][] = [];
   for (let i = 0; i < need.length; i += BATCH) batches.push(need.slice(i, i + BATCH));
 
-  // Modest concurrency + inter-round delay to stay under Wikidata's per-IP
-  // rate limit. 26 rounds * 2 batches * 250ms = ~13s for a full 10k-polity
-  // language switch, which is fine for a background load.
-  const PARALLEL = 2;
-  const ROUND_DELAY_MS = 250;
+  // Concurrency picked to amortize Wikidata's per-call latency (~300-500ms)
+  // without tripping its rate limiter. With cache + retry below, PARALLEL=6
+  // sustains ~10-15 req/sec which Wikidata accepts cleanly; back off to
+  // ROUND_DELAY=0 because the parallelism alone paces us. If 429s reappear
+  // in practice, lower PARALLEL or restore a small delay.
+  const PARALLEL = 6;
+  const ROUND_DELAY_MS = 0;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  let nRateLimited = 0;
+  let nFetched = 0;
+  console.log(`[i18n batch ${lang}] starting fetch: ${need.length} qids in ${batches.length} batches of ${BATCH}, parallel=${PARALLEL}`);
 
   for (let i = 0; i < batches.length; i += PARALLEL) {
     await Promise.all(
@@ -316,27 +329,34 @@ export async function fetchEntityTranslations(
             format: 'json',
             origin: '*',
           });
-          const res = await fetch(`https://www.wikidata.org/w/api.php?${params}`);
-          if (!res.ok) {
-            if (res.status === 429) console.warn(`[i18n batch] HTTP 429 — Wikidata rate-limited (will retry on next round)`);
-            return;
+          let res = await fetch(`https://www.wikidata.org/w/api.php?${params}`);
+          // Retry once on 429 with the server's Retry-After (capped at 3s).
+          if (res.status === 429) {
+            nRateLimited++;
+            const retryAfter = res.headers.get('Retry-After');
+            const waitMs = Math.min(3000, Math.max(500, Number(retryAfter) * 1000 || 1000));
+            await sleep(waitMs);
+            res = await fetch(`https://www.wikidata.org/w/api.php?${params}`);
           }
+          if (!res.ok) return;
           const data = await res.json();
           for (const [qid, entity] of Object.entries(data.entities ?? {})) {
             const label = (entity as Record<string, unknown> & { labels?: Record<string, { value: string }> }).labels?.[lang]?.value;
             // Cache empty string as "no label in this lang" so we never refetch.
             _batchTranslationCache.set(`${qid}|${lang}`, label ?? '');
             if (label) result[qid] = label;
+            nFetched++;
           }
         } catch { /* skip failed batch */ }
       }),
     );
-    // Don't sleep after the final round.
-    if (i + PARALLEL < batches.length) await sleep(ROUND_DELAY_MS);
+    if (i + PARALLEL < batches.length && ROUND_DELAY_MS > 0) await sleep(ROUND_DELAY_MS);
   }
   // Persist the whole accumulated cache for this language back to localStorage
   // so subsequent reloads pick polity labels up instantly.
   _persistToLocalStorage(lang);
+  const totalMs = performance.now() - t0;
+  console.log(`[i18n batch ${lang}] done in ${(totalMs / 1000).toFixed(1)}s: ${nFromCache} from cache + ${nFetched} fetched (${nRateLimited} retries on 429)`);
   return result;
 }
 
