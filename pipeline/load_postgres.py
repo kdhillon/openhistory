@@ -83,6 +83,7 @@ def upsert_locations(conn, location_records: list[dict], pipeline_run: str = "")
     """
 
     loaded_qids: set[str] = set()
+    skipped = 0
 
     with conn.cursor() as cur:
         for record in location_records:
@@ -106,14 +107,27 @@ def upsert_locations(conn, location_records: list[dict], pipeline_run: str = "")
                 "data_version":      CURRENT_DATA_VERSION,
                 "pipeline_run":      pipeline_run,
             }
-            cur.execute(sql, row)
-            result = cur.fetchone()
-            if result and result[0]:
-                loaded_qids.add(result[0])
-            if record["wikidata_qid"]:
-                loaded_qids.add(record["wikidata_qid"])
+            # ON CONFLICT (wikidata_qid) handles QID collisions, but the slug
+            # unique constraint can still fire (e.g. two unrelated Wikipedia
+            # articles slugify the same). Wrap each row in a savepoint so a
+            # secondary unique-key collision skips THIS row instead of
+            # aborting the whole batch.
+            try:
+                cur.execute("SAVEPOINT loc_row")
+                cur.execute(sql, row)
+                result = cur.fetchone()
+                cur.execute("RELEASE SAVEPOINT loc_row")
+                if result and result[0]:
+                    loaded_qids.add(result[0])
+                if record["wikidata_qid"]:
+                    loaded_qids.add(record["wikidata_qid"])
+            except psycopg2.errors.UniqueViolation:
+                cur.execute("ROLLBACK TO SAVEPOINT loc_row")
+                skipped += 1
 
     conn.commit()
+    if skipped:
+        print(f"  → skipped {skipped} location(s) due to non-QID unique-key collisions (slug, etc.)")
     return loaded_qids
 
 
@@ -254,8 +268,18 @@ def upsert_events(
                 "data_version":         CURRENT_DATA_VERSION,
                 "pipeline_run":         pipeline_run,
             }
-            cur.execute(sql, row)
-            loaded += 1
+            # ON CONFLICT (wikidata_qid) handles QID collisions, but the slug
+            # unique constraint can still fire when two unrelated Wikipedia
+            # articles slugify the same. Savepoint per row so a slug clash
+            # skips THIS row instead of aborting the whole batch.
+            try:
+                cur.execute("SAVEPOINT ev_row")
+                cur.execute(sql, row)
+                cur.execute("RELEASE SAVEPOINT ev_row")
+                loaded += 1
+            except psycopg2.errors.UniqueViolation:
+                cur.execute("ROLLBACK TO SAVEPOINT ev_row")
+                skipped += 1
 
     conn.commit()
     return loaded, skipped

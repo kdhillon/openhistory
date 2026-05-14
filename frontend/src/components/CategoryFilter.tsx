@@ -62,6 +62,8 @@ interface Props {
   onPolityPaletteChange: (id: PaletteId) => void;
   maxAdminLevel: number;
   onMaxAdminLevelChange: (level: number) => void;
+  showImperialTerritory: boolean;
+  onToggleShowImperialTerritory: () => void;
 }
 
 function Spinner() {
@@ -161,7 +163,7 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
   );
 }
 
-export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showLabels, onToggleLabels, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onEditTerritory, editorMode, territorySource, getOhmEditUrl, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin, polityPalette, onPolityPaletteChange, maxAdminLevel, onMaxAdminLevelChange }: Props) {
+export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showLabels, onToggleLabels, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onEditTerritory, editorMode, territorySource, getOhmEditUrl, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin, polityPalette, onPolityPaletteChange, maxAdminLevel, onMaxAdminLevelChange, showImperialTerritory, onToggleShowImperialTerritory }: Props) {
   const labelsColor = '#90A4AE';
   const bordersColor = '#607D8B';
   const otherPolitiesColor = '#9C27B0';
@@ -291,6 +293,13 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
                 ))}
               </select>
             </div>
+            <label
+              style={{ ...styles.settingsCheckRow, marginTop: 6 }}
+              title="Show admin_level=1 overlays (Portuguese / Spanish / British Empire, German Confederation, etc.). Off by default — admin=1 fills, borders, and labels are hidden so the map shows only country tier and below."
+            >
+              <input type="checkbox" checked={showImperialTerritory} onChange={onToggleShowImperialTerritory} style={{ margin: 0 }} />
+              <span style={styles.settingsCheckLabel}>Show imperial territory</span>
+            </label>
             <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.08)', margin: '10px 0' }} />
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.35)', marginBottom: 8 }}>Map theme</div>
             <div style={styles.settingsRow}>

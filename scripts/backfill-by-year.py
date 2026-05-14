@@ -56,7 +56,9 @@ def main():
     p.add_argument("--start", type=int, required=True,
                    help="Year to start at (inclusive, processed first)")
     p.add_argument("--count", type=int, required=True,
-                   help="Number of years to process going backwards from --start")
+                   help="Number of years to process from --start")
+    p.add_argument("--ascending", action="store_true",
+                   help="Iterate forward (start, start+1, ...). Default is backwards.")
     p.add_argument("--force", action="store_true",
                    help="Re-run years already marked 'ok' in state")
     args = p.parse_args()
@@ -67,8 +69,9 @@ def main():
 
     state = load_state()
 
+    direction = 1 if args.ascending else -1
     for i in range(args.count):
-        year = args.start - i
+        year = args.start + direction * i
         key = str(year)
         prior = state["runs"].get(key, {})
 
@@ -146,7 +149,7 @@ def main():
     print("\n=== Summary ===")
     print(f"{'Year':<6} {'Status':<9} {'Before':>7} {'After':>7} {'Added':>7}  Notes")
     for i in range(args.count):
-        year = args.start - i
+        year = args.start + direction * i
         r = state["runs"].get(str(year), {})
         status = r.get("status", "—")
         if status == "ok":

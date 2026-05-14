@@ -206,6 +206,20 @@ export default function App() {
     localStorage.setItem('oh-ohm-max-admin-level', String(level));
   }, []);
 
+  // Show admin_level=1 polygons + labels (e.g. Portuguese / Spanish / British
+  // Empire). OFF by default — the map starts at country tier and below. Toggle
+  // on to surface empire-level overlays.
+  const [showImperialTerritory, setShowImperialTerritory] = useState<boolean>(() => {
+    return localStorage.getItem('oh-show-imperial-territory') === 'true';
+  });
+  const handleToggleShowImperialTerritory = useCallback(() => {
+    setShowImperialTerritory((v) => {
+      const next = !v;
+      localStorage.setItem('oh-show-imperial-territory', String(next));
+      return next;
+    });
+  }, []);
+
   const territoriesFeatureCollection = useMemo(
     (): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features: territoryFeatures }),
     [territoryFeatures],
@@ -701,6 +715,8 @@ export default function App() {
           onPolityPaletteChange={handlePolityPaletteChange}
           maxAdminLevel={maxAdminLevel}
           onMaxAdminLevelChange={handleMaxAdminLevelChange}
+          showImperialTerritory={showImperialTerritory}
+          onToggleShowImperialTerritory={handleToggleShowImperialTerritory}
         />
       )}
 
@@ -764,6 +780,7 @@ export default function App() {
           polityPalette={polityPalette}
           ohmQidMap={ohmQidMap}
           maxAdminLevel={maxAdminLevel}
+          showImperialTerritory={showImperialTerritory}
           selectedLang={selectedLang}
         />
         <GlobalSearchPanel
@@ -795,8 +812,18 @@ export default function App() {
               zIndex: 100,
               background: 'rgba(0,0,0,0.7)', color: '#ccc', padding: '4px 10px',
               borderRadius: 6, fontSize: 12, pointerEvents: 'none',
+              display: 'flex', alignItems: 'center', gap: 6,
             }}>
-              Loading: {items.join(', ')}
+              <style>{`@keyframes oh-loading-spin { to { transform: rotate(360deg); } }`}</style>
+              <svg
+                width="11" height="11" viewBox="0 0 12 12"
+                style={{ animation: 'oh-loading-spin 0.75s linear infinite', flexShrink: 0 }}
+                aria-hidden="true"
+              >
+                <circle cx="6" cy="6" r="4.5" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" />
+                <path d="M6 1.5 A4.5 4.5 0 0 1 10.5 6" fill="none" stroke="#ccc" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <span>Loading: {items.join(', ')}</span>
             </div>
           );
         })()}
