@@ -736,6 +736,7 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
         filter: ['all',
           ['==', ['get', 'featureType'], 'event'],
           ['>', ['coalesce', ['get', '_stackCount'], 0], 1],
+          ['<=', ['coalesce', ['get', '_minZoom'], 4], ['zoom']],
         ] as maplibregl.FilterSpecification,
         layout: {
           'text-field': ['concat', '+', ['to-string', ['-', ['get', '_stackCount'], 1]]],
