@@ -3,10 +3,8 @@ import type { Map as MaplibreMap } from 'maplibre-gl';
 import { checkLogin, fetchEntityTranslations } from './lib/wikidataApi';
 import { handleOAuthCallback, getReturnPath } from './lib/wikidataAuth';
 import { TranslationContext } from './lib/TranslationContext';
-import { fetchOverrides, fetchPolityOverrides, fetchHiddenNations, addHiddenNation, removeHiddenNation, removeTerritoryMappingsByPolity, unlinkPolygon, fetchManualPolities, fetchHiddenFeatures, setFeatureHidden } from './lib/api';
+import { fetchOverrides, fetchPolityOverrides, fetchHiddenNations, addHiddenNation, removeHiddenNation, fetchManualPolities, fetchHiddenFeatures, setFeatureHidden } from './lib/api';
 import { MapView } from './components/MapView';
-import { TerritoryEditor } from './editor/TerritoryEditor';
-import { TerritoryMappingModal } from './components/TerritoryMappingModal';
 import { OhmMappingModal } from './components/OhmMappingModal';
 import { TimelineBar, TIMELINE_BAR_HEIGHT, MobileTimelineBar, MOBILE_TIMELINE_BAR_HEIGHT } from './components/TimelineBar';
 import { InfoPanel } from './components/InfoPanel';
@@ -16,14 +14,12 @@ import { AboutPage } from './components/AboutPage';
 import { WelcomeModal, shouldShowWelcome } from './components/WelcomeModal';
 import { MajorEventsPanel } from './components/MajorEventsPanel';
 import { UnlocatedEventsPanel } from './components/UnlocatedEventsPanel';
-import { UnlocatedPolitiesPanel } from './components/UnlocatedPolitiesPanel';
 import { OhmLabelConfirmModal } from './components/OhmLabelConfirmModal';
 import { GlobalSearchPanel } from './components/GlobalSearchPanel';
 import type { SearchPolityResult, SearchEventResult } from './lib/api';
 import { extractOhmTokenFromHash, getOhmToken, clearOhmToken, createOhmLabel } from './lib/ohmApi';
 import { useTimeline, encodeDate, decodeDate, STEP_YEAR } from './hooks/useTimeline';
 import { useEventSource } from './hooks/useEventSource';
-import { useTerritoriesSource } from './hooks/useTerritoriesSource';
 import { useOhmQidMap } from './hooks/useOhmQidMap';
 import { usePendingOhmEdits } from './lib/pendingOhmEdits';
 import { PendingChangesPanel } from './components/PendingChangesPanel';
@@ -108,11 +104,6 @@ export default function App() {
   const { eventFeatures, windowInfo, isLoading: eventsLoading, error: eventsError } =
     useEventSource({ currentYear: debouncedYear, stepSize: timeline.stepSize });
 
-  const territorySource = 'ohm' as const;
-
-  const { territoryFeatures, refresh: refreshTerritories, isLoading: territoriesLoading, error: territoriesError } =
-    useTerritoriesSource({ currentYear: debouncedYear, stepSize: timeline.stepSize, source: 'hb' });
-
   // OHM osm_id → wikidata QID lookup (server-cached, 5-min TTL). Joins tile features to polities.
   const { map: ohmQidMapRaw, refresh: refreshOhmQidMap, isLoading: ohmQidMapLoading } = useOhmQidMap();
 
@@ -147,8 +138,6 @@ export default function App() {
   const [wikiAuth, setWikiAuth] = useState<string | null>(null);
   // polityId → hideUntilYear for modern nations hidden in historical views
   const [hiddenNations, setHiddenNations] = useState<Map<string, number>>(new Map());
-  // Unmatched territory the user clicked — shows the mapping assignment modal
-  const [mappingTarget, setMappingTarget] = useState<{ hbName: string; polygonId: string; yearStart: number; yearEnd: number | null } | null>(null);
   // OHM territory the user clicked — shows the OHM polity assignment modal
   const [ohmMappingTarget, setOhmMappingTarget] = useState<{ ohmName: string; ohmWikidataQid: string | null; yearStart: number | null; yearEnd: number | null; osmType: 'relation' | 'node'; osmId: number } | null>(null);
   // QID of the major event chip selected in the bottom bar (null = no filter)
@@ -163,16 +152,9 @@ export default function App() {
   const [ohmError, setOhmError] = useState<string | null>(null);
   const [fitBoundsRequest, setFitBoundsRequest] = useState<{ bbox: [number,number,number,number]; id: number } | null>(null);
   const fitBoundsIdRef = useRef(0);
-  // Mappings saved in this session: polygonId → { polityId, polityName }
-  // Used to immediately reflect matched territory labels without re-exporting
-  const [localMappings, setLocalMappings] = useState<Map<string, { polityId: string; polityName: string }>>(new Map());
-  // Polygon IDs explicitly unlinked this session (per-polygon, not group-level)
-  const [localPolygonUnlinks, setLocalPolygonUnlinks] = useState<Set<string>>(new Set());
   const [showWelcome, setShowWelcome] = useState(() => shouldShowWelcome());
   // IDs of features the user has manually hidden from the map
   const [hiddenFeatureIds, setHiddenFeatureIds] = useState<Set<string>>(new Set());
-  // Territory editor
-  const [editorMode, setEditorMode] = useState(false);
   const [mapInstance, setMapInstance] = useState<MaplibreMap | null>(null);
   // Wikipedia language + polity label translations
   const [selectedLang, setSelectedLang] = useState(() => localStorage.getItem('oh_lang') ?? 'en');
@@ -220,30 +202,6 @@ export default function App() {
     });
   }, []);
 
-  const territoriesFeatureCollection = useMemo(
-    (): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features: territoryFeatures }),
-    [territoryFeatures],
-  );
-
-  const patchedTerritories = useMemo(() => {
-    if (localMappings.size === 0 && localPolygonUnlinks.size === 0) return territoriesFeatureCollection;
-    return {
-      ...territoriesFeatureCollection,
-      features: territoriesFeatureCollection.features.map((f) => {
-        const p = f.properties as { polygonId: string; polityId: string | null };
-        // Per-polygon unlink: clear polity info for this specific polygon
-        if (localPolygonUnlinks.has(p.polygonId)) {
-          return { ...f, properties: { ...f.properties, polityId: null, polityName: null, explicitlyUnlinked: true } };
-        }
-        const mapping = localMappings.get(p.polygonId);
-        if (mapping) {
-          return { ...f, properties: { ...f.properties, polityId: mapping.polityId, polityName: mapping.polityName } };
-        }
-        return f;
-      }),
-    } as GeoJSON.FeatureCollection;
-  }, [localMappings, localPolygonUnlinks, territoriesFeatureCollection]);
-
   // Pre-compute suppressed polity IDs for the current year.
   // When multiple polities share a capital, only the shortest-lived (most historically
   // specific) shows; longer-lived ones are suppressed. Recomputes once per year — polity
@@ -287,23 +245,8 @@ export default function App() {
   // OHM mode: polity IDs matched to a currently-visible OHM territory (set by MapView after rebuildColors)
   const [ohmMatchedPolityIds, setOhmMatchedPolityIds] = useState<Set<string>>(new Set());
 
-  // Polity IDs that have a matched, time-visible territory — their capital dot is redundant
-  const polityIdsWithTerritory = useMemo(() => {
-    // Always compute from HB territory data (centroid labels use HB data regardless of territorySource)
-    const ids = new Set<string>();
-    for (const f of patchedTerritories.features) {
-      const p = f.properties as { polityId: string | null; yearStart: number; yearEnd: number | null };
-      if (!p.polityId) continue;
-      if (p.yearStart > currentYear) continue;
-      if (p.yearEnd !== null && currentYear > p.yearEnd) continue;
-      ids.add(p.polityId);
-    }
-    // Also include OHM matched polities
-    if (territorySource === 'ohm') {
-      for (const id of ohmMatchedPolityIds) ids.add(id);
-    }
-    return ids;
-  }, [territorySource, ohmMatchedPolityIds, patchedTerritories, currentYear]);
+  // Polity IDs that have a matched, time-visible OHM territory — their capital dot is redundant
+  const polityIdsWithTerritory = ohmMatchedPolityIds;
 
   // Derive the GeoJSON passed to MapView: static features + windowed events + overrides
   // Event features with overrides applied — used by UnlocatedEventsPanel so the list
@@ -441,19 +384,12 @@ export default function App() {
     setSelectedFeature(null);
   }, []);
 
-  const handleUnlinkPolygon = useCallback((polygonId: string) => {
-    unlinkPolygon(polygonId).catch(console.error);
-    setLocalPolygonUnlinks((prev) => new Set(prev).add(polygonId));
-  }, []);
-
   const handleToggleHiddenNation = useCallback((polityId: string) => {
     if (hiddenNations.has(polityId)) {
       removeHiddenNation(polityId).catch(console.error);
       setHiddenNations((m) => { const n = new Map(m); n.delete(polityId); return n; });
     } else {
-      // Hide the polity star and unlink its territory mappings (territory reverts to unassigned)
       addHiddenNation(polityId).catch(console.error);
-      removeTerritoryMappingsByPolity(polityId).catch(console.error);
       setHiddenNations((m) => new Map(m).set(polityId, 1900));
     }
   }, [hiddenNations]);
@@ -487,14 +423,13 @@ export default function App() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (ohmPlacement) { setOhmPlacement(null); return; }
-      if (mappingTarget) { setMappingTarget(null); return; }
       if (ohmMappingTarget) { setOhmMappingTarget(null); return; }
       if (showWelcome) { setShowWelcome(false); return; }
       setSelectedFeature(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [ohmPlacement, mappingTarget, ohmMappingTarget, showWelcome]);
+  }, [ohmPlacement, ohmMappingTarget, showWelcome]);
 
   const navigate = useCallback((to: string) => {
     window.history.pushState({}, '', to);
@@ -742,7 +677,6 @@ export default function App() {
           onToggleTerritoryLabels={handleToggleTerritoryLabels}
           onOpenAbout={() => navigate('/about')}
           onOpenData={() => navigate('/data')}
-          onEditTerritory={() => setEditorMode((v) => !v)}
           getOhmEditUrl={() => {
             const zoom = localStorage.getItem('oh-map-zoom') ?? '5';
             const lat = localStorage.getItem('oh-map-lat') ?? '30';
@@ -751,15 +685,11 @@ export default function App() {
             const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             return `https://www.openhistoricalmap.org/#map=${Math.round(Number(zoom))}/${Number(lat).toFixed(3)}/${Number(lng).toFixed(3)}&layers=O&date=${date}&daterange=1-01-01,${date}`;
           }}
-          editorMode={editorMode}
-          territorySource={territorySource}
           selectedLang={selectedLang}
           onLangChange={handleLangChange}
           windowInfo={windowInfo}
           eventsLoading={eventsLoading}
           eventsError={eventsError}
-          territoriesLoading={territoriesLoading}
-          territoriesError={territoriesError}
           seedLoading={seedLoading}
           locationCount={locationCount}
           polityCount={polityCount}
@@ -789,15 +719,6 @@ export default function App() {
               setStack({ index: 0, total: 1 });
             }}
           />
-          <UnlocatedPolitiesPanel
-            geojson={geojson}
-            currentDateInt={timeline.currentDateInt}
-            onSelectFeature={(props) => {
-              setSelectedFeature(props);
-              setStack({ index: 0, total: 1 });
-            }}
-            mappedPolityIds={polityIdsWithTerritory}
-          />
           <MajorEventsPanel
             geojson={geojson}
             currentDateInt={timeline.currentDateInt}
@@ -810,7 +731,6 @@ export default function App() {
         </div>
         <MapView
           geojson={geojson}
-          territoriesGeojson={patchedTerritories}
           currentDateInt={timeline.currentDateInt}
           stepSize={timeline.stepSize}
           activeCategories={activeCategories}
@@ -824,12 +744,8 @@ export default function App() {
           hiddenNations={hiddenNations}
           suppressedPolityIds={suppressedPolityIds}
           polityIdsWithTerritory={polityIdsWithTerritory}
-          onUnmatchedTerritoryClick={(hbName, polygonId, yearStart, yearEnd) => setMappingTarget({ hbName, polygonId, yearStart, yearEnd })}
-          onUnlinkPolygon={handleUnlinkPolygon}
           majorEventFilter={majorEventFilter}
           onMapReady={setMapInstance}
-          editorMode={editorMode}
-          territorySource={territorySource}
           onOhmTerritoryClick={(ohmName, ohmWikidataQid, yearStart, yearEnd, osmType, osmId) => setOhmMappingTarget({ ohmName, ohmWikidataQid, yearStart, yearEnd, osmType, osmId })}
           onOhmMatchedPolityIds={setOhmMatchedPolityIds}
           showRecentEvents={showRecentEvents}
@@ -856,7 +772,6 @@ export default function App() {
           const items: string[] = [];
           if (seedLoading) items.push('Polities');
           if (eventsLoading) items.push('Events');
-          if (territoriesLoading) items.push('Territories');
           if (ohmQidMapLoading) items.push('OHM QID Map');
           if (translatingLabels) items.push('Translating labels');
           if (items.length === 0) return null;
@@ -951,34 +866,6 @@ export default function App() {
         />
       )}
 
-      {mappingTarget && (
-        <TerritoryMappingModal
-          hbName={mappingTarget.hbName}
-          polygonId={mappingTarget.polygonId}
-          yearStart={mappingTarget.yearStart}
-          yearEnd={mappingTarget.yearEnd}
-          polities={polityFeatures}
-          onClose={() => setMappingTarget(null)}
-          onPolityImported={(feature) => {
-            setSeedFeatureCollection((prev) => ({
-              ...prev,
-              features: [...prev.features, feature],
-            }));
-          }}
-          onSaved={(polityId, polityName) => {
-            setLocalMappings((m) => new Map(m).set(
-              mappingTarget.polygonId,
-              { polityId, polityName },
-            ));
-            refreshTerritories();
-          }}
-          onYearsUpdated={refreshTerritories}
-          onDeleted={() => {
-            setMappingTarget(null);
-            refreshTerritories();
-          }}
-        />
-      )}
       {ohmMappingTarget && (
         <OhmMappingModal
           ohmName={ohmMappingTarget.ohmName}
@@ -1110,17 +997,6 @@ export default function App() {
         />
       )}
 
-{editorMode && mapInstance && (
-        <TerritoryEditor
-          map={mapInstance}
-          currentYear={currentYear}
-          onClose={() => setEditorMode(false)}
-          onSaved={() => { refreshTerritories(); setEditorMode(false); }}
-          onTerritoryCreated={(polygonId, yearStart, yearEnd) =>
-            setMappingTarget({ hbName: 'New Territory', polygonId, yearStart, yearEnd })
-          }
-        />
-      )}
     </div>
     </TranslationContext.Provider>
   );

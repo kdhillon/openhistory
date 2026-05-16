@@ -116,14 +116,6 @@ export async function fetchPolityOverrides(): Promise<GeoJSON.FeatureCollection>
   return res.json();
 }
 
-/**
- * Mark a single territory row as explicitly unlinked (clears polity_id).
- */
-export async function unlinkPolygon(polygonId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/territories/${polygonId}/unlink`, { method: 'PATCH', headers: withWriteSecret() });
-  if (!res.ok) throw new Error(`API PATCH unlink territory failed (${res.status})`);
-}
-
 export interface HiddenNation {
   polityId: string;
   hideUntilYear: number;
@@ -148,59 +140,6 @@ export async function addHiddenNation(polityId: string, hideUntilYear = 1900): P
 export async function removeHiddenNation(polityId: string): Promise<void> {
   const res = await fetch(`${API_BASE}/hidden-modern-nations/${polityId}`, { method: 'DELETE', headers: withWriteSecret() });
   if (!res.ok) throw new Error(`API DELETE hidden-modern-nations failed (${res.status})`);
-}
-
-export async function removeTerritoryMappingsByPolity(polityId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/territories/by-polity/${polityId}`, { method: 'DELETE', headers: withWriteSecret() });
-  if (!res.ok) throw new Error(`API DELETE territories/by-polity failed (${res.status})`);
-}
-
-// ── Territory geometry editing (editor/ prototype) ────────────────────────
-
-export async function patchTerritoryGeometry(
-  territoryId: string,
-  boundary: GeoJSON.MultiPolygon,
-  year: number,
-): Promise<void> {
-  const res = await fetch(`${API_BASE}/territories/${territoryId}/geometry`, {
-    method: 'PATCH',
-    headers: withWriteSecret({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ boundary, year }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Geometry patch failed (${res.status}): ${text}`);
-  }
-}
-
-/**
- * Fetch IDs of all manually-hidden polities and events.
- */
-export interface AssignResult {
-  yearStart: number;
-  yearEnd: number | null;
-  sliceStart: number;
-  sliceEnd: number | null;
-  createdBefore: boolean;
-  createdAfter: boolean;
-}
-
-/**
- * Assign a polity to a territory row.
- * Validates overlap and creates gap rows automatically.
- * Throws with a descriptive message on 422 (no overlap) or other errors.
- */
-export async function assignPolygon(polygonId: string, polityId: string): Promise<AssignResult> {
-  const res = await fetch(`${API_BASE}/territories/${polygonId}/assign`, {
-    method: 'POST',
-    headers: withWriteSecret({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ polityId }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Assign failed (${res.status}): ${text}`);
-  }
-  return res.json();
 }
 
 export async function fetchHiddenFeatures(): Promise<string[]> {

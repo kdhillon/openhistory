@@ -37,9 +37,6 @@ interface Props {
   onToggleTerritoryLabels: () => void;
   onOpenData: () => void;
   onOpenAbout: () => void;
-  onEditTerritory: () => void;
-  editorMode: boolean;
-  territorySource: 'hb' | 'ohm';
   getOhmEditUrl?: () => string;
   selectedLang: string;
   onLangChange: (lang: string) => void;
@@ -47,8 +44,6 @@ interface Props {
   windowInfo: WindowInfo | null;
   eventsLoading: boolean;
   eventsError: string | null;
-  territoriesLoading: boolean;
-  territoriesError: string | null;
   seedLoading: boolean;
   locationCount: number;
   polityCount: number;
@@ -163,7 +158,7 @@ function ChipGroup({ cats, activeCategories, onToggle }: {
   );
 }
 
-export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showLabels, onToggleLabels, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, onEditTerritory, editorMode, territorySource, getOhmEditUrl, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, territoriesLoading, territoriesError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin, polityPalette, onPolityPaletteChange, maxAdminLevel, onMaxAdminLevelChange, showImperialTerritory, onToggleShowImperialTerritory }: Props) {
+export function CategoryFilter({ activeCategories, onToggle, showBorders, onToggleBorders, showLabels, onToggleLabels, showOtherPolities, onToggleOtherPolities, showTerritoryLabels, onToggleTerritoryLabels, onOpenData, onOpenAbout, getOhmEditUrl, selectedLang, onLangChange, windowInfo, eventsLoading, eventsError, seedLoading, locationCount, polityCount, showRecentEvents, onToggleRecentEvents, showOhm, onToggleOhm, showOhmAdmin, onToggleOhmAdmin, polityPalette, onPolityPaletteChange, maxAdminLevel, onMaxAdminLevelChange, showImperialTerritory, onToggleShowImperialTerritory }: Props) {
   const labelsColor = '#90A4AE';
   const bordersColor = '#607D8B';
   const otherPolitiesColor = '#9C27B0';
@@ -195,11 +190,7 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
         </button>
         <div style={styles.wordmark}>OpenHistory</div>
         <div style={{ flex: 1 }} />
-        {territorySource === 'ohm' ? (
-          <a href="#" onClick={(e) => { e.preventDefault(); window.open(getOhmEditUrl?.() ?? 'https://www.openhistoricalmap.org', '_blank'); }} style={{ ...styles.dataBtn, textDecoration: 'none' }}>Edit Borders ✎</a>
-        ) : (
-          <button onClick={onEditTerritory} style={{ ...styles.dataBtn, ...(editorMode ? styles.dataBtnActive : {}) }}>Edit Borders ✎</button>
-        )}
+        <a href="#" onClick={(e) => { e.preventDefault(); window.open(getOhmEditUrl?.() ?? 'https://www.openhistoricalmap.org', '_blank'); }} style={{ ...styles.dataBtn, textDecoration: 'none' }}>Edit Borders ✎</a>
         <button onClick={onOpenData} style={styles.dataBtn}>Data Explorer ↗</button>
         <button onClick={onOpenAbout} style={styles.dataBtn}>About</button>
         {/* Gear / settings */}
@@ -346,13 +337,7 @@ export function CategoryFilter({ activeCategories, onToggle, showBorders, onTogg
               <span style={styles.statsLabel}>Polities</span>
               {seedLoading ? <Spinner /> : <span style={styles.statsBadge}>{polityCount.toLocaleString()}</span>}
             </div>
-            {/* Territories */}
-            <div style={styles.statsRow}>
-              <span style={styles.statsLabel}>Territories</span>
-              {territoriesLoading ? <Spinner /> : <span style={styles.statsNone}>active</span>}
-            </div>
             {eventsError && <div style={{ fontSize: 11, color: '#c0392b', marginTop: 4 }}>⚠ events: {eventsError}</div>}
-            {territoriesError && <div style={{ fontSize: 11, color: '#c0392b', marginTop: 4 }}>⚠ territories: {territoriesError}</div>}
           </div>
       )}
 
