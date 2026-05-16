@@ -1,0 +1,1631 @@
+=== Backfill started at 2026-05-14T06:23:17Z ===
+[1907] already completed (86 added previously); skipping
+[1906] already completed (114 added previously); skipping
+[1905] already completed (87 added previously); skipping
+
+[1904] counting existing events...
+[1904] 44 events already in DB; running pipeline...
+[1904] done: 44 → 223 (+179)
+[1903] already completed (88 added previously); skipping
+[1902] already completed (102 added previously); skipping
+[1901] already completed (86 added previously); skipping
+
+[1900] counting existing events...
+[1900] 37 events already in DB; running pipeline...
+[1900] done: 37 → 246 (+209)
+[1899] already completed (123 added previously); skipping
+[1898] already completed (133 added previously); skipping
+[1897] already completed (77 added previously); skipping
+[1896] already completed (163 added previously); skipping
+
+[1895] counting existing events...
+[1895] 28 events already in DB; running pipeline...
+[1895] done: 28 → 123 (+95)
+
+[1894] counting existing events...
+[1894] 30 events already in DB; running pipeline...
+[1894] done: 30 → 147 (+117)
+[1893] already completed (76 added previously); skipping
+[1892] already completed (148 added previously); skipping
+[1891] already completed (78 added previously); skipping
+[1890] already completed (81 added previously); skipping
+[1889] already completed (81 added previously); skipping
+[1888] already completed (119 added previously); skipping
+[1887] previous run was partial (? category errors, +1 added); retrying
+
+[1887] counting existing events...
+[1887] 29 events already in DB; running pipeline...
+[1887] done: 29 → 100 (+71)
+[1886] already completed (86 added previously); skipping
+[1885] already completed (81 added previously); skipping
+[1884] already completed (106 added previously); skipping
+[1883] already completed (51 added previously); skipping
+
+[1882] counting existing events...
+[1882] 21 events already in DB; running pipeline...
+[1882] done: 21 → 96 (+75)
+
+[1881] counting existing events...
+[1881] 30 events already in DB; running pipeline...
+[1881] done: 30 → 106 (+76)
+
+[1880] counting existing events...
+[1880] 25 events already in DB; running pipeline...
+[1880] done: 25 → 150 (+125)
+
+[1879] counting existing events...
+[1879] 44 events already in DB; running pipeline...
+[1879] done: 44 → 138 (+94)
+
+[1878] counting existing events...
+[1878] 55 events already in DB; running pipeline...
+[1878] done: 55 → 162 (+107)
+
+[1877] counting existing events...
+[1877] 36 events already in DB; running pipeline...
+[1877] done: 36 → 124 (+88)
+
+[1876] counting existing events...
+[1876] 54 events already in DB; running pipeline...
+[1876] done: 54 → 174 (+120)
+
+[1875] counting existing events...
+[1875] 30 events already in DB; running pipeline...
+[1875] done: 30 → 108 (+78)
+
+[1874] counting existing events...
+[1874] 50 events already in DB; running pipeline...
+[1874] done: 50 → 135 (+85)
+
+[1873] counting existing events...
+[1873] 39 events already in DB; running pipeline...
+[1873] done: 39 → 109 (+70)
+
+[1872] counting existing events...
+[1872] 38 events already in DB; running pipeline...
+[1872] done: 38 → 161 (+123)
+
+[1871] counting existing events...
+[1871] 42 events already in DB; running pipeline...
+[1871] done: 42 → 138 (+96)
+
+[1870] counting existing events...
+[1870] 38 events already in DB; running pipeline...
+[1870] done: 38 → 185 (+147)
+
+[1869] counting existing events...
+[1869] 46 events already in DB; running pipeline...
+[1869] done: 46 → 115 (+69)
+
+[1868] counting existing events...
+[1868] 46 events already in DB; running pipeline...
+[1868] done: 46 → 177 (+131)
+
+[1867] counting existing events...
+[1867] 33 events already in DB; running pipeline...
+[1867] done: 33 → 106 (+73)
+
+[1866] counting existing events...
+[1866] 33 events already in DB; running pipeline...
+[1866] done: 33 → 148 (+115)
+
+[1865] counting existing events...
+[1865] 30 events already in DB; running pipeline...
+[1865] partial: 30 → 114 (+84)  [3 category errors]
+
+[1864] counting existing events...
+[1864] 38 events already in DB; running pipeline...
+[1864] done: 38 → 332 (+294)
+
+[1863] counting existing events...
+[1863] 35 events already in DB; running pipeline...
+[1863] done: 35 → 327 (+292)
+
+[1862] counting existing events...
+[1862] 25 events already in DB; running pipeline...
+[1862] done: 25 → 230 (+205)
+
+[1861] counting existing events...
+[1861] 28 events already in DB; running pipeline...
+[1861] done: 28 → 172 (+144)
+
+[1860] counting existing events...
+[1860] 30 events already in DB; running pipeline...
+[1860] done: 30 → 158 (+128)
+
+[1859] counting existing events...
+[1859] 15 events already in DB; running pipeline...
+[1859] done: 15 → 89 (+74)
+
+[1858] counting existing events...
+[1858] 34 events already in DB; running pipeline...
+[1858] done: 34 → 103 (+69)
+
+[1857] counting existing events...
+[1857] 27 events already in DB; running pipeline...
+[1857] done: 27 → 103 (+76)
+
+[1856] counting existing events...
+[1856] 36 events already in DB; running pipeline...
+[1856] done: 36 → 134 (+98)
+
+[1855] counting existing events...
+[1855] 29 events already in DB; running pipeline...
+[1855] done: 29 → 96 (+67)
+
+[1854] counting existing events...
+[1854] 18 events already in DB; running pipeline...
+[1854] done: 18 → 81 (+63)
+
+[1853] counting existing events...
+[1853] 18 events already in DB; running pipeline...
+[1853] done: 18 → 55 (+37)
+
+[1852] counting existing events...
+[1852] 12 events already in DB; running pipeline...
+[1852] partial: 12 → 80 (+68)  [1 category errors]
+
+[1851] counting existing events...
+[1851] 17 events already in DB; running pipeline...
+[1851] partial: 17 → 54 (+37)  [1 category errors]
+
+[1850] counting existing events...
+[1850] 13 events already in DB; running pipeline...
+[1850] done: 13 → 47 (+34)
+
+[1849] counting existing events...
+[1849] 22 events already in DB; running pipeline...
+[1849] done: 22 → 108 (+86)
+
+[1848] counting existing events...
+[1848] 37 events already in DB; running pipeline...
+[1848] done: 37 → 142 (+105)
+
+[1847] counting existing events...
+[1847] 16 events already in DB; running pipeline...
+[1847] done: 16 → 84 (+68)
+
+[1846] counting existing events...
+[1846] 20 events already in DB; running pipeline...
+[1846] done: 20 → 66 (+46)
+
+[1845] counting existing events...
+[1845] 13 events already in DB; running pipeline...
+[1845] PIPELINE FAILED (exit 1): load_all(events, city_records, pipeline_run=run_tag)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py", line 401, in load_all
+    loaded, skipped = upsert_events(conn, events
+
+[1844] counting existing events...
+[1844] 18 events already in DB; running pipeline...
+[1844] done: 18 → 83 (+65)
+
+[1843] counting existing events...
+[1843] 11 events already in DB; running pipeline...
+[1843] done: 11 → 44 (+33)
+
+[1842] counting existing events...
+[1842] 14 events already in DB; running pipeline...
+[1842] done: 14 → 64 (+50)
+
+[1841] counting existing events...
+[1841] 15 events already in DB; running pipeline...
+[1841] done: 15 → 60 (+45)
+
+[1840] counting existing events...
+[1840] 18 events already in DB; running pipeline...
+[1840] PIPELINE FAILED (exit 1): vents, city_records, pipeline_run=run_tag)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py", line 397, in load_all
+    loaded_qids = upsert_locations(conn, location_records,
+
+[1839] counting existing events...
+[1839] 22 events already in DB; running pipeline...
+[1839] done: 22 → 64 (+42)
+
+[1838] counting existing events...
+[1838] 16 events already in DB; running pipeline...
+[1838] partial: 16 → 81 (+65)  [1 category errors]
+
+[1837] counting existing events...
+[1837] 19 events already in DB; running pipeline...
+[1837] done: 19 → 72 (+53)
+
+[1836] counting existing events...
+[1836] 17 events already in DB; running pipeline...
+[1836] PIPELINE FAILED (exit 1): vents, city_records, pipeline_run=run_tag)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py", line 397, in load_all
+    loaded_qids = upsert_locations(conn, location_records,
+
+[1835] counting existing events...
+[1835] 23 events already in DB; running pipeline...
+[1835] PIPELINE FAILED (exit 1): vents, city_records, pipeline_run=run_tag)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py", line 397, in load_all
+    loaded_qids = upsert_locations(conn, location_records,
+
+[1834] counting existing events...
+[1834] 14 events already in DB; running pipeline...
+[1834] done: 14 → 50 (+36)
+
+[1833] counting existing events...
+[1833] 16 events already in DB; running pipeline...
+[1833] done: 16 → 40 (+24)
+
+[1832] counting existing events...
+[1832] 21 events already in DB; running pipeline...
+[1832] done: 21 → 91 (+70)
+
+[1831] counting existing events...
+[1831] 18 events already in DB; running pipeline...
+[1831] done: 18 → 68 (+50)
+
+[1830] counting existing events...
+[1830] 61 events already in DB; running pipeline...
+[1830] done: 61 → 63 (+2)
+
+[1829] counting existing events...
+[1829] 49 events already in DB; running pipeline...
+[1829] done: 49 → 51 (+2)
+
+[1828] counting existing events...
+[1828] 76 events already in DB; running pipeline...
+[1828] done: 76 → 80 (+4)
+
+[1827] counting existing events...
+[1827] 53 events already in DB; running pipeline...
+[1827] done: 53 → 54 (+1)
+
+[1826] counting existing events...
+[1826] 75 events already in DB; running pipeline...
+[1826] done: 75 → 80 (+5)
+
+[1825] counting existing events...
+[1825] 60 events already in DB; running pipeline...
+[1825] done: 60 → 62 (+2)
+
+[1824] counting existing events...
+[1824] 73 events already in DB; running pipeline...
+[1824] done: 73 → 73 (+0)
+
+[1823] counting existing events...
+[1823] 54 events already in DB; running pipeline...
+[1823] done: 54 → 55 (+1)
+
+[1822] counting existing events...
+[1822] 58 events already in DB; running pipeline...
+[1822] done: 58 → 59 (+1)
+
+[1821] counting existing events...
+[1821] 76 events already in DB; running pipeline...
+[1821] PIPELINE FAILED (exit 1): events, city_records, pipeline_run=run_tag)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py", line 401, in load_all
+    loaded, skipped = upsert_events(conn, events, pipelin
+
+[1820] counting existing events...
+[1820] 98 events already in DB; running pipeline...
+[1820] done: 98 → 98 (+0)
+
+[1819] counting existing events...
+[1819] 42 events already in DB; running pipeline...
+[1819] done: 42 → 43 (+1)
+
+[1818] counting existing events...
+[1818] 62 events already in DB; running pipeline...
+[1818] done: 62 → 65 (+3)
+
+[1817] counting existing events...
+[1817] 60 events already in DB; running pipeline...
+[1817] done: 60 → 62 (+2)
+
+[1816] counting existing events...
+[1816] 86 events already in DB; running pipeline...
+[1816] done: 86 → 87 (+1)
+
+[1815] counting existing events...
+[1815] 94 events already in DB; running pipeline...
+[1815] done: 94 → 96 (+2)
+
+[1814] counting existing events...
+[1814] 165 events already in DB; running pipeline...
+[1814] PIPELINE FAILED (exit 1): all(events, city_records, pipeline_run=run_tag)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py", line 397, in load_all
+    loaded_qids = upsert_locations(conn, location_rec
+
+[1813] counting existing events...
+[1813] 160 events already in DB; running pipeline...
+[1813] done: 160 → 163 (+3)
+
+[1812] counting existing events...
+[1812] 163 events already in DB; running pipeline...
+[1812] done: 163 → 165 (+2)
+
+[1811] counting existing events...
+[1811] 92 events already in DB; running pipeline...
+[1811] done: 92 → 93 (+1)
+
+[1810] counting existing events...
+[1810] 97 events already in DB; running pipeline...
+[1810] done: 97 → 98 (+1)
+
+[1809] counting existing events...
+[1809] 129 events already in DB; running pipeline...
+[1809] done: 129 → 131 (+2)
+
+[1808] counting existing events...
+[1808] 146 events already in DB; running pipeline...
+[1808] done: 146 → 147 (+1)
+
+[1807] counting existing events...
+[1807] 74 events already in DB; running pipeline...
+[1807] done: 74 → 74 (+0)
+
+[1806] counting existing events...
+[1806] 80 events already in DB; running pipeline...
+[1806] done: 80 → 80 (+0)
+
+[1805] counting existing events...
+[1805] 66 events already in DB; running pipeline...
+[1805] done: 66 → 70 (+4)
+
+[1804] counting existing events...
+[1804] 84 events already in DB; running pipeline...
+[1804] done: 84 → 84 (+0)
+
+[1803] counting existing events...
+[1803] 56 events already in DB; running pipeline...
+[1803] done: 56 → 56 (+0)
+
+[1802] counting existing events...
+[1802] 48 events already in DB; running pipeline...
+[1802] partial: 48 → 49 (+1)  [1 category errors]
+
+[1801] counting existing events...
+[1801] 71 events already in DB; running pipeline...
+[1801] done: 71 → 73 (+2)
+
+[1800] counting existing events...
+[1800] 96 events already in DB; running pipeline...
+[1800] done: 96 → 121 (+25)
+
+[1799] counting existing events...
+[1799] 92 events already in DB; running pipeline...
+[1799] done: 92 → 93 (+1)
+
+[1798] counting existing events...
+[1798] 103 events already in DB; running pipeline...
+[1798] done: 103 → 103 (+0)
+
+[1797] counting existing events...
+[1797] 59 events already in DB; running pipeline...
+[1797] done: 59 → 59 (+0)
+
+[1796] counting existing events...
+[1796] 105 events already in DB; running pipeline...
+[1796] done: 105 → 107 (+2)
+
+[1795] counting existing events...
+[1795] 59 events already in DB; running pipeline...
+[1795] done: 59 → 61 (+2)
+
+[1794] counting existing events...
+[1794] 110 events already in DB; running pipeline...
+[1794] done: 110 → 111 (+1)
+
+[1793] counting existing events...
+[1793] 118 events already in DB; running pipeline...
+[1793] done: 118 → 121 (+3)
+
+[1792] counting existing events...
+[1792] 75 events already in DB; running pipeline...
+[1792] done: 75 → 75 (+0)
+
+[1791] counting existing events...
+[1791] 48 events already in DB; running pipeline...
+[1791] done: 48 → 49 (+1)
+
+[1790] counting existing events...
+[1790] 68 events already in DB; running pipeline...
+[1790] done: 68 → 71 (+3)
+
+[1789] counting existing events...
+[1789] 57 events already in DB; running pipeline...
+[1789] done: 57 → 57 (+0)
+
+[1788] counting existing events...
+[1788] 45 events already in DB; running pipeline...
+[1788] done: 45 → 45 (+0)
+
+[1787] counting existing events...
+[1787] 27 events already in DB; running pipeline...
+[1787] done: 27 → 27 (+0)
+
+[1786] counting existing events...
+[1786] 21 events already in DB; running pipeline...
+[1786] done: 21 → 23 (+2)
+
+[1785] counting existing events...
+[1785] 22 events already in DB; running pipeline...
+[1785] done: 22 → 22 (+0)
+
+[1784] counting existing events...
+[1784] 23 events already in DB; running pipeline...
+[1784] done: 23 → 24 (+1)
+
+[1783] counting existing events...
+[1783] 32 events already in DB; running pipeline...
+[1783] done: 32 → 32 (+0)
+
+=== Summary ===
+Year   Status     Before   After   Added  Notes
+1907   ok             53     139      86
+1906   ok             41     155     114
+1905   ok             42     129      87
+1904   ok             44     223     179
+1903   ok             37     125      88
+1902   ok             24     126     102
+1901   ok             27     113      86
+1900   ok             37     246     209
+1899   ok             41     164     123
+1898   ok             42     175     133
+1897   ok             26     103      77
+1896   ok             30     193     163
+1895   ok             28     123      95
+1894   ok             30     147     117
+1893   ok             33     109      76
+1892   ok             26     174     148
+1891   ok             29     107      78
+1890   ok             35     116      81
+1889   ok             30     111      81
+1888   ok             23     142     119
+1887   ok             29     100      71
+1886   ok             32     118      86
+1885   ok             25     106      81
+1884   ok             33     139     106
+1883   ok             24      75      51
+1882   ok             21      96      75
+1881   ok             30     106      76
+1880   ok             25     150     125
+1879   ok             44     138      94
+1878   ok             55     162     107
+1877   ok             36     124      88
+1876   ok             54     174     120
+1875   ok             30     108      78
+1874   ok             50     135      85
+1873   ok             39     109      70
+1872   ok             38     161     123
+1871   ok             42     138      96
+1870   ok             38     185     147
+1869   ok             46     115      69
+1868   ok             46     177     131
+1867   ok             33     106      73
+1866   ok             33     148     115
+1865   partial        30     114      84  3 category errors — retry later
+1864   ok             38     332     294
+1863   ok             35     327     292
+1862   ok             25     230     205
+1861   ok             28     172     144
+1860   ok             30     158     128
+1859   ok             15      89      74
+1858   ok             34     103      69
+1857   ok             27     103      76
+1856   ok             36     134      98
+1855   ok             29      96      67
+1854   ok             18      81      63
+1853   ok             18      55      37
+1852   partial        12      80      68  1 category errors — retry later
+1851   partial        17      54      37  1 category errors — retry later
+1850   ok             13      47      34
+1849   ok             22     108      86
+1848   ok             37     142     105
+1847   ok             16      84      68
+1846   ok             20      66      46
+1845   failed         13       —       —  (pipeline: load_all(events, city_records, pipeline_run=run_tag)
+  File …)
+1844   ok             18      83      65
+1843   ok             11      44      33
+1842   ok             14      64      50
+1841   ok             15      60      45
+1840   failed         18       —       —  (pipeline: vents, city_records, pipeline_run=run_tag)
+  File "/Users/kd…)
+1839   ok             22      64      42
+1838   partial        16      81      65  1 category errors — retry later
+1837   ok             19      72      53
+1836   failed         17       —       —  (pipeline: vents, city_records, pipeline_run=run_tag)
+  File "/Users/kd…)
+1835   failed         23       —       —  (pipeline: vents, city_records, pipeline_run=run_tag)
+  File "/Users/kd…)
+1834   ok             14      50      36
+1833   ok             16      40      24
+1832   ok             21      91      70
+1831   ok             18      68      50
+1830   ok             61      63       2
+1829   ok             49      51       2
+1828   ok             76      80       4
+1827   ok             53      54       1
+1826   ok             75      80       5
+1825   ok             60      62       2
+1824   ok             73      73       0
+1823   ok             54      55       1
+1822   ok             58      59       1
+1821   failed         76       —       —  (pipeline: events, city_records, pipeline_run=run_tag)
+  File "/Users/k…)
+1820   ok             98      98       0
+1819   ok             42      43       1
+1818   ok             62      65       3
+1817   ok             60      62       2
+1816   ok             86      87       1
+1815   ok             94      96       2
+1814   failed        165       —       —  (pipeline: all(events, city_records, pipeline_run=run_tag)
+  File "/Use…)
+1813   ok            160     163       3
+1812   ok            163     165       2
+1811   ok             92      93       1
+1810   ok             97      98       1
+1809   ok            129     131       2
+1808   ok            146     147       1
+1807   ok             74      74       0
+1806   ok             80      80       0
+1805   ok             66      70       4
+1804   ok             84      84       0
+1803   ok             56      56       0
+1802   partial        48      49       1  1 category errors — retry later
+1801   ok             71      73       2
+1800   ok             96     121      25
+1799   ok             92      93       1
+1798   ok            103     103       0
+1797   ok             59      59       0
+1796   ok            105     107       2
+1795   ok             59      61       2
+1794   ok            110     111       1
+1793   ok            118     121       3
+1792   ok             75      75       0
+1791   ok             48      49       1
+1790   ok             68      71       3
+1789   ok             57      57       0
+1788   ok             45      45       0
+1787   ok             27      27       0
+1786   ok             21      23       2
+1785   ok             22      22       0
+1784   ok             23      24       1
+1783   ok             32      32       0
+=== Retry of failed/partial years started at 2026-05-14T17:24:30Z ===
+[1865] previous run was partial (3 category errors, +84 added); retrying
+
+[1865] counting existing events...
+[1865] 114 events already in DB; running pipeline...
+[1865] done: 114 → 163 (+49)
+[1864] already completed (294 added previously); skipping
+[1863] already completed (292 added previously); skipping
+[1862] already completed (205 added previously); skipping
+[1861] already completed (144 added previously); skipping
+[1860] already completed (128 added previously); skipping
+[1859] already completed (74 added previously); skipping
+[1858] already completed (69 added previously); skipping
+[1857] already completed (76 added previously); skipping
+[1856] already completed (98 added previously); skipping
+[1855] already completed (67 added previously); skipping
+[1854] already completed (63 added previously); skipping
+[1853] already completed (37 added previously); skipping
+[1852] previous run was partial (1 category errors, +68 added); retrying
+
+[1852] counting existing events...
+[1852] 80 events already in DB; running pipeline...
+[1852] done: 80 → 80 (+0)
+[1851] previous run was partial (1 category errors, +37 added); retrying
+
+[1851] counting existing events...
+[1851] 54 events already in DB; running pipeline...
+[1851] done: 54 → 54 (+0)
+[1850] already completed (34 added previously); skipping
+[1849] already completed (86 added previously); skipping
+[1848] already completed (105 added previously); skipping
+[1847] already completed (68 added previously); skipping
+[1846] already completed (46 added previously); skipping
+
+[1845] counting existing events...
+[1845] 13 events already in DB; running pipeline...
+[1845] done: 13 → 52 (+39)
+[1844] already completed (65 added previously); skipping
+[1843] already completed (33 added previously); skipping
+[1842] already completed (50 added previously); skipping
+[1841] already completed (45 added previously); skipping
+
+[1840] counting existing events...
+[1840] 18 events already in DB; running pipeline...
+[1840] done: 18 → 91 (+73)
+[1839] already completed (42 added previously); skipping
+[1838] previous run was partial (1 category errors, +65 added); retrying
+
+[1838] counting existing events...
+[1838] 81 events already in DB; running pipeline...
+[1838] done: 81 → 81 (+0)
+[1837] already completed (53 added previously); skipping
+
+[1836] counting existing events...
+[1836] 17 events already in DB; running pipeline...
+[1836] done: 17 → 97 (+80)
+
+[1835] counting existing events...
+[1835] 23 events already in DB; running pipeline...
+[1835] done: 23 → 73 (+50)
+[1834] already completed (36 added previously); skipping
+[1833] already completed (24 added previously); skipping
+[1832] already completed (70 added previously); skipping
+[1831] already completed (50 added previously); skipping
+[1830] already completed (2 added previously); skipping
+[1829] already completed (2 added previously); skipping
+[1828] already completed (4 added previously); skipping
+[1827] already completed (1 added previously); skipping
+[1826] already completed (5 added previously); skipping
+[1825] already completed (2 added previously); skipping
+[1824] already completed (0 added previously); skipping
+[1823] already completed (1 added previously); skipping
+[1822] already completed (1 added previously); skipping
+
+[1821] counting existing events...
+[1821] 76 events already in DB; running pipeline...
+[1821] done: 76 → 78 (+2)
+[1820] already completed (0 added previously); skipping
+[1819] already completed (1 added previously); skipping
+[1818] already completed (3 added previously); skipping
+[1817] already completed (2 added previously); skipping
+[1816] already completed (1 added previously); skipping
+[1815] already completed (2 added previously); skipping
+
+[1814] counting existing events...
+[1814] 165 events already in DB; running pipeline...
+[1814] done: 165 → 167 (+2)
+[1813] already completed (3 added previously); skipping
+[1812] already completed (2 added previously); skipping
+[1811] already completed (1 added previously); skipping
+[1810] already completed (1 added previously); skipping
+[1809] already completed (2 added previously); skipping
+[1808] already completed (1 added previously); skipping
+[1807] already completed (0 added previously); skipping
+[1806] already completed (0 added previously); skipping
+[1805] already completed (4 added previously); skipping
+[1804] already completed (0 added previously); skipping
+[1803] already completed (0 added previously); skipping
+[1802] previous run was partial (1 category errors, +1 added); retrying
+
+[1802] counting existing events...
+[1802] 49 events already in DB; running pipeline...
+[1802] done: 49 → 49 (+0)
+
+=== Summary ===
+Year   Status     Before   After   Added  Notes
+1865   ok            114     163      49
+1864   ok             38     332     294
+1863   ok             35     327     292
+1862   ok             25     230     205
+1861   ok             28     172     144
+1860   ok             30     158     128
+1859   ok             15      89      74
+1858   ok             34     103      69
+1857   ok             27     103      76
+1856   ok             36     134      98
+1855   ok             29      96      67
+1854   ok             18      81      63
+1853   ok             18      55      37
+1852   ok             80      80       0
+1851   ok             54      54       0
+1850   ok             13      47      34
+1849   ok             22     108      86
+1848   ok             37     142     105
+1847   ok             16      84      68
+1846   ok             20      66      46
+1845   ok             13      52      39
+1844   ok             18      83      65
+1843   ok             11      44      33
+1842   ok             14      64      50
+1841   ok             15      60      45
+1840   ok             18      91      73
+1839   ok             22      64      42
+1838   ok             81      81       0
+1837   ok             19      72      53
+1836   ok             17      97      80
+1835   ok             23      73      50
+1834   ok             14      50      36
+1833   ok             16      40      24
+1832   ok             21      91      70
+1831   ok             18      68      50
+1830   ok             61      63       2
+1829   ok             49      51       2
+1828   ok             76      80       4
+1827   ok             53      54       1
+1826   ok             75      80       5
+1825   ok             60      62       2
+1824   ok             73      73       0
+1823   ok             54      55       1
+1822   ok             58      59       1
+1821   ok             76      78       2
+1820   ok             98      98       0
+1819   ok             42      43       1
+1818   ok             62      65       3
+1817   ok             60      62       2
+1816   ok             86      87       1
+1815   ok             94      96       2
+1814   ok            165     167       2
+1813   ok            160     163       3
+1812   ok            163     165       2
+1811   ok             92      93       1
+1810   ok             97      98       1
+1809   ok            129     131       2
+1808   ok            146     147       1
+1807   ok             74      74       0
+1806   ok             80      80       0
+1805   ok             66      70       4
+1804   ok             84      84       0
+1803   ok             56      56       0
+1802   ok             49      49       0
+=== 20th century backfill (ascending 1913→2000) started at 2026-05-14T18:00:25Z ===
+
+[1913] counting existing events...
+[1913] 172 events already in DB; running pipeline...
+[1913] done: 172 → 172 (+0)
+
+[1914] counting existing events...
+[1914] 260 events already in DB; running pipeline...
+[1914] done: 260 → 371 (+111)
+
+[1915] counting existing events...
+[1915] 223 events already in DB; running pipeline...
+[1915] done: 223 → 293 (+70)
+
+[1916] counting existing events...
+[1916] 276 events already in DB; running pipeline...
+[1916] done: 276 → 410 (+134)
+
+[1917] counting existing events...
+[1917] 245 events already in DB; running pipeline...
+[1917] done: 245 → 298 (+53)
+
+[1918] counting existing events...
+[1918] 342 events already in DB; running pipeline...
+[1918] done: 342 → 475 (+133)
+
+[1919] counting existing events...
+[1919] 103 events already in DB; running pipeline...
+[1919] done: 103 → 312 (+209)
+
+[1920] counting existing events...
+[1920] 106 events already in DB; running pipeline...
+[1920] done: 106 → 435 (+329)
+
+[1921] counting existing events...
+[1921] 93 events already in DB; running pipeline...
+[1921] done: 93 → 208 (+115)
+
+[1922] counting existing events...
+[1922] 63 events already in DB; running pipeline...
+[1922] done: 63 → 246 (+183)
+
+[1923] counting existing events...
+[1923] 56 events already in DB; running pipeline...
+[1923] done: 56 → 140 (+84)
+
+[1924] counting existing events...
+[1924] 46 events already in DB; running pipeline...
+[1924] done: 46 → 242 (+196)
+
+[1925] counting existing events...
+[1925] 48 events already in DB; running pipeline...
+[1925] done: 48 → 158 (+110)
+
+[1926] counting existing events...
+[1926] 49 events already in DB; running pipeline...
+[1926] done: 49 → 182 (+133)
+
+[1927] counting existing events...
+[1927] 49 events already in DB; running pipeline...
+[1927] done: 49 → 153 (+104)
+
+[1928] counting existing events...
+[1928] 41 events already in DB; running pipeline...
+[1928] done: 41 → 263 (+222)
+
+[1929] counting existing events...
+[1929] 47 events already in DB; running pipeline...
+[1929] done: 47 → 166 (+119)
+
+[1930] counting existing events...
+[1930] 56 events already in DB; running pipeline...
+[1930] done: 56 → 229 (+173)
+
+[1931] counting existing events...
+[1931] 39 events already in DB; running pipeline...
+[1931] done: 39 → 176 (+137)
+
+[1932] counting existing events...
+[1932] 62 events already in DB; running pipeline...
+[1932] done: 62 → 284 (+222)
+
+[1933] counting existing events...
+[1933] 55 events already in DB; running pipeline...
+[1933] done: 55 → 181 (+126)
+
+[1934] counting existing events...
+[1934] 54 events already in DB; running pipeline...
+=== Resume started at 2026-05-14T19:10:11Z ===
+
+[1934] counting existing events...
+[1934] 54 events already in DB; running pipeline...
+[1934] done: 54 → 225 (+171)
+[1933] already completed (126 added previously); skipping
+[1932] already completed (222 added previously); skipping
+[1931] already completed (137 added previously); skipping
+[1930] already completed (173 added previously); skipping
+[1929] already completed (119 added previously); skipping
+[1928] already completed (222 added previously); skipping
+[1927] already completed (104 added previously); skipping
+[1926] already completed (133 added previously); skipping
+[1925] already completed (110 added previously); skipping
+[1924] already completed (196 added previously); skipping
+[1923] already completed (84 added previously); skipping
+[1922] already completed (183 added previously); skipping
+[1921] already completed (115 added previously); skipping
+[1920] already completed (329 added previously); skipping
+[1919] already completed (209 added previously); skipping
+[1918] already completed (133 added previously); skipping
+[1917] already completed (53 added previously); skipping
+[1916] already completed (134 added previously); skipping
+[1915] already completed (70 added previously); skipping
+[1914] already completed (111 added previously); skipping
+[1913] already completed (0 added previously); skipping
+[1912] already completed (200 added previously); skipping
+[1911] already completed (123 added previously); skipping
+[1910] already completed (125 added previously); skipping
+[1909] already completed (67 added previously); skipping
+[1908] already completed (158 added previously); skipping
+[1907] already completed (86 added previously); skipping
+[1906] already completed (114 added previously); skipping
+[1905] already completed (87 added previously); skipping
+[1904] already completed (179 added previously); skipping
+[1903] already completed (88 added previously); skipping
+[1902] already completed (102 added previously); skipping
+[1901] already completed (86 added previously); skipping
+[1900] already completed (209 added previously); skipping
+[1899] already completed (123 added previously); skipping
+[1898] already completed (133 added previously); skipping
+[1897] already completed (77 added previously); skipping
+[1896] already completed (163 added previously); skipping
+[1895] already completed (95 added previously); skipping
+[1894] already completed (117 added previously); skipping
+[1893] already completed (76 added previously); skipping
+[1892] already completed (148 added previously); skipping
+[1891] already completed (78 added previously); skipping
+[1890] already completed (81 added previously); skipping
+[1889] already completed (81 added previously); skipping
+[1888] already completed (119 added previously); skipping
+[1887] already completed (71 added previously); skipping
+[1886] already completed (86 added previously); skipping
+[1885] already completed (81 added previously); skipping
+[1884] already completed (106 added previously); skipping
+[1883] already completed (51 added previously); skipping
+[1882] already completed (75 added previously); skipping
+[1881] already completed (76 added previously); skipping
+[1880] already completed (125 added previously); skipping
+[1879] already completed (94 added previously); skipping
+[1878] already completed (107 added previously); skipping
+[1877] already completed (88 added previously); skipping
+[1876] already completed (120 added previously); skipping
+[1875] already completed (78 added previously); skipping
+[1874] already completed (85 added previously); skipping
+[1873] already completed (70 added previously); skipping
+[1872] already completed (123 added previously); skipping
+[1871] already completed (96 added previously); skipping
+[1870] already completed (147 added previously); skipping
+[1869] already completed (69 added previously); skipping
+[1868] already completed (131 added previously); skipping
+[1867] already completed (73 added previously); skipping
+[1866] already completed (115 added previously); skipping
+[1865] already completed (49 added previously); skipping
+[1864] already completed (294 added previously); skipping
+[1863] already completed (292 added previously); skipping
+[1862] already completed (205 added previously); skipping
+[1861] already completed (144 added previously); skipping
+[1860] already completed (128 added previously); skipping
+[1859] already completed (74 added previously); skipping
+[1858] already completed (69 added previously); skipping
+[1857] already completed (76 added previously); skipping
+[1856] already completed (98 added previously); skipping
+[1855] already completed (67 added previously); skipping
+[1854] already completed (63 added previously); skipping
+[1853] already completed (37 added previously); skipping
+[1852] already completed (0 added previously); skipping
+[1851] already completed (0 added previously); skipping
+[1850] already completed (34 added previously); skipping
+[1849] already completed (86 added previously); skipping
+[1848] already completed (105 added previously); skipping
+[1847] already completed (68 added previously); skipping
+[1846] already completed (46 added previously); skipping
+[1845] already completed (39 added previously); skipping
+[1844] already completed (65 added previously); skipping
+[1843] already completed (33 added previously); skipping
+
+=== Summary ===
+Year   Status     Before   After   Added  Notes
+1934   ok             54     225     171
+1933   ok             55     181     126
+1932   ok             62     284     222
+1931   ok             39     176     137
+1930   ok             56     229     173
+1929   ok             47     166     119
+1928   ok             41     263     222
+1927   ok             49     153     104
+1926   ok             49     182     133
+1925   ok             48     158     110
+1924   ok             46     242     196
+1923   ok             56     140      84
+1922   ok             63     246     183
+1921   ok             93     208     115
+1920   ok            106     435     329
+1919   ok            103     312     209
+1918   ok            342     475     133
+1917   ok            245     298      53
+1916   ok            276     410     134
+1915   ok            223     293      70
+1914   ok            260     371     111
+1913   ok            172     172       0
+1912   ok             60     260     200
+1911   ok             62     185     123
+1910   ok             49     174     125
+1909   ok             52     119      67
+1908   ok             46     204     158
+1907   ok             53     139      86
+1906   ok             41     155     114
+1905   ok             42     129      87
+1904   ok             44     223     179
+1903   ok             37     125      88
+1902   ok             24     126     102
+1901   ok             27     113      86
+1900   ok             37     246     209
+1899   ok             41     164     123
+1898   ok             42     175     133
+1897   ok             26     103      77
+1896   ok             30     193     163
+1895   ok             28     123      95
+1894   ok             30     147     117
+1893   ok             33     109      76
+1892   ok             26     174     148
+1891   ok             29     107      78
+1890   ok             35     116      81
+1889   ok             30     111      81
+1888   ok             23     142     119
+1887   ok             29     100      71
+1886   ok             32     118      86
+1885   ok             25     106      81
+1884   ok             33     139     106
+1883   ok             24      75      51
+1882   ok             21      96      75
+1881   ok             30     106      76
+1880   ok             25     150     125
+1879   ok             44     138      94
+1878   ok             55     162     107
+1877   ok             36     124      88
+1876   ok             54     174     120
+1875   ok             30     108      78
+1874   ok             50     135      85
+1873   ok             39     109      70
+1872   ok             38     161     123
+1871   ok             42     138      96
+1870   ok             38     185     147
+1869   ok             46     115      69
+1868   ok             46     177     131
+1867   ok             33     106      73
+1866   ok             33     148     115
+1865   ok            114     163      49
+1864   ok             38     332     294
+1863   ok             35     327     292
+1862   ok             25     230     205
+1861   ok             28     172     144
+1860   ok             30     158     128
+1859   ok             15      89      74
+1858   ok             34     103      69
+1857   ok             27     103      76
+1856   ok             36     134      98
+1855   ok             29      96      67
+1854   ok             18      81      63
+1853   ok             18      55      37
+1852   ok             80      80       0
+1851   ok             54      54       0
+1850   ok             13      47      34
+1849   ok             22     108      86
+1848   ok             37     142     105
+1847   ok             16      84      68
+1846   ok             20      66      46
+1845   ok             13      52      39
+1844   ok             18      83      65
+1843   ok             11      44      33
+=== Resume v2 (ascending) at 2026-05-14T19:13:21Z ===
+
+[1935] counting existing events...
+[1935] 39 events already in DB; running pipeline...
+[1935] done: 39 → 148 (+109)
+
+[1936] counting existing events...
+[1936] 99 events already in DB; running pipeline...
+[1936] done: 99 → 336 (+237)
+
+[1937] counting existing events...
+[1937] 68 events already in DB; running pipeline...
+[1937] partial: 68 → 198 (+130)  [1 category errors]
+
+[1938] counting existing events...
+[1938] 54 events already in DB; running pipeline...
+[1938] done: 54 → 240 (+186)
+
+[1939] counting existing events...
+[1939] 84 events already in DB; running pipeline...
+[1939] done: 84 → 286 (+202)
+
+[1940] counting existing events...
+[1940] 86 events already in DB; running pipeline...
+[1940] done: 86 → 435 (+349)
+
+[1941] counting existing events...
+[1941] 123 events already in DB; running pipeline...
+[1941] done: 123 → 387 (+264)
+
+[1942] counting existing events...
+[1942] 97 events already in DB; running pipeline...
+[1942] done: 97 → 425 (+328)
+
+[1943] counting existing events...
+[1943] 102 events already in DB; running pipeline...
+[1943] done: 102 → 403 (+301)
+
+[1944] counting existing events...
+[1944] 112 events already in DB; running pipeline...
+[1944] done: 112 → 585 (+473)
+
+[1945] counting existing events...
+[1945] 110 events already in DB; running pipeline...
+[1945] done: 110 → 429 (+319)
+
+[1946] counting existing events...
+[1946] 99 events already in DB; running pipeline...
+[1946] done: 99 → 364 (+265)
+
+[1947] counting existing events...
+[1947] 68 events already in DB; running pipeline...
+[1947] done: 68 → 218 (+150)
+
+[1948] counting existing events...
+[1948] 70 events already in DB; running pipeline...
+[1948] done: 70 → 337 (+267)
+
+[1949] counting existing events...
+[1949] 62 events already in DB; running pipeline...
+[1949] done: 62 → 215 (+153)
+
+[1950] counting existing events...
+[1950] 46 events already in DB; running pipeline...
+[1950] done: 46 → 323 (+277)
+
+[1951] counting existing events...
+[1951] 36 events already in DB; running pipeline...
+[1951] done: 36 → 206 (+170)
+
+[1952] counting existing events...
+[1952] 58 events already in DB; running pipeline...
+[1952] done: 58 → 329 (+271)
+
+[1953] counting existing events...
+[1953] 43 events already in DB; running pipeline...
+[1953] done: 43 → 198 (+155)
+
+[1954] counting existing events...
+[1954] 36 events already in DB; running pipeline...
+[1954] done: 36 → 249 (+213)
+
+[1955] counting existing events...
+[1955] 44 events already in DB; running pipeline...
+[1955] done: 44 → 182 (+138)
+
+[1956] counting existing events...
+[1956] 55 events already in DB; running pipeline...
+[1956] done: 55 → 320 (+265)
+
+[1957] counting existing events...
+[1957] 46 events already in DB; running pipeline...
+[1957] done: 46 → 210 (+164)
+
+[1958] counting existing events...
+[1958] 46 events already in DB; running pipeline...
+[1958] done: 46 → 265 (+219)
+
+[1959] counting existing events...
+[1959] 51 events already in DB; running pipeline...
+[1959] done: 51 → 203 (+152)
+
+[1960] counting existing events...
+[1960] 53 events already in DB; running pipeline...
+[1960] partial: 53 → 319 (+266)  [1 category errors]
+
+[1961] counting existing events...
+[1961] 52 events already in DB; running pipeline...
+[1961] done: 52 → 200 (+148)
+
+[1962] counting existing events...
+[1962] 51 events already in DB; running pipeline...
+[1962] done: 51 → 296 (+245)
+
+[1963] counting existing events...
+[1963] 55 events already in DB; running pipeline...
+[1963] done: 55 → 231 (+176)
+
+[1964] counting existing events...
+[1964] 58 events already in DB; running pipeline...
+[1964] done: 58 → 367 (+309)
+
+[1965] counting existing events...
+[1965] 51 events already in DB; running pipeline...
+[1965] done: 51 → 228 (+177)
+
+[1966] counting existing events...
+[1966] 57 events already in DB; running pipeline...
+[1966] done: 57 → 287 (+230)
+
+[1967] counting existing events...
+[1967] 55 events already in DB; running pipeline...
+[1967] done: 55 → 295 (+240)
+
+[1968] counting existing events...
+[1968] 79 events already in DB; running pipeline...
+[1968] done: 79 → 446 (+367)
+
+[1969] counting existing events...
+[1969] 58 events already in DB; running pipeline...
+[1969] done: 58 → 230 (+172)
+
+[1970] counting existing events...
+[1970] 75 events already in DB; running pipeline...
+[1970] done: 75 → 359 (+284)
+
+[1971] counting existing events...
+[1971] 83 events already in DB; running pipeline...
+[1971] done: 83 → 323 (+240)
+
+[1972] counting existing events...
+[1972] 81 events already in DB; running pipeline...
+[1972] done: 81 → 374 (+293)
+
+[1973] counting existing events...
+[1973] 69 events already in DB; running pipeline...
+[1973] done: 69 → 392 (+323)
+
+[1974] counting existing events...
+[1974] 80 events already in DB; running pipeline...
+[1974] done: 80 → 402 (+322)
+
+[1975] counting existing events...
+[1975] 94 events already in DB; running pipeline...
+[1975] done: 94 → 285 (+191)
+
+[1976] counting existing events...
+[1976] 67 events already in DB; running pipeline...
+[1976] done: 67 → 418 (+351)
+
+[1977] counting existing events...
+[1977] 68 events already in DB; running pipeline...
+[1977] done: 68 → 307 (+239)
+
+[1978] counting existing events...
+[1978] 75 events already in DB; running pipeline...
+[1978] done: 75 → 405 (+330)
+
+[1979] counting existing events...
+[1979] 86 events already in DB; running pipeline...
+[1979] done: 86 → 415 (+329)
+
+[1980] counting existing events...
+[1980] 84 events already in DB; running pipeline...
+[1980] done: 84 → 484 (+400)
+
+[1981] counting existing events...
+[1981] 71 events already in DB; running pipeline...
+[1981] PIPELINE FAILED (exit 1): cations(conn, location_records, pipeline_run)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py", line 119, in upsert_locations
+    cur.execute("RELEASE SAVEPOINT loc_row")
+ps
+
+[1982] counting existing events...
+[1982] 85 events already in DB; running pipeline...
+[1982] done: 85 → 429 (+344)
+
+[1983] counting existing events...
+[1983] 76 events already in DB; running pipeline...
+[1983] partial: 76 → 150 (+74)  [1 category errors]
+
+[1984] counting existing events...
+[1984] 68 events already in DB; running pipeline...
+[1984] done: 68 → 442 (+374)
+
+[1985] counting existing events...
+[1985] 76 events already in DB; running pipeline...
+[1985] done: 76 → 377 (+301)
+
+[1986] counting existing events...
+[1986] 65 events already in DB; running pipeline...
+[1986] done: 65 → 436 (+371)
+
+[1987] counting existing events...
+[1987] 81 events already in DB; running pipeline...
+[1987] done: 81 → 397 (+316)
+
+[1988] counting existing events...
+[1988] 84 events already in DB; running pipeline...
+[1988] done: 84 → 475 (+391)
+
+[1989] counting existing events...
+[1989] 74 events already in DB; running pipeline...
+[1989] done: 74 → 393 (+319)
+
+[1990] counting existing events...
+[1990] 96 events already in DB; running pipeline...
+[1990] done: 96 → 587 (+491)
+
+[1991] counting existing events...
+[1991] 112 events already in DB; running pipeline...
+[1991] done: 112 → 570 (+458)
+
+[1992] counting existing events...
+[1992] 131 events already in DB; running pipeline...
+[1992] done: 131 → 643 (+512)
+
+[1993] counting existing events...
+[1993] 98 events already in DB; running pipeline...
+[1993] done: 98 → 397 (+299)
+
+[1994] counting existing events...
+[1994] 106 events already in DB; running pipeline...
+[1994] done: 106 → 598 (+492)
+
+[1995] counting existing events...
+[1995] 68 events already in DB; running pipeline...
+[1995] PIPELINE FAILED (exit 1): psert_locations(conn, location_records, pipeline_run)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py", line 116, in upsert_locations
+    cur.execute("SAVEPOINT loc_row")
+ps
+
+[1996] counting existing events...
+[1996] 98 events already in DB; running pipeline...
+[1996] PIPELINE FAILED (exit 1): 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/kdhillon/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(req
+
+[1997] counting existing events...
+[1997] 74 events already in DB; running pipeline...
+[1997] partial: 74 → 319 (+245)  [2 category errors]
+
+[1998] counting existing events...
+[1998] 81 events already in DB; running pipeline...
+[1998] done: 81 → 654 (+573)
+
+[1999] counting existing events...
+[1999] 105 events already in DB; running pipeline...
+[1999] partial: 105 → 798 (+693)  [1 category errors]
+
+[2000] counting existing events...
+[2000] 117 events already in DB; running pipeline...
+[2000] done: 117 → 726 (+609)
+
+[2001] counting existing events...
+[2001] 4 events already in DB; running pipeline...
+[2001] PIPELINE FAILED (exit 1): ipped = upsert_events(conn, events, pipeline_run)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py", line 278, in upsert_events
+    cur.execute("RELEASE SAVEPOINT ev_row")
+ps
+
+[2002] counting existing events...
+[2002] 2 events already in DB; running pipeline...
+[2002] done: 2 → 699 (+697)
+
+[2003] counting existing events...
+[2003] 1 events already in DB; running pipeline...
+[2003] done: 1 → 760 (+759)
+
+[2004] counting existing events...
+[2004] 3 events already in DB; running pipeline...
+[2004] done: 3 → 863 (+860)
+
+[2005] counting existing events...
+[2005] 2 events already in DB; running pipeline...
+[2005] done: 2 → 551 (+549)
+
+[2006] counting existing events...
+[2006] 2 events already in DB; running pipeline...
+[2006] done: 2 → 983 (+981)
+
+[2007] counting existing events...
+[2007] 1 events already in DB; running pipeline...
+[2007] done: 1 → 950 (+949)
+
+[2008] counting existing events...
+[2008] 1 events already in DB; running pipeline...
+[2008] done: 1 → 1124 (+1123)
+
+[2009] counting existing events...
+[2009] 2 events already in DB; running pipeline...
+[2009] done: 2 → 776 (+774)
+
+[2010] counting existing events...
+[2010] 1 events already in DB; running pipeline...
+[2010] done: 1 → 1163 (+1162)
+
+[2011] counting existing events...
+[2011] 1 events already in DB; running pipeline...
+[2011] PIPELINE FAILED (exit 1): ipped = upsert_events(conn, events, pipeline_run)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py", line 278, in upsert_events
+    cur.execute("RELEASE SAVEPOINT ev_row")
+ps
+
+[2012] counting existing events...
+[2012] 2 events already in DB; running pipeline...
+[2012] PIPELINE FAILED (exit 1): est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/kdhillon/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwar
+
+[2013] counting existing events...
+[2013] 3 events already in DB; running pipeline...
+[2013] PIPELINE FAILED (exit 1): 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/kdhillon/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(req
+
+[2014] counting existing events...
+[2014] 0 events already in DB; running pipeline...
+[2014] PIPELINE FAILED (exit 1): est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/kdhillon/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwar
+
+[2015] counting existing events...
+[2015] 2 events already in DB; running pipeline...
+[2015] PIPELINE FAILED (exit 1): 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/kdhillon/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(req
+
+[2016] counting existing events...
+[2016] 1 events already in DB; running pipeline...
+[2016] PIPELINE FAILED (exit 1): est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/kdhillon/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwar
+
+[2017] counting existing events...
+[2017] 1 events already in DB; running pipeline...
+[2017] PIPELINE FAILED (exit 1): 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/kdhillon/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(req
+
+[2018] counting existing events...
+[2018] 4 events already in DB; running pipeline...
+[2018] PIPELINE FAILED (exit 1): psert_locations(conn, location_records, pipeline_run)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py", line 116, in upsert_locations
+    cur.execute("SAVEPOINT loc_row")
+ps
+
+[2019] counting existing events...
+[2019] 0 events already in DB; running pipeline...
+[2019] PIPELINE FAILED (exit 1): est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/kdhillon/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwar
+
+[2020] counting existing events...
+[2020] 3 events already in DB; running pipeline...
+[2020] PIPELINE FAILED (exit 1): est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/kdhillon/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwar
+
+[2021] counting existing events...
+[2021] 0 events already in DB; running pipeline...
+[2021] PIPELINE FAILED (exit 1): 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/kdhillon/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(req
+
+[2022] counting existing events...
+[2022] 1 events already in DB; running pipeline...
+[2022] PIPELINE FAILED (exit 1): est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/kdhillon/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwar
+
+[2023] counting existing events...
+[2023] 0 events already in DB; running pipeline...
+[2023] PIPELINE FAILED (exit 1): est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users/kdhillon/.pyenv/versions/3.10.13/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwar
+
+[2024] counting existing events...
+[2024] 0 events already in DB; running pipeline...
+[2024] PIPELINE FAILED (exit 1): psert_locations(conn, location_records, pipeline_run)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py", line 116, in upsert_locations
+    cur.execute("SAVEPOINT loc_row")
+ps
+
+[2025] counting existing events...
+[2025] 1 events already in DB; running pipeline...
+[2025] PIPELINE FAILED (exit 1): ed_qids = upsert_locations(conn, location_records, pipeline_run)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/load_postgres.py", line 117, in upsert_locations
+    cur.execute(sql, row)
+ps
+
+=== Summary ===
+Year   Status     Before   After   Added  Notes
+1935   ok             39     148     109
+1936   ok             99     336     237
+1937   partial        68     198     130  1 category errors — retry later
+1938   ok             54     240     186
+1939   ok             84     286     202
+1940   ok             86     435     349
+1941   ok            123     387     264
+1942   ok             97     425     328
+1943   ok            102     403     301
+1944   ok            112     585     473
+1945   ok            110     429     319
+1946   ok             99     364     265
+1947   ok             68     218     150
+1948   ok             70     337     267
+1949   ok             62     215     153
+1950   ok             46     323     277
+1951   ok             36     206     170
+1952   ok             58     329     271
+1953   ok             43     198     155
+1954   ok             36     249     213
+1955   ok             44     182     138
+1956   ok             55     320     265
+1957   ok             46     210     164
+1958   ok             46     265     219
+1959   ok             51     203     152
+1960   partial        53     319     266  1 category errors — retry later
+1961   ok             52     200     148
+1962   ok             51     296     245
+1963   ok             55     231     176
+1964   ok             58     367     309
+1965   ok             51     228     177
+1966   ok             57     287     230
+1967   ok             55     295     240
+1968   ok             79     446     367
+1969   ok             58     230     172
+1970   ok             75     359     284
+1971   ok             83     323     240
+1972   ok             81     374     293
+1973   ok             69     392     323
+1974   ok             80     402     322
+1975   ok             94     285     191
+1976   ok             67     418     351
+1977   ok             68     307     239
+1978   ok             75     405     330
+1979   ok             86     415     329
+1980   ok             84     484     400
+1981   failed         71       —       —  (pipeline: cations(conn, location_records, pipeline_run)
+  File "/Users…)
+1982   ok             85     429     344
+1983   partial        76     150      74  1 category errors — retry later
+1984   ok             68     442     374
+1985   ok             76     377     301
+1986   ok             65     436     371
+1987   ok             81     397     316
+1988   ok             84     475     391
+1989   ok             74     393     319
+1990   ok             96     587     491
+1991   ok            112     570     458
+1992   ok            131     643     512
+1993   ok             98     397     299
+1994   ok            106     598     492
+1995   failed         68       —       —  (pipeline: psert_locations(conn, location_records, pipeline_run)
+  File…)
+1996   failed         98       —       —  (pipeline: 589, in request
+    resp = self.send(prep, **send_kwargs)
+  …)
+1997   partial        74     319     245  2 category errors — retry later
+1998   ok             81     654     573
+1999   partial       105     798     693  1 category errors — retry later
+2000   ok            117     726     609
+2001   failed          4       —       —  (pipeline: ipped = upsert_events(conn, events, pipeline_run)
+  File "/U…)
+2002   ok              2     699     697
+2003   ok              1     760     759
+2004   ok              3     863     860
+2005   ok              2     551     549
+2006   ok              2     983     981
+2007   ok              1     950     949
+2008   ok              1    1124    1123
+2009   ok              2     776     774
+2010   ok              1    1163    1162
+2011   failed          1       —       —  (pipeline: ipped = upsert_events(conn, events, pipeline_run)
+  File "/U…)
+2012   failed          2       —       —  (pipeline: est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users…)
+2013   failed          3       —       —  (pipeline: 589, in request
+    resp = self.send(prep, **send_kwargs)
+  …)
+2014   failed          0       —       —  (pipeline: est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users…)
+2015   failed          2       —       —  (pipeline: 589, in request
+    resp = self.send(prep, **send_kwargs)
+  …)
+2016   failed          1       —       —  (pipeline: est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users…)
+2017   failed          1       —       —  (pipeline: 589, in request
+    resp = self.send(prep, **send_kwargs)
+  …)
+2018   failed          4       —       —  (pipeline: psert_locations(conn, location_records, pipeline_run)
+  File…)
+2019   failed          0       —       —  (pipeline: est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users…)
+2020   failed          3       —       —  (pipeline: est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users…)
+2021   failed          0       —       —  (pipeline: 589, in request
+    resp = self.send(prep, **send_kwargs)
+  …)
+2022   failed          1       —       —  (pipeline: est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users…)
+2023   failed          0       —       —  (pipeline: est
+    resp = self.send(prep, **send_kwargs)
+  File "/Users…)
+2024   failed          0       —       —  (pipeline: psert_locations(conn, location_records, pipeline_run)
+  File…)
+2025   failed          1       —       —  (pipeline: ed_qids = upsert_locations(conn, location_records, pipeline_…)
+DATABASE_URL not set; run `source .env` first
+
+[-500] counting existing events...
+[-500] 4 events already in DB; running pipeline...
+[-500] done: 4 → 4 (+0)
+
+[-501] counting existing events...
+[-501] 0 events already in DB; running pipeline...
+[-501] PIPELINE FAILED (exit 1): run_globals)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py", line 829, in <module>
+    main()
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py", line 812
+
+[-502] counting existing events...
+[-502] 0 events already in DB; running pipeline...
+[-502] done: 0 → 0 (+0)
+
+[-503] counting existing events...
+[-503] 1 events already in DB; running pipeline...
+[-503] PIPELINE FAILED (exit 1): run_globals)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py", line 829, in <module>
+    main()
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py", line 812
+
+[-504] counting existing events...
+[-504] 0 events already in DB; running pipeline...
+[-504] PIPELINE FAILED (exit 1): run_globals)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py", line 829, in <module>
+    main()
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py", line 812
+
+[-505] counting existing events...
+[-505] 0 events already in DB; running pipeline...
+[-505] done: 0 → 0 (+0)
+
+[-506] counting existing events...
+[-506] 1 events already in DB; running pipeline...
+[-506] PIPELINE FAILED (exit 1): run_globals)
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py", line 829, in <module>
+    main()
+  File "/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py", line 812
+
+[-507] counting existing events...
+[-507] 0 events already in DB; running pipeline...
+[-507] partial: 0 → 0 (+0)  [2 category errors]
+
+[-508] counting existing events...
+[-508] 2 events already in DB; running pipeline...

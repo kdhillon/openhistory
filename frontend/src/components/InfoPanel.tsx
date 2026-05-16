@@ -22,11 +22,16 @@ interface WikiSection {
   level: number;
 }
 
+interface WikiImage {
+  url: string;
+  caption?: string;
+}
+
 interface WikiArticle {
   wikiTitle: string;
   apiBase: string;
   lang: string;
-  images: string[];
+  images: WikiImage[];
   leadHtml: string;
   sections: WikiSection[];
 }
@@ -75,11 +80,34 @@ function fixWikiHtml(html: string, lang = 'en'): string {
       `target="_blank" rel="noopener noreferrer" href="https://${lang}.wikipedia.org$1"`,
     )
     .replace(/src="\/\/([^"]+)"/g, 'src="https://$1"')
-    .replace(/srcset="\/\/([^"]+)"/g, 'srcset="https://$1"');
+    .replace(/srcset="\/\/([^"]+)"/g, 'srcset="https://$1"')
+    // Strip inline citation markers ([1], [2], etc.) — `<sup class="reference">…</sup>`
+    .replace(/<sup\b[^>]*\bclass="[^"]*\breference\b[^"]*"[^>]*>[\s\S]*?<\/sup>/gi, '')
+    // Strip the reference list itself in case it slips into a kept section
+    .replace(/<ol\b[^>]*\bclass="[^"]*\breferences\b[^"]*"[^>]*>[\s\S]*?<\/ol>/gi, '')
+    // Strip the per-section "[edit]" link wrappers that MediaWiki emits
+    .replace(/<span\b[^>]*\bclass="[^"]*\bmw-editsection\b[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '');
 }
 
 function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, '');
+  // First drop the BODIES of <style> and <script> blocks (and embedded TemplateStyles
+  // from Wikipedia like `<style data-mw-deduplicate=...>.mw-parser-output {...}</style>`).
+  // The simple `<[^>]+>` strip leaves the CSS/JS payload behind otherwise — which is
+  // how image-description templates leaked raw CSS rules into the caption overlay.
+  return html
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function decodeHtmlEntities(s: string): string {
+  // Lightweight — Wikipedia's extmetadata mostly contains &amp; &quot; &#39; etc.
+  // For anything more exotic we let the browser do it via a textarea trick.
+  if (typeof document === 'undefined' || !s) return s;
+  const ta = document.createElement('textarea');
+  ta.innerHTML = s;
+  return ta.value;
 }
 
 function MissingWikiNote({ qid, onEdit }: { qid: string; onEdit?: () => void }) {
@@ -192,7 +220,6 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
   const [loadingSections, setLoadingSections] = useState<Set<number>>(new Set());
   const [imageIndex, setImageIndex] = useState(0);
   const [imageExpanded, setImageExpanded] = useState(false);
-  const [showImages, setShowImages] = useState(!isMobile);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const [categorySaving, setCategorySaving] = useState(false);
   // "Part of" parent picker state — only rendered for polities with no active
@@ -415,12 +442,19 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
     }
 
     setLoading(true);
+    // `redirects=1` makes the MediaWiki parse API follow #REDIRECT pages
+    // server-side and return the target's content. Without it, pages that are
+    // pure redirects (e.g. "Smolensk Campaign" → "Battle of Smolensk") render
+    // as a 1-line "Redirect to: …" stub. We also read parse.title from the
+    // response and update wikiTitle so subsequent section fetches use the
+    // resolved name rather than the redirect alias.
     Promise.all([
-      fetch(`${apiBase}?${wikiParams({ action: 'parse', page: pageTitle, section: '0', prop: 'text' })}`).then((r) => r.json()),
-      fetch(`${apiBase}?${wikiParams({ action: 'parse', page: pageTitle, prop: 'sections' })}`).then((r) => r.json()),
-      fetch(`${apiBase}?${wikiParams({ action: 'query', generator: 'images', titles: pageTitle, prop: 'imageinfo', iiprop: 'url|size|mime', iiurlwidth: '800', gimlimit: '30' })}`).then((r) => r.json()),
+      fetch(`${apiBase}?${wikiParams({ action: 'parse', page: pageTitle, section: '0', prop: 'text', redirects: '1' })}`).then((r) => r.json()),
+      fetch(`${apiBase}?${wikiParams({ action: 'parse', page: pageTitle, prop: 'sections', redirects: '1' })}`).then((r) => r.json()),
+      fetch(`${apiBase}?${wikiParams({ action: 'query', generator: 'images', titles: pageTitle, prop: 'imageinfo', iiprop: 'url|size|mime|extmetadata', iiurlwidth: '800', gimlimit: '30', redirects: '1' })}`).then((r) => r.json()),
     ])
       .then(([leadRes, sectionsRes, imagesRes]) => {
+        const resolvedTitle = (leadRes.parse?.title as string | undefined) ?? pageTitle;
         const leadHtml = fixWikiHtml(leadRes.parse?.text?.['*'] ?? '', selectedLang);
         const sections: WikiSection[] = (sectionsRes.parse?.sections ?? []).map(
           (s: { line?: string; index?: string; toclevel?: number }) => ({
@@ -429,18 +463,39 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
             level: Number(s.toclevel ?? 1),
           }),
         );
-        type ImgPage = { imageinfo?: Array<{ url?: string; thumburl?: string; width?: number; mime?: string }> };
+        type ExtMetaField = { value?: string };
+        type ImgInfo = {
+          url?: string;
+          thumburl?: string;
+          width?: number;
+          mime?: string;
+          extmetadata?: {
+            ImageDescription?: ExtMetaField;
+            ObjectName?: ExtMetaField;
+          };
+        };
+        type ImgPage = { imageinfo?: ImgInfo[] };
         const imgPages = Object.values(imagesRes?.query?.pages ?? {}) as ImgPage[];
-        const images = imgPages
+        const images: WikiImage[] = imgPages
           .filter((p) => {
             const ii = p.imageinfo?.[0];
             if (!ii) return false;
             const mime = ii.mime ?? '';
             return mime.startsWith('image/') && mime !== 'image/svg+xml' && (ii.width ?? 0) >= 300;
           })
-          .map((p) => p.imageinfo![0].thumburl ?? p.imageinfo![0].url ?? '')
-          .filter(Boolean);
-        setArticle({ wikiTitle: pageTitle, apiBase, lang: selectedLang, images, leadHtml, sections });
+          .map((p) => {
+            const ii = p.imageinfo![0];
+            const url = ii.thumburl ?? ii.url ?? '';
+            // ImageDescription is HTML; strip tags + entities. Fall back to
+            // ObjectName (the file's display title) if no description is set.
+            const descRaw = ii.extmetadata?.ImageDescription?.value
+              ?? ii.extmetadata?.ObjectName?.value
+              ?? '';
+            const caption = decodeHtmlEntities(stripHtml(descRaw)).trim() || undefined;
+            return { url, caption };
+          })
+          .filter((img): img is WikiImage => Boolean(img.url));
+        setArticle({ wikiTitle: resolvedTitle, apiBase, lang: selectedLang, images, leadHtml, sections });
       })
       .catch(() => {
         setArticle({ wikiTitle: pageTitle, apiBase, lang: selectedLang, images: [], leadHtml: '<p>Could not load article.</p>', sections: [] });
@@ -456,7 +511,7 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
 
     setOpenSections((prev) => new Set(prev).add(history.index));
     setLoadingSections((prev) => new Set(prev).add(history.index));
-    fetch(`${article.apiBase}?${wikiParams({ action: 'parse', page: article.wikiTitle, section: String(history.index), prop: 'text' })}`)
+    fetch(`${article.apiBase}?${wikiParams({ action: 'parse', page: article.wikiTitle, section: String(history.index), prop: 'text', redirects: '1' })}`)
       .then((r) => r.json())
       .then((data) => {
         setSectionHtml((prev) => new Map(prev).set(history.index, fixWikiHtml(data.parse?.text?.['*'] ?? '', article.lang)));
@@ -694,7 +749,7 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
 
     if (!sectionHtml.has(i) && !loadingSections.has(i) && article) {
       setLoadingSections((prev) => new Set(prev).add(i));
-      fetch(`${article.apiBase}?${wikiParams({ action: 'parse', page: article.wikiTitle, section: String(i), prop: 'text' })}`)
+      fetch(`${article.apiBase}?${wikiParams({ action: 'parse', page: article.wikiTitle, section: String(i), prop: 'text', redirects: '1' })}`)
         .then((r) => r.json())
         .then((data) => {
           setSectionHtml((prev) => new Map(prev).set(i, fixWikiHtml(data.parse?.text?.['*'] ?? '<p>Empty section.</p>', article.lang)));
@@ -818,7 +873,7 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
             );
           })}
           {/* "+ Category" button for uncategorized events/polities */}
-          {(feature.categories ?? []).length === 0 && (feature.featureType === 'event' || feature.featureType === 'polity') && (
+          {(feature.categories ?? []).length === 0 && feature.featureType === 'event' && (
             <button
               onClick={() => setCategoryPickerOpen((v) => !v)}
               style={{
@@ -1100,19 +1155,47 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
       {article && article.images.length > 0
         ? (
           <>
-            {showImages && (
-              <div style={{ position: 'relative', flexShrink: 0, background: '#000', cursor: 'pointer' }} onClick={() => setImageExpanded((v) => !v)}>
+            <div style={{ position: 'relative', flexShrink: 0, background: '#000', cursor: 'pointer' }} onClick={() => setImageExpanded((v) => !v)}>
                 <img
-                  src={article.images[imageIndex]}
+                  src={article.images[imageIndex].url}
                   alt={`${feature.title} ${imageIndex + 1}`}
                   style={{
                     width: '100%',
                     height: imageExpanded ? 'auto' : 200,
                     maxHeight: imageExpanded ? '50vh' : 200,
-                    objectFit: imageExpanded ? 'contain' : 'cover',
+                    // Always `contain` — the image area's width/height stay
+                    // fixed but the image is letterboxed (against the black
+                    // background) instead of cropped, so portraits and wide
+                    // panoramas are fully visible.
+                    objectFit: 'contain',
                     display: 'block',
                   }}
                 />
+                {article.images[imageIndex].caption && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      padding: '6px 10px',
+                      background: 'rgba(0, 0, 0, 0.55)',
+                      color: '#ffffff',
+                      fontSize: 11,
+                      lineHeight: 1.35,
+                      // Wrap freely instead of one-line ellipsis so longer
+                      // captions are fully readable. Cap height so they don't
+                      // eat the image at extreme lengths.
+                      whiteSpace: 'normal',
+                      wordBreak: 'break-word',
+                      maxHeight: '50%',
+                      overflow: 'auto',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    {article.images[imageIndex].caption}
+                  </div>
+                )}
                 {article.images.length > 1 && (
                   <>
                     <button style={{ ...styles.imgArrow, left: 8 }} onClick={(e) => { e.stopPropagation(); setImageIndex((i) => (i - 1 + article.images.length) % article.images.length); }}>‹</button>
@@ -1121,9 +1204,12 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
                   </>
                 )}
               </div>
-            )}
-            <button onClick={() => setShowImages((v) => !v)} style={styles.imageToggle}>
-              <span style={{ fontSize: 9, opacity: 0.4 }}>{showImages ? '▲' : '▼'}</span>
+            <button
+              onClick={() => setImageExpanded((v) => !v)}
+              style={styles.imageToggle}
+              title={imageExpanded ? 'Collapse image' : 'Expand image'}
+            >
+              <span style={{ fontSize: 9, opacity: 0.4 }}>{imageExpanded ? '▲' : '▼'}</span>
             </button>
           </>
         )

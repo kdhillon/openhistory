@@ -1,5 +1,129 @@
 {
   "runs": {
+    "-500": {
+      "added": 0,
+      "after": 4,
+      "before": 4,
+      "ran_at": "2026-05-16T04:41:11.062958+00:00",
+      "status": "ok"
+    },
+    "-501": {
+      "before": 0,
+      "error": "run_globals)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py\", line 829, in <module>\n    main()\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py\", line 812, in main\n    print_coverage(events, loaded, skipped_count)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py\", line 645, in print_coverage\n    print(f\"  With date:               {has_date}/{total} ({has_date*100//total}%)\")\nZeroDivisionError: integer division or modulo by zero",
+      "phase": "pipeline",
+      "ran_at": "2026-05-16T04:42:08.524101+00:00",
+      "status": "failed"
+    },
+    "-502": {
+      "added": 0,
+      "after": 0,
+      "before": 0,
+      "ran_at": "2026-05-16T04:43:05.513005+00:00",
+      "status": "ok"
+    },
+    "-503": {
+      "before": 1,
+      "error": "run_globals)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py\", line 829, in <module>\n    main()\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py\", line 812, in main\n    print_coverage(events, loaded, skipped_count)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py\", line 645, in print_coverage\n    print(f\"  With date:               {has_date}/{total} ({has_date*100//total}%)\")\nZeroDivisionError: integer division or modulo by zero",
+      "phase": "pipeline",
+      "ran_at": "2026-05-16T04:44:03.999745+00:00",
+      "status": "failed"
+    },
+    "-504": {
+      "before": 0,
+      "error": "run_globals)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py\", line 829, in <module>\n    main()\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py\", line 812, in main\n    print_coverage(events, loaded, skipped_count)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py\", line 645, in print_coverage\n    print(f\"  With date:               {has_date}/{total} ({has_date*100//total}%)\")\nZeroDivisionError: integer division or modulo by zero",
+      "phase": "pipeline",
+      "ran_at": "2026-05-16T04:45:10.580291+00:00",
+      "status": "failed"
+    },
+    "-505": {
+      "added": 0,
+      "after": 0,
+      "before": 0,
+      "ran_at": "2026-05-16T04:46:17.855505+00:00",
+      "status": "ok"
+    },
+    "-506": {
+      "before": 1,
+      "error": "run_globals)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py\", line 829, in <module>\n    main()\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py\", line 812, in main\n    print_coverage(events, loaded, skipped_count)\n  File \"/Users/kdhillon/Documents/Claude/history/pipeline/run_local.py\", line 645, in print_coverage\n    print(f\"  With date:               {has_date}/{total} ({has_date*100//total}%)\")\nZeroDivisionError: integer division or modulo by zero",
+      "phase": "pipeline",
+      "ran_at": "2026-05-16T04:48:25.247539+00:00",
+      "status": "failed"
+    },
+    "-507": {
+      "added": 0,
+      "after": 0,
+      "before": 0,
+      "ran_at": "2026-05-16T04:51:33.590678+00:00",
+      "status": "partial",
+      "throttled_categories": 2,
+      "warnings": [
+        "ERROR:",
+        "ERROR:"
+      ]
+    },
+    "1774": {
+      "added": 0,
+      "after": 20,
+      "before": 20,
+      "ran_at": "2026-05-16T03:40:59.192474+00:00",
+      "status": "ok"
+    },
+    "1775": {
+      "added": 0,
+      "after": 50,
+      "before": 50,
+      "ran_at": "2026-05-16T03:39:45.736844+00:00",
+      "status": "ok"
+    },
+    "1776": {
+      "added": 1,
+      "after": 46,
+      "before": 45,
+      "ran_at": "2026-05-16T03:38:18.411479+00:00",
+      "status": "ok"
+    },
+    "1777": {
+      "added": 0,
+      "after": 51,
+      "before": 51,
+      "ran_at": "2026-05-16T03:36:55.810138+00:00",
+      "status": "ok"
+    },
+    "1778": {
+      "added": 1,
+      "after": 46,
+      "before": 45,
+      "ran_at": "2026-05-16T03:35:27.488631+00:00",
+      "status": "ok"
+    },
+    "1779": {
+      "added": 0,
+      "after": 58,
+      "before": 58,
+      "ran_at": "2026-05-16T03:33:56.982889+00:00",
+      "status": "ok"
+    },
+    "1780": {
+      "added": 0,
+      "after": 64,
+      "before": 64,
+      "ran_at": "2026-05-16T03:32:20.479124+00:00",
+      "status": "ok"
+    },
+    "1781": {
+      "added": 0,
+      "after": 71,
+      "before": 71,
+      "ran_at": "2026-05-16T03:30:40.752493+00:00",
+      "status": "ok"
+    },
+    "1782": {
+      "added": 2,
+      "after": 56,
+      "before": 54,
+      "ran_at": "2026-05-16T03:28:55.437973+00:00",
+      "status": "ok"
+    },
     "1783": {
       "added": 0,
       "after": 32,
@@ -1720,6 +1844,13 @@
       "after": 857,
       "before": 3,
       "ran_at": "2026-05-16T03:22:22.489064+00:00",
+      "status": "ok"
+    },
+    "2026": {
+      "added": 493,
+      "after": 494,
+      "before": 1,
+      "ran_at": "2026-05-16T03:49:09.117955+00:00",
       "status": "ok"
     }
   }
