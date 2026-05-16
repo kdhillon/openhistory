@@ -1180,6 +1180,128 @@ def remove_hidden_modern_nation(polity_id: str, _: None = Depends(require_write_
 
 
 
+@app.get("/api/events")
+def get_events(year_min: int, year_max: int):
+    """
+    Return all events overlapping [year_min, year_max] as a GeoJSON FeatureCollection.
+
+    Uses a GiST int4range index for O(log n + k) interval overlap queries.
+    2 DB queries total regardless of window size.
+    """
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        features = build_event_features_bulk(cur, year_min, year_max)
+        return {
+            "type": "FeatureCollection",
+            "features": features,
+            "count": len(features),
+            "yearMin": year_min,
+            "yearMax": year_max,
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/events/by-qids")
+def get_events_by_qids(qids: str):
+    """
+    Return specific events by Wikidata QIDs as a GeoJSON FeatureCollection.
+    Used by the story player to pre-fetch beat event data.
+
+    Query param: qids=Q1,Q2,Q3 (comma-separated)
+    """
+    qid_list = [q.strip() for q in qids.split(",") if q.strip().startswith("Q")]
+    if not qid_list:
+        return {"type": "FeatureCollection", "features": [], "count": 0}
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT
+              e.id, e.wikidata_qid, e.slug, e.title, e.wikipedia_title, e.wikipedia_summary, e.wikipedia_url,
+              e.year_start, e.month_start, e.day_start,
+              e.year_end, e.month_end, e.day_end,
+              e.date_is_fuzzy, e.date_range_min, e.date_range_max,
+              e.location_level, e.location_wikidata_qid,
+              CASE WHEN e.location_level = 'point' THEN e.lng ELSE l.lng END AS lng,
+              CASE WHEN e.location_level = 'point' THEN e.lat ELSE l.lat END AS lat,
+              e.location_name,
+              l.slug AS location_slug,
+              e.categories, e.p31_qids, e.part_of_qids,
+              e.sitelinks_count, e.data_version, e.pipeline_run
+            FROM events e
+            LEFT JOIN locations l ON e.location_wikidata_qid = l.wikidata_qid
+            WHERE e.wikidata_qid = ANY(%s)
+        """, (qid_list,))
+        rows = cur.fetchall()
+
+        all_qids: list[str] = []
+        for row in rows:
+            all_qids.extend(row["part_of_qids"] or [])
+        qid_map: dict = {}
+        if all_qids:
+            cur.execute(
+                "SELECT wikidata_qid, title, slug FROM events WHERE wikidata_qid = ANY(%s)",
+                (list(set(all_qids)),),
+            )
+            qid_map = {r["wikidata_qid"]: {"title": r["title"], "slug": r["slug"]} for r in cur.fetchall()}
+
+        features = []
+        for row in rows:
+            part_of_resolved = [
+                {"qid": qid, "title": qid_map[qid]["title"], "slug": qid_map[qid]["slug"]}
+                for qid in (row["part_of_qids"] or [])
+                if qid in qid_map
+            ]
+            lng, lat = row["lng"], row["lat"]
+            geometry = (
+                {"type": "Point", "coordinates": [float(lng), float(lat)]}
+                if lng is not None and lat is not None
+                else None
+            )
+            features.append({
+                "type": "Feature",
+                "geometry": geometry,
+                "properties": {
+                    "featureType": "event",
+                    "id": str(row["id"]),
+                    "wikidataQid": row["wikidata_qid"],
+                    "slug": row["slug"] or (row["wikipedia_title"] or "").replace(" ", "_"),
+                    "title": row["title"],
+                    "wikipediaTitle": row["wikipedia_title"],
+                    "wikipediaSummary": row["wikipedia_summary"] or "",
+                    "wikipediaUrl": row["wikipedia_url"],
+                    "yearStart": row["year_start"],
+                    "monthStart": row["month_start"],
+                    "dayStart": row["day_start"],
+                    "yearEnd": row["year_end"],
+                    "monthEnd": row["month_end"],
+                    "dayEnd": row["day_end"],
+                    "dateIsFuzzy": row["date_is_fuzzy"],
+                    "dateRangeMin": row["date_range_min"],
+                    "dateRangeMax": row["date_range_max"],
+                    "locationLevel": row["location_level"],
+                    "locationName": row["location_name"] or "",
+                    "locationSlug": row["location_slug"],
+                    "locationWikidataQid": row["location_wikidata_qid"],
+                    "categories": row["categories"] or [],
+                    "primaryCategory": (row["categories"] or ["unknown"])[0],
+                    "wikidataClasses": row["p31_qids"] or [],
+                    "partOf": row["part_of_qids"] or [],
+                    "partOfResolved": part_of_resolved,
+                    "sitelinksCount": row["sitelinks_count"],
+                    "yearDisplay": display_year(row["year_start"]) if row["year_start"] is not None else "Unknown",
+                    "dataVersion": row["data_version"],
+                    "pipelineRun": row["pipeline_run"],
+                },
+            })
+
+        return {"type": "FeatureCollection", "features": features, "count": len(features)}
+    finally:
+        conn.close()
+
 # ── OHM territory links ───────────────────────────────────────────────────────
 # Lightweight polity→OHM-relation mapping for coloring live OHM vector tiles.
 # No geometry stored here — tiles are fetched directly from vtiles.openhistoricalmap.org.
