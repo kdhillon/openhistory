@@ -1705,6 +1705,7 @@ async def extract_location(request: Request):
         f"Text: {text}"
     )
 
+    raw = ""
     try:
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
@@ -1712,13 +1713,11 @@ async def extract_location(request: Request):
             messages=[{"role": "user", "content": prompt}],
         )
         raw = msg.content[0].text.strip()
-        m = re.search(r'\{[^}]+\}', raw, re.DOTALL)
-        if not m:
-            raise ValueError("No JSON object in response")
-        data = json.loads(m.group())
+        m = re.search(r'\{.*?\}', raw, re.DOTALL)
+        data = json.loads(m.group()) if m else {"location": raw if raw and raw.lower() != "null" else None}
     except Exception as e:
-        print(f"[extract-location] failed: {e}", flush=True)
-        raise HTTPException(500, "Location extraction failed")
+        print(f"[extract-location] failed: {type(e).__name__}: {e} | raw={raw!r}", flush=True)
+        raise HTTPException(500, f"Location extraction failed: {type(e).__name__}")
 
     location = data.get("location")
     _capture("ai_location_extracted", {"text_length": len(text), "location_found": location is not None}, request)
