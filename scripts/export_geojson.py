@@ -178,7 +178,6 @@ def export(conn: "psycopg2.connection | None" = None) -> int:
                 "categories": [row["polity_type"]],
                 "primaryCategory": row["polity_type"],
                 "wikidataClasses": row["p31_qids"] or [],
-                "hasTerritory": False,  # true once polity_territories has data
                 "sitelinksCount": row["sitelinks_count"],
                 "yearDisplay": display_year(row["year_start"]) if row["year_start"] is not None else "Unknown",
                 "dataVersion": row["data_version"],

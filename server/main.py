@@ -765,7 +765,6 @@ def _build_polity_feature(row: dict) -> dict:
             "categories": [row["polity_type"]],
             "primaryCategory": row["polity_type"],
             "wikidataClasses": row["p31_qids"] or [],
-            "hasTerritory": False,
             "sitelinksCount": row.get("sitelinks_count"),
             "yearDisplay": display_year(row["year_start"]) if row["year_start"] is not None else "Unknown",
             "dataVersion": row.get("data_version"),
