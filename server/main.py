@@ -1687,13 +1687,11 @@ async def extract_dates(request: Request):
 @app.post("/api/ai/extract-location")
 async def extract_location(request: Request):
     """Extract the primary location of a historical event from a Wikipedia lead snippet."""
-    print("[extract-location] entered", flush=True)
     if not ANTHROPIC_API_KEY:
         raise HTTPException(503, "AI extraction not configured")
 
     body = await request.json()
     text = (body.get("text") or "").strip()[:500]
-    print(f"[extract-location] text_len={len(text)}", flush=True)
     if not text:
         raise HTTPException(400, "No text provided")
 

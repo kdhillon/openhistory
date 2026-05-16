@@ -8,6 +8,8 @@ import {
 import { startOAuthLogin } from '../lib/wikidataAuth';
 import { patchFeature, patchPolity } from '../lib/api';
 
+const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
+
 interface Props {
   feature: FeatureProperties;
   field: 'date' | 'location' | 'capital' | 'sovereign';
@@ -55,7 +57,7 @@ export function WikiEditForm({ feature, field, wikiAuth, onAuth, onSuccess, onCl
     if (!wikiAuth || !leadText) return;
     if (field === 'date') {
       setExtracting(true);
-      fetch('/api/ai/extract-dates', {
+      fetch(`${API_BASE}/ai/extract-dates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: leadText }),
@@ -79,7 +81,7 @@ export function WikiEditForm({ feature, field, wikiAuth, onAuth, onSuccess, onCl
         .finally(() => setExtracting(false));
     } else if (field === 'location') {
       setExtracting(true);
-      fetch('/api/ai/extract-location', {
+      fetch(`${API_BASE}/ai/extract-location`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: leadText }),
