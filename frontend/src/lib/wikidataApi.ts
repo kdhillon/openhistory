@@ -56,10 +56,24 @@ export async function getQid(wikipediaTitle: string): Promise<string | null> {
 // ── CSRF ─────────────────────────────────────────────────────────────────────
 
 export async function getCsrf(): Promise<string> {
-  const res = await wdAuth({ action: 'query', meta: 'tokens' });
+  // Fetch the CSRF token via the SAME direct-to-Wikidata path that
+  // submitClaim uses (access_token in the form body, no Authorization
+  // header, origin= the page origin). MediaWiki CSRF tokens are
+  // session-bound — fetching via the backend proxy would issue a token
+  // for the proxy's session, and the subsequent direct-submit would
+  // reject it as `badtoken`.
+  const token = await getAccessToken();
+  if (!token) throw new Error('Not logged in to Wikimedia');
+  const body = new URLSearchParams({
+    action: 'query', meta: 'tokens', format: 'json',
+    access_token: token,
+  });
+  const res = await fetch(`${WD}?origin=${encodeURIComponent(window.location.origin)}`, {
+    method: 'POST',
+    body,
+  });
   const data = await res.json();
-  const token = data.query.tokens.csrftoken as string;
-  return token;
+  return data.query.tokens.csrftoken as string;
 }
 
 // ── Claims ───────────────────────────────────────────────────────────────────

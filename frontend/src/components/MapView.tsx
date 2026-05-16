@@ -548,7 +548,7 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
         paint: {
           'text-color': '#bebebe',
           'text-halo-color': '#000000',  // default = unmapped (black). Overridden per-name in rebuildColors.
-          'text-halo-width': 1.5,
+          'text-halo-width': 1,
         },
       });
       // ---------------------------------------------------------------------
@@ -646,7 +646,7 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
         paint: {
           'text-color': '#ffffff',
           'text-halo-color': '#000000',
-          'text-halo-width': 1.5,
+          'text-halo-width': 1,
         },
       });
       // The cross-layer collision rule turns out to be: layers later in the
