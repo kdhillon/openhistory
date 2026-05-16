@@ -14,21 +14,9 @@ Events, locations, and polities are imported via SPARQL queries in the pipeline 
 
 ---
 
-## 2. historical-basemaps (Ourednik)
+## 2. historical-basemaps (Ourednik) — *removed*
 
-**Role**: Current source for territory polygon data.
-**License**: **GPL-3.0** — any redistribution of modified territory data must also be GPL-3.0.
-**Source**: https://github.com/aourednik/historical-basemaps
-**Format**: GeoJSON MultiPolygon, WGS84
-**Coverage**: ~1 BC to 2000 AD in ~50-year snapshots (53 snapshots in our DB)
-
-Polygon data lives in the `territories` table (10,231 polygons, merged from snapshot data into rolling year ranges). Territory features have `hb_name` identifiers that are matched to our polity QIDs via the territory mapping system.
-
-**Limitations**:
-- Coarse 50-year snapshot resolution — no sub-decade boundary changes
-- Simplified polygon geometry
-- Coverage ends at 2000 AD
-- GPL-3.0 license constrains redistribution
+Previously the source of territory polygon data, imported into a `territories` table and exported as `territories.geojson` (GPL-3.0). Removed in May 2026 in favor of OHM. No HB code, tables, or data remain in the repo; this entry is kept only as historical context.
 
 ---
 
