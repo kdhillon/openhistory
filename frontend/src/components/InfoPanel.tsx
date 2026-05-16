@@ -39,6 +39,7 @@ interface WikiArticle {
 interface Props {
   feature: FeatureProperties | null;
   stack: StackInfo;
+  onAdvanceStack?: (index: number) => void;
   onClose: () => void;
   geojson?: GeoJSON.FeatureCollection;
   onNavigateToFeature?: (f: FeatureProperties) => void;
@@ -164,7 +165,7 @@ function PencilIcon() {
   );
 }
 
-export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated, hiddenNations, onToggleHiddenNation, onHideFeature, selectedLang = 'en', onStartStory, isMobile, currentDateInt, isOhmMapped, onAddToOhm, onEditOhm, onPolityImported }: Props) {
+export function InfoPanel({ feature: rawFeature, stack, onAdvanceStack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated, hiddenNations, onToggleHiddenNation, onHideFeature, selectedLang = 'en', onStartStory, isMobile, currentDateInt, isOhmMapped, onAddToOhm, onEditOhm, onPolityImported }: Props) {
   // Live-fetch Wikidata when either:
   //   (a) the feature is a Wikidata stub (synthesized in MapView for OHM polygons
   //       with no matching local feature — id starts with `wd:`), or
@@ -1650,16 +1651,7 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
                 ↗
               </a>
             )}
-            {onHideFeature && (feature.featureType === 'polity' || feature.featureType === 'event') && (
-              <button
-                onClick={() => onHideFeature(feature.id, feature.featureType as 'polity' | 'event')}
-                title="Hide from map — this entry won't appear on the map. You can unhide it in the Data Viewer."
-                style={styles.extBtn as React.CSSProperties}
-              >
-                Hide
-              </button>
-            )}
-            {stack.total > 1 && <StackDots stack={stack} />}
+            {stack.total > 1 && <StackDots stack={stack} onJump={onAdvanceStack} />}
           </>
         ) : (
           <>
@@ -1668,16 +1660,7 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
                 Open in Wikipedia ↗
               </a>
             )}
-            {onHideFeature && (feature.featureType === 'polity' || feature.featureType === 'event') && (
-              <button
-                onClick={() => onHideFeature(feature.id, feature.featureType as 'polity' | 'event')}
-                title="Hide from map — this entry won't appear on the map. You can unhide it in the Data Viewer."
-                style={styles.extBtn as React.CSSProperties}
-              >
-                Hide
-              </button>
-            )}
-            {stack.total > 1 && <StackDots stack={stack} />}
+            {stack.total > 1 && <StackDots stack={stack} onJump={onAdvanceStack} />}
           </>
         )}
       </div>
@@ -1685,21 +1668,51 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
   );
 }
 
-function StackDots({ stack }: { stack: StackInfo }) {
+function StackDots({ stack, onJump }: { stack: StackInfo; onJump?: (index: number) => void }) {
+  const prev = () => onJump?.((stack.index - 1 + stack.total) % stack.total);
+  const next = () => onJump?.((stack.index + 1) % stack.total);
+  const arrowStyle: React.CSSProperties = {
+    background: 'transparent',
+    border: 'none',
+    padding: '2px 6px',
+    fontSize: 20,
+    lineHeight: 1,
+    cursor: onJump ? 'pointer' : 'default',
+    color: '#202122',
+    opacity: onJump ? 1 : 0.4,
+  };
+  // Cap the visible dot count so the row doesn't grow unbounded. For larger
+  // stacks the dots represent proportional positions; arrows still walk every
+  // entry 1-by-1.
+  const MAX_DOTS = 12;
+  const dotCount = Math.min(stack.total, MAX_DOTS);
+  const activeDot = stack.total <= MAX_DOTS
+    ? stack.index
+    : Math.round((stack.index * (dotCount - 1)) / (stack.total - 1));
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
-      {Array.from({ length: stack.total }, (_, i) => (
-        <div
-          key={i}
-          style={{
-            height: 6,
-            borderRadius: 3,
-            transition: 'all 0.2s ease',
-            background: i === stack.index ? '#202122' : 'rgba(0,0,0,0.2)',
-            width: i === stack.index ? 16 : 6,
-          }}
-        />
-      ))}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+      <button onClick={prev} disabled={!onJump} title="Previous" style={arrowStyle}>‹</button>
+      {Array.from({ length: dotCount }, (_, i) => {
+        const targetIndex = stack.total <= MAX_DOTS
+          ? i
+          : Math.round((i * (stack.total - 1)) / (dotCount - 1));
+        return (
+          <div
+            key={i}
+            onClick={onJump ? () => onJump(targetIndex) : undefined}
+            title={onJump ? `Jump to entry ${targetIndex + 1} of ${stack.total}` : undefined}
+            style={{
+              height: 9,
+              borderRadius: 5,
+              transition: 'all 0.2s ease',
+              background: i === activeDot ? '#202122' : 'rgba(0,0,0,0.2)',
+              width: i === activeDot ? 22 : 9,
+              cursor: onJump ? 'pointer' : 'default',
+            }}
+          />
+        );
+      })}
+      <button onClick={next} disabled={!onJump} title="Next" style={arrowStyle}>›</button>
     </div>
   );
 }

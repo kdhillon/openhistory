@@ -179,6 +179,8 @@ interface Props {
   majorEventFilter?: string | null;
   /** Called once after the MapLibre map finishes loading — provides the map instance for editor components. */
   onMapReady?: (map: Map) => void;
+  /** Imperative handle for the InfoPanel stack dots: jump to a specific cycle index. */
+  stackApiRef?: React.MutableRefObject<{ advanceStack: (targetIndex: number) => void } | null>;
   /** Called when user clicks an OHM territory that has no Wikidata QID matched in our polities */
   onOhmTerritoryClick?: (
     ohmName: string,
@@ -252,7 +254,7 @@ function applyBorderVisibility(map: Map, visible: boolean) {
   });
 }
 
-export function MapView({ geojson, currentDateInt, stepSize, activeCategories, showBorders, showOtherPolities, showTerritoryLabels = false, onSelectFeature, zoomRequest, fitBoundsRequest, hiddenNations, suppressedPolityIds, polityIdsWithTerritory, majorEventFilter, onMapReady, onOhmTerritoryClick, onOhmMatchedPolityIds, showRecentEvents = false, showOhm = true, showOhmAdmin = false, polityPalette = 'polity-type', ohmQidMap = {}, maxAdminLevel = 2, showImperialTerritory = false, showLabels = true, selectedLang = 'en' }: Props) {
+export function MapView({ geojson, currentDateInt, stepSize, activeCategories, showBorders, showOtherPolities, showTerritoryLabels = false, onSelectFeature, zoomRequest, fitBoundsRequest, hiddenNations, suppressedPolityIds, polityIdsWithTerritory, majorEventFilter, onMapReady, stackApiRef, onOhmTerritoryClick, onOhmMatchedPolityIds, showRecentEvents = false, showOhm = true, showOhmAdmin = false, polityPalette = 'polity-type', ohmQidMap = {}, maxAdminLevel = 2, showImperialTerritory = false, showLabels = true, selectedLang = 'en' }: Props) {
   const translationMap = useTranslations();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
@@ -398,6 +400,7 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
           ['literal', ['Noto Sans Bold', 'Arial Unicode MS Regular']],
           ['literal', ['Noto Sans Italic', 'Arial Unicode MS Regular']],
         ],
+        'symbol-sort-key': ['coalesce', ['get', '_sortKey'], 0],
       };
 
       const labelPaint = {
@@ -718,9 +721,37 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
           'icon-size': ['interpolate', ['linear'], ['coalesce', ['get', '_radius'], 7], 5, 0.6, 7, 0.75, 9, 0.9, 12, 1.1],
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
+          'symbol-sort-key': ['coalesce', ['get', '_sortKey'], 0],
         },
         paint: {
           'icon-opacity': ['number', ['get', '_opacity'], 1.0],
+        },
+      });
+
+      // Stack-count badge: small "+N" indicator on events that share a location with others
+      map.addLayer({
+        id: 'events-stack-badge',
+        type: 'symbol',
+        source: 'features',
+        filter: ['all',
+          ['==', ['get', 'featureType'], 'event'],
+          ['>', ['coalesce', ['get', '_stackCount'], 0], 1],
+        ] as maplibregl.FilterSpecification,
+        layout: {
+          'text-field': ['concat', '+', ['to-string', ['-', ['get', '_stackCount'], 1]]],
+          'text-size': 10,
+          'text-offset': [0.9, -0.9],
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+          'text-anchor': 'center',
+          'symbol-sort-key': ['coalesce', ['get', '_sortKey'], 0],
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': '#8b0000',
+          'text-halo-width': 1.2,
+          'text-opacity': ['number', ['get', '_opacity'], 1.0],
         },
       });
 
@@ -1351,6 +1382,9 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
   const onMapReadyRef = useRef(onMapReady);
   onMapReadyRef.current = onMapReady;
   const stackRef = useRef<{ ids: string[]; index: number } | null>(null);
+  // Features from the last click that produced the current stack — keyed by id
+  // so InfoPanel can request a jump to any index without re-querying the map.
+  const stackFeaturesRef = useRef<globalThis.Map<string, maplibregl.MapGeoJSONFeature>>(new globalThis.Map());
   const ohmStackRef = useRef<{ names: string[]; index: number } | null>(null);
 
   useEffect(() => {
@@ -1569,7 +1603,7 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
       // their own early-return path above.
       const PANEL_TYPES = new Set(['event', 'city', 'region', 'polity']);
       const seen = new Set<string>();
-      const unique = features.filter((f) => {
+      let unique = features.filter((f) => {
         const ft = f.properties?.featureType as string | undefined;
         if (!ft || !PANEL_TYPES.has(ft)) return false;
         const id = String(f.properties?.id ?? '');
@@ -1578,6 +1612,12 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
         seen.add(id);
         return true;
       });
+      // If the click hit any events, drop non-event features from the cycle —
+      // overlapping polities/locations at the click point shouldn't end up as
+      // entries in the stack the user is paging through.
+      if (unique.some((f) => f.properties?.featureType === 'event')) {
+        unique = unique.filter((f) => f.properties?.featureType === 'event');
+      }
       // After filtering it's possible nothing renderable was clicked (e.g. only
       // an OHM tile feature underneath). Bail rather than passing garbage.
       if (unique.length === 0) return;
@@ -1588,19 +1628,88 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
         index = (stackRef.current.index + 1) % ids.length;
       }
       stackRef.current = { ids, index };
+      stackFeaturesRef.current = new globalThis.Map(unique.map((f, i) => [ids[i], f]));
 
-      const raw = { ...unique[index].properties } as Record<string, unknown>;
+      const selectedId = ids[index];
+      const selectedFeature = unique[index];
+
+      const raw = { ...selectedFeature.properties } as Record<string, unknown>;
       for (const key of ['categories', 'partOfResolved', 'wikidataClasses'] as const) {
         if (typeof raw[key] === 'string') {
           try { raw[key] = JSON.parse(raw[key] as string); } catch { /* leave as-is */ }
         }
       }
       onSelectRef.current(raw as unknown as FeatureProperties, { index, total: ids.length });
+
+      // Bring the selected event to the front of any visual stack so the icon
+      // you see matches the panel. Higher sort key = drawn later = on top.
+      const isEvent = (selectedFeature.properties as FeatureProperties).featureType === 'event';
+      if (isEvent) {
+        const sortExpr: maplibregl.ExpressionSpecification = [
+          'case',
+          ['==', ['get', 'id'], selectedId], 100000,
+          ['coalesce', ['get', '_sortKey'], 0],
+        ];
+        // Labels default to text-allow-overlap=false, so collision is decided
+        // by which feature is placed FIRST — and "placed first" = LOWER sort
+        // key. Invert: selected label gets -100000 to beat everything else.
+        const labelSortExpr: maplibregl.ExpressionSpecification = [
+          'case',
+          ['==', ['get', 'id'], selectedId], -100000,
+          ['*', -1, ['coalesce', ['get', '_sortKey'], 0]],
+        ];
+        try {
+          if (map.getLayer('events-major')) map.setLayoutProperty('events-major', 'symbol-sort-key', sortExpr);
+          if (map.getLayer('events-stack-badge')) map.setLayoutProperty('events-stack-badge', 'symbol-sort-key', sortExpr);
+          if (map.getLayer('labels-major')) map.setLayoutProperty('labels-major', 'symbol-sort-key', labelSortExpr);
+        } catch { /* ignore */ }
+      }
     };
 
     map.on('click', onClick);
-    return () => { map.off('click', onClick); };
-  }, []);
+
+    if (stackApiRef) {
+      stackApiRef.current = {
+        advanceStack: (targetIndex: number) => {
+          const cur = stackRef.current;
+          if (!cur || targetIndex < 0 || targetIndex >= cur.ids.length) return;
+          const targetId = cur.ids[targetIndex];
+          const feat = stackFeaturesRef.current.get(targetId);
+          if (!feat) return;
+          stackRef.current = { ids: cur.ids, index: targetIndex };
+          const raw = { ...feat.properties } as Record<string, unknown>;
+          for (const key of ['categories', 'partOfResolved', 'wikidataClasses'] as const) {
+            if (typeof raw[key] === 'string') {
+              try { raw[key] = JSON.parse(raw[key] as string); } catch { /* leave as-is */ }
+            }
+          }
+          onSelectRef.current(raw as unknown as FeatureProperties, { index: targetIndex, total: cur.ids.length });
+          if ((feat.properties as FeatureProperties).featureType === 'event') {
+            const sortExpr: maplibregl.ExpressionSpecification = [
+              'case',
+              ['==', ['get', 'id'], targetId], 100000,
+              ['coalesce', ['get', '_sortKey'], 0],
+            ];
+            const labelSortExpr: maplibregl.ExpressionSpecification = [
+              'case',
+              ['==', ['get', 'id'], targetId], -100000,
+              ['*', -1, ['coalesce', ['get', '_sortKey'], 0]],
+            ];
+            try {
+              if (map.getLayer('events-major')) map.setLayoutProperty('events-major', 'symbol-sort-key', sortExpr);
+              if (map.getLayer('events-stack-badge')) map.setLayoutProperty('events-stack-badge', 'symbol-sort-key', sortExpr);
+              if (map.getLayer('labels-major')) map.setLayoutProperty('labels-major', 'symbol-sort-key', labelSortExpr);
+            } catch { /* ignore */ }
+          }
+        },
+      };
+    }
+
+    return () => {
+      map.off('click', onClick);
+      if (stackApiRef) stackApiRef.current = null;
+    };
+  }, [stackApiRef]);
 
   const updateFilter = useCallback(() => {
     const map = mapRef.current;
@@ -1738,6 +1847,10 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
         extraProps._minZoom = sl === null ? 3 : sl >= 80 ? 0.75 : sl >= 40 ? 1.5 : sl >= 20 ? 2.25 : sl >= 10 ? 3 : sl >= 3 ? 3.75 : 4.5;
         extraProps._radius  = sl === null ? 7 : sl >= 25 ? 12 : sl >= 10 ? 9 : sl >= 3 ? 7 : 5;
         extraProps._icon    = (p.primaryCategory in CATEGORY_SVGS) ? catIconName(p.primaryCategory as Category) : 'marker';
+        // Default sort key: higher sitelinks = drawn later = on top of the stack.
+        // Click handler overrides this with case-expression to bring the selected
+        // event forward; this default applies until something is clicked.
+        extraProps._sortKey = sl ?? 0;
       }
 
       return [{ ...f, properties: { ...f.properties, ...extraProps } }];
@@ -1750,6 +1863,24 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
     // the user's selected language; we overwrite `title` so the existing
     // `['get', 'title']` text-field expression picks it up without touching
     // every label layer.
+    // Stack-count: group event features by rounded coords, tag the most prominent
+    // one in each group with _stackCount so it shows a "+N" badge. ~5 decimals ≈ 1m.
+    const stackGroups: globalThis.Map<string, GeoJSON.Feature[]> = new globalThis.Map();
+    for (const f of visible) {
+      const p = f.properties as FeatureProperties;
+      if (p.featureType !== 'event' || !f.geometry || f.geometry.type !== 'Point') continue;
+      const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
+      const key = `${lng.toFixed(5)},${lat.toFixed(5)}`;
+      const arr = stackGroups.get(key);
+      if (arr) arr.push(f); else stackGroups.set(key, [f]);
+    }
+    for (const group of stackGroups.values()) {
+      if (group.length < 2) continue;
+      for (const f of group) {
+        (f.properties as Record<string, unknown>)._stackCount = group.length;
+      }
+    }
+
     const hasTranslations = translationMap && Object.keys(translationMap).length > 0;
     const localized = hasTranslations
       ? visible.map((f) => {

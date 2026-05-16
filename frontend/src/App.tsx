@@ -123,6 +123,8 @@ export default function App() {
 
   const [selectedFeature, setSelectedFeature] = useState<FeatureProperties | null>(null);
   const [stack, setStack] = useState<StackInfo>({ index: 0, total: 1 });
+  const stackApiRef = useRef<{ advanceStack: (i: number) => void } | null>(null);
+  const handleAdvanceStack = useCallback((i: number) => stackApiRef.current?.advanceStack(i), []);
   const [activeCategories, setActiveCategories] = useState<Set<Category>>(
     new Set(EVENT_CATEGORIES as Category[]),
   );
@@ -465,16 +467,24 @@ export default function App() {
   const handleSelectFeature = useCallback((props: FeatureProperties, stackInfo: StackInfo) => {
     setSelectedFeature(props);
     setStack(stackInfo);
+    // Skip auto-seek when the user is cycling through a stack of multiple
+    // events — seeking changes the visible-event set, which shifts the badge
+    // count under them mid-cycle. They can still seek manually via the timeline.
     if (props.yearStart !== null) {
       const isStaticFeature = props.featureType === 'city' || props.featureType === 'region'
         || props.featureType === 'polity';
       if (!isStaticFeature) {
-        const featureDateInt = encodeDate(props.yearStart, props.monthStart ?? 1, props.dayStart ?? 1);
-        const cur = timeline.currentDateInt;
-        const activeNow = props.yearEnd != null
-          ? cur >= featureDateInt && cur <= encodeDate(props.yearEnd, props.monthEnd ?? 12, props.dayEnd ?? 31)
-          : cur === featureDateInt;
-        if (!activeNow) timeline.seek(featureDateInt);
+        // Only seek if the current year is OUTSIDE the event's year range.
+        // If we're already within it (even mid-event), don't jump — the event
+        // is contextually current and seeking to its start would shift the
+        // visible-event set unnecessarily.
+        const curYear = decodeDate(timeline.currentDateInt).year;
+        const endYear = props.yearEnd ?? props.yearStart;
+        const inRange = curYear >= props.yearStart && curYear <= endYear;
+        if (!inRange) {
+          const featureDateInt = encodeDate(props.yearStart, props.monthStart ?? 1, props.dayStart ?? 1);
+          timeline.seek(featureDateInt);
+        }
       }
     }
   }, [timeline]);
@@ -746,6 +756,7 @@ export default function App() {
           polityIdsWithTerritory={polityIdsWithTerritory}
           majorEventFilter={majorEventFilter}
           onMapReady={setMapInstance}
+          stackApiRef={stackApiRef}
           onOhmTerritoryClick={(ohmName, ohmWikidataQid, yearStart, yearEnd, osmType, osmId) => setOhmMappingTarget({ ohmName, ohmWikidataQid, yearStart, yearEnd, osmType, osmId })}
           onOhmMatchedPolityIds={setOhmMatchedPolityIds}
           showRecentEvents={showRecentEvents}
@@ -805,6 +816,7 @@ export default function App() {
       <InfoPanel
         feature={selectedFeature}
         stack={stack}
+        onAdvanceStack={handleAdvanceStack}
         onClose={handleClosePanel}
         geojson={geojson}
         onNavigateToFeature={handleNavigateToFeature}
