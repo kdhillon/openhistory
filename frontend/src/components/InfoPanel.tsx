@@ -261,11 +261,6 @@ export function InfoPanel({ feature: rawFeature, stack, onAdvanceStack, onClose,
 
   const [storyIndex, setStoryIndex] = useState<StoryIndexEntry[]>([]);
 
-  // Collapse photos when the edit form opens
-  useEffect(() => {
-    if (editField) setShowImages(false);
-  }, [editField]);
-
   // Load story index once
   useEffect(() => {
     fetch('/data/stories/index.json')
