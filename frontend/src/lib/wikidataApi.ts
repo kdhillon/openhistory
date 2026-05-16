@@ -56,22 +56,7 @@ export async function getQid(wikipediaTitle: string): Promise<string | null> {
 // ── CSRF ─────────────────────────────────────────────────────────────────────
 
 export async function getCsrf(): Promise<string> {
-  // Fetch the CSRF token via the SAME direct-to-Wikidata path that
-  // submitClaim uses (access_token in the form body, no Authorization
-  // header, origin= the page origin). MediaWiki CSRF tokens are
-  // session-bound — fetching via the backend proxy would issue a token
-  // for the proxy's session, and the subsequent direct-submit would
-  // reject it as `badtoken`.
-  const token = await getAccessToken();
-  if (!token) throw new Error('Not logged in to Wikimedia');
-  const body = new URLSearchParams({
-    action: 'query', meta: 'tokens', format: 'json',
-    access_token: token,
-  });
-  const res = await fetch(`${WD}?origin=${encodeURIComponent(window.location.origin)}`, {
-    method: 'POST',
-    body,
-  });
+  const res = await wdAuth({ action: 'query', meta: 'tokens' });
   const data = await res.json();
   return data.query.tokens.csrftoken as string;
 }
@@ -112,9 +97,6 @@ function buildTimeClaim(property: string, year: number, month: number | null, da
 }
 
 async function submitClaim(entityId: string, claim: Claim, csrf: string, summary: string): Promise<void> {
-  const token = await getAccessToken();
-  if (!token) throw new Error('Not logged in to Wikimedia');
-
   let body: URLSearchParams;
 
   if (claim.id) {
@@ -135,25 +117,12 @@ async function submitClaim(entityId: string, claim: Claim, csrf: string, summary
     });
   }
 
-  // POST directly to Wikidata from the browser (not through our proxy) so the
-  // request uses the user's IP instead of Railway's blocked IP range.
-  // Pass OAuth token as form body parameter (RFC 6750 §2.2) instead of
-  // Authorization header — this avoids triggering a CORS preflight.
-  body.set('access_token', token);
-
-  let data: Record<string, unknown>;
-  try {
-    const res = await fetch(`${WD}?origin=${encodeURIComponent(window.location.origin)}`, {
-      method: 'POST',
-      body,
-    });
-    data = await res.json();
-  } catch {
-    // CORS may block reading the response even though the edit succeeded.
-    // Verify by re-reading the entity's claims.
-    console.warn('[submitClaim] Could not read Wikidata response (likely CORS). Verifying edit…');
-    return;
-  }
+  // Route through the backend proxy so getCsrf and submitClaim share a
+  // session (avoids badtoken) and so we don't have to be on Wikidata's
+  // CORS allowlist (avoids the "Origin mismatch" rejection on direct
+  // browser POSTs from openhistory.app).
+  const res = await wdAuth({}, 'POST', body);
+  const data = await res.json() as Record<string, unknown>;
 
   if (data.error) {
     console.error('[submitClaim] Wikidata error:', JSON.stringify(data.error));
