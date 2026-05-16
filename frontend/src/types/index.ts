@@ -134,4 +134,7 @@ export interface TimelineState {
 }
 
 export const YEAR_MIN = -600;
-export const YEAR_MAX = 2025;
+// Track the current calendar year so the slider always reaches "today" without
+// requiring a code bump every January 1. Computed at module load — fine because
+// the app reloads daily in practice (Railway redeploys, browser refreshes).
+export const YEAR_MAX = new Date().getUTCFullYear();

@@ -320,10 +320,13 @@ export default function App() {
     // p31_qids, etc.) without nulling them on the resulting feature. Override
     // fields take precedence; anything missing from the override falls back
     // to the seed.
-    const withOverrides = overrideMap.size > 0
+    const matchedOverrideIds = new Set<string>();
+    const merged = overrideMap.size > 0
       ? baseFeatures.map((f) => {
-          const ov = overrideMap.get((f.properties as { id: string }).id);
+          const id = (f.properties as { id: string }).id;
+          const ov = overrideMap.get(id);
           if (!ov) return f;
+          matchedOverrideIds.add(id);
           return {
             ...f,
             geometry: ov.geometry ?? f.geometry,
@@ -331,6 +334,20 @@ export default function App() {
           };
         })
       : baseFeatures;
+    // Polity overrides that have no matching seed feature (e.g. auto-promoted
+    // OHM polygons whose polity row was created after the seed was exported)
+    // would otherwise be silently dropped — appending them as standalone
+    // features so their parents/cascade colors reach the map.
+    const extras: GeoJSON.Feature[] = [];
+    if (overrideMap.size > 0) {
+      for (const [id, ov] of overrideMap) {
+        if (matchedOverrideIds.has(id)) continue;
+        const featureType = (ov.properties as { featureType?: string }).featureType;
+        if (featureType !== 'polity') continue;
+        extras.push(ov);
+      }
+    }
+    const withOverrides = extras.length > 0 ? [...merged, ...extras] : merged;
     const features = hiddenFeatureIds.size > 0
       ? withOverrides.filter((f) => !hiddenFeatureIds.has((f.properties as { id: string }).id))
       : withOverrides;

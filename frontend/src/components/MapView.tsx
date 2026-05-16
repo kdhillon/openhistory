@@ -1775,19 +1775,27 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         return;
       }
 
-      // Deduplicate by id — queryRenderedFeatures can return the same feature
-      // from multiple layers (e.g. a war event appears in both circles-major and icons-war).
-      // Also exclude territory features here — they are only handled via the early-return
-      // branch above (when they're the top hit). Letting them into the stack cycling causes
-      // handleSelectFeature to receive a territory with no yearStart → encodeDate(undefined) → NaN.
+      // Deduplicate by id, and restrict to feature types the InfoPanel can
+      // actually render. Without this restriction, OHM tile features (ohm-fills
+      // polygons, ohm-labels symbols) that happen to share the click point
+      // with an event sneak into the stack — the user clicks the same event
+      // twice, the stack cycles to the OHM tile feature, and the panel gets
+      // junk properties (no id/title/yearStart). Territory features have
+      // their own early-return path above.
+      const PANEL_TYPES = new Set(['event', 'city', 'region', 'polity']);
       const seen = new Set<string>();
       const unique = features.filter((f) => {
-        if (f.properties?.featureType === 'territory') return false;
+        const ft = f.properties?.featureType as string | undefined;
+        if (!ft || !PANEL_TYPES.has(ft)) return false;
         const id = String(f.properties?.id ?? '');
+        if (!id) return false;
         if (seen.has(id)) return false;
         seen.add(id);
         return true;
       });
+      // After filtering it's possible nothing renderable was clicked (e.g. only
+      // an OHM tile feature underneath). Bail rather than passing garbage.
+      if (unique.length === 0) return;
 
       const ids = unique.map((f) => String(f.properties?.id ?? ''));
       let index = 0;
@@ -1938,8 +1946,11 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       if (!isLocation) {
         // Sitelinks count drives both zoom threshold and pin size.
         // Higher sitelinks = more globally significant = visible earlier + bigger pin.
+        // Thresholds shifted ~1.3x earlier (divided by 1.3, rounded to a quarter)
+        // so events surface at lower zoom levels — the previous values left the
+        // map feeling sparse until quite zoomed in.
         const sl = p.sitelinksCount ?? null;
-        extraProps._minZoom = sl === null ? 4 : sl >= 80 ? 1 : sl >= 40 ? 2 : sl >= 20 ? 3 : sl >= 10 ? 4 : sl >= 3 ? 5 : 6;
+        extraProps._minZoom = sl === null ? 3 : sl >= 80 ? 0.75 : sl >= 40 ? 1.5 : sl >= 20 ? 2.25 : sl >= 10 ? 3 : sl >= 3 ? 3.75 : 4.5;
         extraProps._radius  = sl === null ? 7 : sl >= 25 ? 12 : sl >= 10 ? 9 : sl >= 3 ? 7 : 5;
         extraProps._icon    = (p.primaryCategory in CATEGORY_SVGS) ? catIconName(p.primaryCategory as Category) : 'marker';
       }

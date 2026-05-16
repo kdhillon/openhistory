@@ -3,7 +3,7 @@ import { POLITY_COLOR_OVERRIDES, PALETTE_COLOR_COUNT } from './polityColorOverri
 import { getUserColorOverride } from '../lib/userColorOverrides';
 import type { PolityType } from '../types';
 
-export type PaletteId = 'polity-type' | 'muted-classic' | 'saturated-retro' | 'retro' | 'earth-tones' | 'none';
+export type PaletteId = 'polity-type' | 'muted-classic' | 'saturated-retro' | 'retro' | 'spectrum' | 'earth-tones' | 'none';
 
 export const POLITY_PALETTES: Record<PaletteId, { label: string; colors: string[]; fillOpacity: number }> = {
   // Blank fill — keeps borders + labels but renders no polygon coloring.
@@ -16,10 +16,14 @@ export const POLITY_PALETTES: Record<PaletteId, { label: string; colors: string[
   'muted-classic':   { label: 'Muted classic',            colors: ['#F2B5A8', '#F4D58D', '#BFD8B8', '#A8C6DF', '#D5BCE0', '#F0C292', '#A8D6CD'],                       fillOpacity: 0.6 },
   'saturated-retro': { label: 'Saturated retro',          colors: ['#C9536E', '#ED7B2F', '#D9A92E', '#2A9D8F', '#2E86C1', '#9B5DE5', '#5BB377'],                       fillOpacity: 0.4 },
   'retro':           { label: 'Retro',                    colors: ['#C9536E', '#ED7B2F', '#D9A92E', '#2A9D8F', '#2E86C1', '#9B5DE5', '#5BB377'],                       fillOpacity: 0.25 },
+  // 7 hues spaced ~51° apart around the wheel, equal saturation/lightness.
+  // Designed to be perceptually distinct without grays — every neighbor pair
+  // has a clear hue jump, and no two share a temperature bucket.
+  'spectrum':        { label: 'Spectrum',                 colors: ['#D9534F', '#E0A93C', '#9CB740', '#3FB28A', '#2C5F8D', '#8E5DD5', '#D456A8'],                       fillOpacity: 0.4 },
   'earth-tones':     { label: 'Earth tones',              colors: ['#C97B63', '#D9A05B', '#B4A269', '#8FA6A0', '#7C95B1', '#B58FA8', '#7B8B5C'],                       fillOpacity: 0.6 },
 };
 
-export const DEFAULT_PALETTE_ID: PaletteId = 'saturated-retro';
+export const DEFAULT_PALETTE_ID: PaletteId = 'spectrum';
 
 // FNV-1a 32-bit hash. Deterministic, fast, well-distributed for short strings.
 // Same input always produces the same output, so the same polity title always

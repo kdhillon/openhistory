@@ -84,7 +84,13 @@ export function normalizeDateInt(raw: number): number {
 }
 
 export const DATE_MIN = encodeDate(YEAR_MIN, 1, 1);
-export const DATE_MAX = encodeDate(YEAR_MAX, 12, 31);
+// Cap the slider's upper bound at *today*, not Dec 31 of the current year.
+// Otherwise at 1m/1d granularity users could scroll into a future month/day
+// that doesn't actually exist yet (e.g. Dec 31 2026 when today is May 15 2026).
+// Computed at module load — fine because reloads happen often enough in
+// practice and a stale "today" by one day causes no real bug.
+const _today = new Date();
+export const DATE_MAX = encodeDate(_today.getUTCFullYear(), _today.getUTCMonth() + 1, _today.getUTCDate());
 
 /** Compute [startDateInt, endDateInt] for an event given its year/month/day fields.
  *  endDateInt is the last dateInt when the event is "active" (before the fade window). */

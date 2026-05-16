@@ -26,6 +26,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=None, help="Only process the first N polities (for testing).")
     parser.add_argument("--dry-run", action="store_true", help="Print diff counts without writing.")
+    parser.add_argument("--only-empty", action="store_true",
+                        help="Only process polities whose parents column is NULL or []. "
+                             "Polities with any existing parent entry (manual OR Wikidata) are skipped.")
     args = parser.parse_args()
 
     dsn = os.environ.get("DATABASE_URL")
@@ -54,7 +57,12 @@ def main() -> int:
 
     # `qids` are the children we'll FETCH parents for. With --limit, only that subset
     # is queried; the parent filter still recognizes the full polity registry.
-    qids = [r["wikidata_qid"] for r in (all_rows[: args.limit] if args.limit else all_rows)]
+    candidate_rows = all_rows
+    if args.only_empty:
+        candidate_rows = [r for r in all_rows if not (r["parents"] or [])]
+        print(f"--only-empty: filtered to {len(candidate_rows)} polities with no existing parents.",
+              file=sys.stderr)
+    qids = [r["wikidata_qid"] for r in (candidate_rows[: args.limit] if args.limit else candidate_rows)]
     print(f"Fetching parents for {len(qids)} children from Wikidata...", file=sys.stderr)
     fetched = fetch_parents(qids, polity_meta=polity_meta)
     print(f"Wikidata returned parent links for {len(fetched)} children.", file=sys.stderr)

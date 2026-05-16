@@ -72,12 +72,12 @@ export const LOCATION_CATEGORIES: Category[] = [
 export const POLITY_CATEGORIES: Category[] = [
   'empire',
   'kingdom',
+  'colony',
   'principality',
   'republic',
   'confederation',
   'sultanate',
   'papacy',
-  'colony',
   'people',
   'other',
 ];

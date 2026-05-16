@@ -374,6 +374,515 @@ WIKIDATA_TO_CATEGORY: dict[str, Optional[str]] = {
     "Q13418847": None,           # historical event (generic)
     "Q1190554":  None,           # occurrence (generic)
     "Q3249551":  None,           # process (very generic)
+    # Auto-learned from LLM (do not edit by hand — re-run fix-empty-categories.py)
+    "Q10431430":  "battle",      # human massacre
+    "Q11370241":  "battle",      # Kyūshū campaign
+    "Q11499675":  "battle",      # katakiuchi
+    "Q1470138":  "battle",      # frontal assault
+    "Q15047343":  "battle",      # battle of the Paraguayan War
+    "Q26913948":  "battle",      # legendary battle
+    "Q3289720":  "battle",      # forced march
+    "Q60332293":  "battle",      # infantry charge
+    "Q650711":  "battle",      # combat
+    "Q100906234":  "war",      # multinational military coalition
+    "Q105370834":  "war",      # war phase
+    "Q107637520":  "war",      # border conflict
+    "Q10931495":  "war",      # shizoku rebellion
+    "Q111953439":  "war",      # princely rebellion
+    "Q11490312":  "war",      # tokusei-ikki
+    "Q11682252":  "war",      # expeditionary warfare
+    "Q130241618":  "war",      # expeditionary army
+    "Q130704399":  "war",      # coal strike
+    "Q133800469":  "war",      # naval mutiny
+    "Q13427130":  "war",      # jacquerie
+    "Q13573188":  "war",      # holy war
+    "Q154278":  "war",      # ethnic cleansing
+    "Q1827102":  "war",      # religious war
+    "Q20045350":  "war",      # sōkoku-ikki
+    "Q2672648":  "war",      # social conflict
+    "Q2912528":  "war",      # trade conflict
+    "Q3119160":  "war",      # Colombian civil war
+    "Q369799":  "war",      # low-intensity conflict
+    "Q42750320":  "war",      # border incident
+    "Q467033":  "war",      # feud
+    "Q5153967":  "war",      # communal violence
+    "Q5533440":  "war",      # genocidal massacre
+    "Q5919191":  "war",      # military intervention
+    "Q718893":  "war",      # theater of war
+    "Q7292715":  "war",      # range war
+    "Q837556":  "war",      # forced displacement
+    "Q891854":  "war",      # bomb attack
+    "Q947533":  "war",      # Ikkō-ikki
+    "Q9683607":  "war",      # kuni-ikki
+    "Q100580950":  "politics",      # London County Council election
+    "Q104708121":  "politics",      # storming
+    "Q106691665":  "politics",      # Argentine presidential election
+    "Q1076105":  "politics",      # general election
+    "Q10855380":  "politics",      # public execution
+    "Q108809873":  "politics",      # political conflict
+    "Q11079230":  "politics",      # anti-missionary riot in China
+    "Q11267645":  "politics",      # Japanese House of Representatives election
+    "Q112679158":  "politics",      # Chilean presidential election
+    "Q112679256":  "politics",      # Ecuadorian presidential election
+    "Q112679286":  "politics",      # presidential election in El Salvador
+    "Q112679378":  "politics",      # Guatemalan presidential election
+    "Q112727393":  "politics",      # United States Senate election in Kansas
+    "Q112727415":  "politics",      # United States Senate election in Ohio
+    "Q112727422":  "politics",      # United States Senate election in South Carolina
+    "Q11371169":  "politics",      # incident
+    "Q1143371":  "politics",      # cession
+    "Q11517839":  "politics",      # anti-Chinese riots
+    "Q1156016":  "politics",      # royal elections in Poland
+    "Q120736802":  "politics",      # election to the Cislaithanian Parliament
+    "Q1219394":  "politics",      # independence referendum
+    "Q12311825":  "politics",      # Danish parliamentary election
+    "Q12323704":  "politics",      # Danish Landsting election
+    "Q1255828":  "politics",      # controversy
+    "Q1262732":  "politics",      # purge
+    "Q12761956":  "politics",      # affair
+    "Q1333366":  "politics",      # snap election
+    "Q1412901":  "politics",      # non-aggression pact
+    "Q1422253":  "politics",      # royal charter
+    "Q14276938":  "politics",      # Reichstag election in the German Empire
+    "Q14509381":  "politics",      # Dutch general election
+    "Q1498487":  "politics",      # secret treaty
+    "Q152450":  "politics",      # municipal election
+    "Q15813155":  "politics",      # succession controversy
+    "Q15966540":  "politics",      # local election
+    "Q1679887":  "politics",      # student protest
+    "Q16939528":  "politics",      # general election in Malta
+    "Q16964284":  "politics",      # Toronto municipal election
+    "Q1709241":  "politics",      # brawling
+    "Q17496410":  "politics",      # United Kingdom local elections
+    "Q18343076":  "politics",      # corruption scandal
+    "Q188494":  "politics",      # witch hunt
+    "Q191355":  "politics",      # hunger strike
+    "Q19393843":  "politics",      # unsolved murder
+    "Q194465":  "politics",      # annexation
+    "Q19692072":  "politics",      # decision of the Supreme Court of the United States
+    "Q19902850":  "politics",      # witch trial
+    "Q20053795":  "politics",      # Brazilian presidential election
+    "Q204933":  "politics",      # decapitation
+    "Q207304":  "politics",      # Estates General
+    "Q21095053":  "politics",      # parliamentary term in the Kingdom of Great Britain
+    "Q2197458":  "politics",      # sex scandal
+    "Q22160105":  "politics",      # Greek legislative election
+    "Q22160401":  "politics",      # Swiss federal election
+    "Q22162827":  "politics",      # New Zealand general election
+    "Q22266255":  "politics",      # Belgian general election
+    "Q22266624":  "politics",      # Luxembourg general election
+    "Q22266709":  "politics",      # Swedish general election
+    "Q22275982":  "politics",      # Bulgarian parliamentary election
+    "Q22276080":  "politics",      # Icelandic parliamentary election
+    "Q22280976":  "politics",      # Faroese parliamentary election
+    "Q22284407":  "politics",      # Australian federal election
+    "Q22338585":  "politics",      # Brazilian legislative election
+    "Q22669535":  "politics",      # Liberian general election
+    "Q22695896":  "politics",      # Sammarinese general election
+    "Q2447975":  "politics",      # strife
+    "Q24714393":  "politics",      # Puerto Rican general election
+    "Q24714461":  "politics",      # Surinamese parliamentary election
+    "Q2515494":  "politics",      # constitutional referendum
+    "Q25343648":  "politics",      # Jamaican legislative election
+    "Q25448839":  "politics",      # Honduran legislative election
+    "Q25449075":  "politics",      # Bahamian general election
+    "Q2620826":  "politics",      # declaration
+    "Q273120":  "politics",      # protest
+    "Q28221923":  "politics",      # United States presidential election in Arkansas
+    "Q28221929":  "politics",      # United States presidential election in California
+    "Q28221935":  "politics",      # United States presidential election in Colorado
+    "Q28221954":  "politics",      # United States presidential election in Florida
+    "Q28221964":  "politics",      # United States presidential election in Georgia
+    "Q28221976":  "politics",      # United States presidential election in Idaho
+    "Q28221987":  "politics",      # United States presidential election in Illinois
+    "Q28221992":  "politics",      # United States presidential election in Iowa
+    "Q28222001":  "politics",      # United States presidential election in Kansas
+    "Q28222008":  "politics",      # United States presidential election in Kentucky
+    "Q28222017":  "politics",      # United States presidential election in Maine
+    "Q28222023":  "politics",      # United States presidential election in Maryland
+    "Q28222036":  "politics",      # United States presidential election in Michigan
+    "Q28222041":  "politics",      # United States presidential election in Minnesota
+    "Q28222048":  "politics",      # United States presidential election in Missisippi
+    "Q28222055":  "politics",      # United States presidential election in Montana
+    "Q28222060":  "politics",      # United States presidential election in Nebraska
+    "Q28222066":  "politics",      # United States presidential election in Nevada
+    "Q28222087":  "politics",      # United States presidential election in North Carolina
+    "Q28222094":  "politics",      # United States presidential election in North Dakota
+    "Q28222111":  "politics",      # United States presidential election in Oregon
+    "Q28222124":  "politics",      # United States presidential election in Rhode Island
+    "Q28222136":  "politics",      # United States presidential election in South Dakota
+    "Q28222142":  "politics",      # United States presidential election in Tennessee
+    "Q28222148":  "politics",      # United States presidential election in Texas
+    "Q28222155":  "politics",      # United States presidential election in Utah
+    "Q28222165":  "politics",      # United States presidential election in Virginia
+    "Q28222171":  "politics",      # United States presidential election in Washington
+    "Q28222179":  "politics",      # United States presidential election in West Virginia
+    "Q28222187":  "politics",      # United States presidential election in Wisconsin
+    "Q28222191":  "politics",      # United States presidential election in Wyoming
+    "Q28545697":  "politics",      # Peruvian presidential election
+    "Q28649370":  "politics",      # Philippine House election
+    "Q28710139":  "politics",      # territorial expansion
+    "Q3068523":  "politics",      # elections in Denmark
+    "Q318296":  "politics",      # kidnapping
+    "Q322732":  "politics",      # abolition
+    "Q3246417":  "politics",      # cause célèbre
+    "Q332695":  "politics",      # Russification
+    "Q3536928":  "politics",      # free trade agreement
+    "Q3586928":  "politics",      # Alberta general election
+    "Q3586936":  "politics",      # British Columbia general election
+    "Q3586944":  "politics",      # Manitoba general election
+    "Q3586948":  "politics",      # Ontario general election
+    "Q3586951":  "politics",      # Quebec general election
+    "Q3586952":  "politics",      # Saskatchewan general election
+    "Q3587386":  "politics",      # French Presidential election under the Third Republic
+    "Q3587541":  "politics",      # French senate elections
+    "Q3588250":  "politics",      # ethnic riot
+    "Q3824506":  "politics",      # commercial treaty
+    "Q4460509":  "politics",      # self-coup
+    "Q4676786":  "politics",      # deliberate murder
+    "Q47516525":  "politics",      # Cuban parliamentary election
+    "Q49371":  "politics",      # legislation
+    "Q51159762":  "politics",      # deliberate poisoning
+    "Q51879476":  "politics",      # South Australian House of Assembly by-election
+    "Q5300066":  "politics",      # double murder
+    "Q5354734":  "politics",      # elections in Liberia
+    "Q56185179":  "politics",      # South Australian state election
+    "Q56188162":  "politics",      # South Australian Legislative Council election
+    "Q56188227":  "politics",      # South Australian House of Assembly election
+    "Q5782934":  "politics",      # labor dispute
+    "Q6024855":  "politics",      # tax riot
+    "Q6508670":  "politics",      # leadership election
+    "Q6518201":  "politics",      # legislative assembly election in India
+    "Q6869257":  "politics",      # Minority reign
+    "Q6934728":  "politics",      # multilateral treaty
+    "Q6936320":  "politics",      # Municipal elections in Canada
+    "Q7232773":  "politics",      # Portuguese legislative election
+    "Q7313519":  "politics",      # rent strike
+    "Q7335248":  "politics",      # Rio Grande border dispute
+    "Q7579940":  "politics",      # sports riot
+    "Q7627882":  "politics",      # student riot
+    "Q7832904":  "politics",      # train robbery
+    "Q7864918":  "politics",      # UK Parliamentary by-election
+    "Q837144":  "politics",      # Numbered Treaties
+    "Q85811481":  "politics",      # United States presidential impeachment
+    "Q858439":  "politics",      # presidential election
+    "Q878794":  "politics",      # expulsions and exoduses of Jews
+    "Q88178910":  "politics",      # assassination attempt
+    "Q934744":  "politics",      # political scandal
+    "Q949683":  "politics",      # transformation
+    "Q1029878":  "religion",      # camp meeting
+    "Q113688024":  "religion",      # theological movement
+    "Q11453226":  "religion",      # ritual ceremony of the Imperial Palace
+    "Q1165406":  "religion",      # Taoist ritual
+    "Q12546":  "religion",      # Crusades
+    "Q126287984":  "religion",      # religious schism
+    "Q126288065":  "religion",      # schism from the Catholic Church
+    "Q126325378":  "religion",      # Schism in Islam
+    "Q1263926":  "religion",      # shinshūkyō
+    "Q1482264":  "religion",      # Yearly Meeting
+    "Q1482674":  "religion",      # Mubahala
+    "Q160598":  "religion",      # heresy
+    "Q170774":  "religion",      # miracle
+    "Q1826286":  "religion",      # religious movement
+    "Q288495":  "religion",      # First Mass
+    "Q31732":  "religion",      # nativity scene
+    "Q35856":  "religion",      # baptism
+    "Q41521":  "religion",      # schism
+    "Q4378806":  "religion",      # forced conversion
+    "Q4927790":  "religion",      # blood compact
+    "Q507850":  "religion",      # Marian apparition
+    "Q59532":  "religion",      # christianization
+    "Q65083733":  "religion",      # schism in Christianity
+    "Q7311342":  "religion",      # religious controversy
+    "Q814997":  "religion",      # religious conversion
+    "Q1033074":  "disaster",      # dam failure
+    "Q1078765":  "disaster",      # train wreck
+    "Q112158455":  "disaster",      # earthquake doublet
+    "Q11396401":  "disaster",      # train fire
+    "Q114041309":  "disaster",      # earthquake sequence
+    "Q11457362":  "disaster",      # cold winter
+    "Q11642516":  "disaster",      # distress
+    "Q121742":  "disaster",      # storm surge
+    "Q125568601":  "disaster",      # EMS intensity X earthquake
+    "Q133780":  "disaster",      # plague
+    "Q142824":  "disaster",      # mass suicide
+    "Q1516910":  "disaster",      # plague epidemic
+    "Q1550225":  "disaster",      # mining accident
+    "Q1639789":  "disaster",      # phreatomagmatic eruption
+    "Q1671228":  "disaster",      # food scandal
+    "Q167903":  "disaster",      # landslide
+    "Q169950":  "disaster",      # wildfire
+    "Q23007305":  "disaster",      # mine explosion
+    "Q24039748":  "disaster",      # Kantō earthquakes
+    "Q2620513":  "disaster",      # maritime disaster
+    "Q2635501":  "disaster",      # Kamchatka earthquake
+    "Q30103545":  "disaster",      # smallpox epidemic
+    "Q30880545":  "disaster",      # sinking
+    "Q3193890":  "disaster",      # environmental disaster
+    "Q3196":  "disaster",      # fire
+    "Q358275":  "disaster",      # sturzstrom
+    "Q43059":  "disaster",      # drought
+    "Q4856009":  "disaster",      # bank failure
+    "Q63472138":  "disaster",      # cocoliztli epidemic
+    "Q642683":  "disaster",      # cold wave
+    "Q6624990":  "disaster",      # locust plague
+    "Q6963731":  "disaster",      # Nankai megathrust earthquake
+    "Q7312186":  "disaster",      # remotely triggered earthquake
+    "Q7446977":  "disaster",      # off Sanriku earthquake
+    "Q747501":  "disaster",      # Plinian eruption
+    "Q7625093":  "disaster",      # structure fire
+    "Q8070":  "disaster",      # tsunami
+    "Q8081":  "disaster",      # tornado
+    "Q906512":  "disaster",      # shipwrecking
+    "Q12772819":  "discovery",      # discovery
+    "Q1345443":  "discovery",      # decipherment
+    "Q1675174":  "exploration",      # Italienzug
+    "Q14506045":  "science",      # optical phenomenon
+    "Q2996078":  "science",      # scientific controversy
+    "Q751989":  "science",      # astronomical phenomenon
+    "Q77872752":  "science",      # physics experiment
+    "Q11588597":  "culture",      # public holiday in the Empire of Japan
+    "Q130748394":  "culture",      # religious festival
+    "Q132241":  "culture",      # festival
+    "Q13930359":  "culture",      # folk festival
+    "Q193605":  "culture",      # lullaby
+    "Q24887419":  "culture",      # National Industrial Exhibition
+    "Q40039114":  "culture",      # Volkslied
+    "Q58483083":  "culture",      # dramatico-musical work
+    "Q60733114":  "culture",      # music tradition
+    "Q717040":  "culture",      # Christmas tradition
+    "Q736161":  "culture",      # tournament
+    "Q943929":  "culture",      # traditional folk song
+    "Q10416961":  None,          # working life museum — generic/excluded
+    "Q1048835":  None,          # political territorial entity — generic/excluded
+    "Q105543609":  None,          # musical work/composition — generic/excluded
+    "Q106006806":  None,          # lordship — generic/excluded
+    "Q1063239":  None,          # polity — generic/excluded
+    "Q107410977":  None,          # Amazigh tribe — generic/excluded
+    "Q107489970":  None,          # bamboo slip — generic/excluded
+    "Q107555073":  None,          #  — generic/excluded
+    "Q108102018":  None,          # romanisation system — generic/excluded
+    "Q10843872":  None,          # process — generic/excluded
+    "Q1089515":  None,          # conquest dynasty — generic/excluded
+    "Q109734237":  None,          # individual means of transport — generic/excluded
+    "Q110295396":  None,          # type of musical instrument — generic/excluded
+    "Q11042":  None,          # culture — generic/excluded
+    "Q112091425":  None,          #  — generic/excluded
+    "Q112229208":  None,          # trope — generic/excluded
+    "Q1123037":  None,          # nursery rhyme — generic/excluded
+    "Q1123131":  None,          # disputation — generic/excluded
+    "Q1128340":  None,          # subject heading — generic/excluded
+    "Q1129461":  None,          # history of Kazakhstan — generic/excluded
+    "Q113371917":  None,          # legendary saint — generic/excluded
+    "Q1139327":  None,          # rivalry — generic/excluded
+    "Q1151643":  None,          # mathematical puzzle — generic/excluded
+    "Q115518362":  None,          # Christmas character — generic/excluded
+    "Q11555358":  None,          # dharma discussion — generic/excluded
+    "Q1157068":  None,          # clerical institute — generic/excluded
+    "Q11658":  None,          # transformer — generic/excluded
+    "Q117389020":  None,          # state in American Civil War — generic/excluded
+    "Q117850":  None,          # doctrine — generic/excluded
+    "Q1200957":  None,          # tourist destination — generic/excluded
+    "Q12055674":  None,          # dispute — generic/excluded
+    "Q120609028":  None,          # aspect in a historical period in a geographic region — generic/excluded
+    "Q12106034":  None,          #  — generic/excluded
+    "Q12164319":  None,          # Ukrainian fairy tale — generic/excluded
+    "Q1221280":  None,          # folk tale — generic/excluded
+    "Q12323":  None,          # dam — generic/excluded
+    "Q12355361":  None,          # redewendung — generic/excluded
+    "Q12366139":  None,          # fish hatchery — generic/excluded
+    "Q124078422":  None,          # weapon type — generic/excluded
+    "Q12558574":  None,          # point of view — generic/excluded
+    "Q12827256":  None,          # myth — generic/excluded
+    "Q12870":  None,          # explosive chemicals — generic/excluded
+    "Q12890393":  None,          # incident — generic/excluded
+    "Q1292119":  None,          # style — generic/excluded
+    "Q13002315":  None,          # legendary figure — generic/excluded
+    "Q1311":  None,          # winter — generic/excluded
+    "Q131621892":  None,          # commune — generic/excluded
+    "Q13462494":  None,          # centre for marine biology — generic/excluded
+    "Q1347480":  None,          # literary period — generic/excluded
+    "Q136329308":  None,          # intellectual movement — generic/excluded
+    "Q1395149":  None,          # demonstration — generic/excluded
+    "Q1406161":  None,          # artistic theme — generic/excluded
+    "Q1430466":  None,          # flight — generic/excluded
+    "Q1468524":  None,          # city center — generic/excluded
+    "Q147027":  None,          # thought experiment — generic/excluded
+    "Q1475062":  None,          # joint resolution — generic/excluded
+    "Q148319":  None,          # planetarium — generic/excluded
+    "Q1497375":  None,          # architectural ensemble — generic/excluded
+    "Q1507104":  None,          # mathematical game — generic/excluded
+    "Q1509831":  None,          # titles of Mary, mother of Jesus — generic/excluded
+    "Q15169167":  None,          # execution method — generic/excluded
+    "Q1521426":  None,          # gharana — generic/excluded
+    "Q15243209":  None,          # historic district — generic/excluded
+    "Q15284636":  None,          # presidential term — generic/excluded
+    "Q1530022":  None,          # religious organization — generic/excluded
+    "Q1548025":  None,          # retail banking — generic/excluded
+    "Q15642541":  None,          # human-geographic territorial entity — generic/excluded
+    "Q15707521":  None,          # fictional battle — generic/excluded
+    "Q15711870":  None,          # animated character — generic/excluded
+    "Q15720625":  None,          # fictional dog — generic/excluded
+    "Q15773317":  None,          # television character — generic/excluded
+    "Q15773347":  None,          # film character — generic/excluded
+    "Q15900647":  None,          # convention series — generic/excluded
+    "Q16103215":  None,          # boat type — generic/excluded
+    "Q1624034":  None,          # adage — generic/excluded
+    "Q16266378":  None,          # serial murder — generic/excluded
+    "Q16334295":  None,          # group of humans — generic/excluded
+    "Q163740":  None,          # nonprofit organization — generic/excluded
+    "Q1653679":  None,          # IHI Corporation — generic/excluded
+    "Q1656682":  None,          # event — generic/excluded
+    "Q166118":  None,          # archives — generic/excluded
+    "Q1666865":  None,          # mathematical instrument — generic/excluded
+    "Q167172":  None,          # stereotype — generic/excluded
+    "Q167346":  None,          # botanical garden — generic/excluded
+    "Q16738832":  None,          # criminal case — generic/excluded
+    "Q169336":  None,          # mixture — generic/excluded
+    "Q1711697":  None,          # wildlife park — generic/excluded
+    "Q17152708":  None,          # republic regime in France — generic/excluded
+    "Q1747411":  None,          # Russian lacquer art — generic/excluded
+    "Q177734":  None,          # artesian well — generic/excluded
+    "Q1782649":  None,          # long poem — generic/excluded
+    "Q1796500":  None,          # Königswahl — generic/excluded
+    "Q18564543":  None,          # international conference — generic/excluded
+    "Q186408":  None,          # point in time — generic/excluded
+    "Q188213":  None,          # state religion — generic/excluded
+    "Q188451":  None,          # music genre — generic/excluded
+    "Q188913":  None,          # plantation — generic/excluded
+    "Q189756":  None,          # question — generic/excluded
+    "Q19097":  None,          # sect — generic/excluded
+    "Q1936384":  None,          # branch of mathematics — generic/excluded
+    "Q19394283":  None,          # textile arts tool — generic/excluded
+    "Q194195":  None,          # amusement park — generic/excluded
+    "Q1969448":  None,          # term — generic/excluded
+    "Q1970365":  None,          # natural history museum — generic/excluded
+    "Q1990987":  None,          # social theory — generic/excluded
+    "Q20127274":  None,          # certain aspects of a person's life — generic/excluded
+    "Q206615":  None,          # building material — generic/excluded
+    "Q207174":  None,          # personification — generic/excluded
+    "Q20746389":  None,          # Christian missionary society — generic/excluded
+    "Q208555":  None,          # parable — generic/excluded
+    "Q209894":  None,          # fish farming — generic/excluded
+    "Q210272":  None,          # cultural heritage — generic/excluded
+    "Q210588":  None,          # umbrella term — generic/excluded
+    "Q210729":  None,          # electrical element — generic/excluded
+    "Q2110808":  None,          # religious behaviour — generic/excluded
+    "Q211586":  None,          # mechanical calculator — generic/excluded
+    "Q211967":  None,          # history of Brazil — generic/excluded
+    "Q222516":  None,          # school of Buddhism — generic/excluded
+    "Q22687":  None,          # bank — generic/excluded
+    "Q22746":  None,          # urban park — generic/excluded
+    "Q22811234":  None,          # branch of philosophy — generic/excluded
+    "Q22813674":  None,          # group of biblical humans — generic/excluded
+    "Q2281788":  None,          # public aquarium — generic/excluded
+    "Q230052":  None,          # tongue-twister — generic/excluded
+    "Q23009442":  None,          # removal — generic/excluded
+    "Q2319498":  None,          # architectural landmark — generic/excluded
+    "Q2424752":  None,          # product — generic/excluded
+    "Q251777":  None,          # custom — generic/excluded
+    "Q2523556":  None,          # directorial system — generic/excluded
+    "Q2571972":  None,          # decree — generic/excluded
+    "Q25810847":  None,          # folklore character — generic/excluded
+    "Q2643280":  None,          # decad — generic/excluded
+    "Q2727213":  None,          # theft — generic/excluded
+    "Q28108":  None,          # political system — generic/excluded
+    "Q28109769":  None,          # Christian theological school — generic/excluded
+    "Q2883346":  None,          # liberty — generic/excluded
+    "Q291177":  None,          # rose garden — generic/excluded
+    "Q29430681":  None,          # triad — generic/excluded
+    "Q29441699":  None,          # octad — generic/excluded
+    "Q29933858":  None,          # territorial claim — generic/excluded
+    "Q309":  None,          # history — generic/excluded
+    "Q3115110":  None,          # great homeland — generic/excluded
+    "Q3152824":  None,          # cultural institution — generic/excluded
+    "Q31855":  None,          # research institute — generic/excluded
+    "Q33104069":  None,          # political concept — generic/excluded
+    "Q334166":  None,          # mode of transport — generic/excluded
+    "Q3375722":  None,          # theatrical character — generic/excluded
+    "Q34038":  None,          # waterfall — generic/excluded
+    "Q34728658":  None,          # archrivalry — generic/excluded
+    "Q3558349":  None,          # presidency — generic/excluded
+    "Q365680":  None,          # assault — generic/excluded
+    "Q3658341":  None,          # literary character — generic/excluded
+    "Q3937904":  None,          # land claim — generic/excluded
+    "Q3952369":  None,          # Shinto sects and schools — generic/excluded
+    "Q414147":  None,          # academy of sciences — generic/excluded
+    "Q42402646":  None,          # Volksmärchen — generic/excluded
+    "Q4271324":  None,          # mythical character — generic/excluded
+    "Q43091":  None,          # orthography — generic/excluded
+    "Q431289":  None,          # brand — generic/excluded
+    "Q43229":  None,          # organization — generic/excluded
+    "Q43501":  None,          # zoo — generic/excluded
+    "Q44342":  None,          # legend — generic/excluded
+    "Q45190":  None,          # cement — generic/excluded
+    "Q4686758":  None,          # advertising character — generic/excluded
+    "Q471880":  None,          # identity theft — generic/excluded
+    "Q47258130":  None,          # academic conference series — generic/excluded
+    "Q47451145":  None,          # tale type — generic/excluded
+    "Q47728":  None,          # hobby — generic/excluded
+    "Q4830453":  None,          # business — generic/excluded
+    "Q485537":  None,          # odor — generic/excluded
+    "Q49848":  None,          # document — generic/excluded
+    "Q5100861":  None,          # Chinese patent medicine — generic/excluded
+    "Q51632":  None,          # parable of Jesus — generic/excluded
+    "Q5281800":  None,          # discovered text — generic/excluded
+    "Q53706":  None,          # robbery — generic/excluded
+    "Q538629":  None,          # Burgrecht — generic/excluded
+    "Q5464477":  None,          # folk saint — generic/excluded
+    "Q5551966":  None,          # phraseme — generic/excluded
+    "Q5589178":  None,          # regime — generic/excluded
+    "Q56061":  None,          # administrative territorial entity — generic/excluded
+    "Q5679976":  None,          # general crisis — generic/excluded
+    "Q576029":  None,          # libraries in the ancient world — generic/excluded
+    "Q57831":  None,          # fortress — generic/excluded
+    "Q5982983":  None,          # jurisdiction — generic/excluded
+    "Q5999593":  None,          # General fraternity — generic/excluded
+    "Q60158614":  None,          # bookkeeping system — generic/excluded
+    "Q60680430":  None,          # branch of psychology — generic/excluded
+    "Q6266":  None,          # nation — generic/excluded
+    "Q63313685":  None,          # history of a geographic region — generic/excluded
+    "Q63315203":  None,          # colloquial expression — generic/excluded
+    "Q636497":  None,          # stock character — generic/excluded
+    "Q642682":  None,          # safari park — generic/excluded
+    "Q6501447":  None,          # local government — generic/excluded
+    "Q650241":  None,          # financial institution — generic/excluded
+    "Q6567237":  None,          # Christmas gift-bringer — generic/excluded
+    "Q65943":  None,          # theorem — generic/excluded
+    "Q693":  None,          # fable — generic/excluded
+    "Q699405":  None,          # dwelling — generic/excluded
+    "Q7075":  None,          # library — generic/excluded
+    "Q7188":  None,          # government — generic/excluded
+    "Q7210356":  None,          # political organization — generic/excluded
+    "Q727002":  None,          # charter — generic/excluded
+    "Q7315155":  None,          # research center — generic/excluded
+    "Q736556":  None,          # filter — generic/excluded
+    "Q750080":  None,          # motorcycle speedway — generic/excluded
+    "Q751997":  None,          # astronomical instrument — generic/excluded
+    "Q7534220":  None,          # Russian fairy tales — generic/excluded
+    "Q756102":  None,          # open-air museum — generic/excluded
+    "Q7725634":  None,          # literary work — generic/excluded
+    "Q778483":  None,          # trip — generic/excluded
+    "Q7832362":  None,          # traditional story — generic/excluded
+    "Q7840353":  None,          # federally recognized Native American tribe in the United Sta — generic/excluded
+    "Q788460":  None,          # bagatelle — generic/excluded
+    "Q80071":  None,          # symbol — generic/excluded
+    "Q80447738":  None,          # anime character — generic/excluded
+    "Q811165":  None,          # architectural heritage monument — generic/excluded
+    "Q8192":  None,          # writing system — generic/excluded
+    "Q82036085":  None,          # physical media format — generic/excluded
+    "Q838081":  None,          # insurance fraud — generic/excluded
+    "Q838948":  None,          # work of art — generic/excluded
+    "Q856663":  None,          # Bible story — generic/excluded
+    "Q857909":  None,          # beer garden — generic/excluded
+    "Q858893":  None,          # salute — generic/excluded
+    "Q879146":  None,          # Christian denomination — generic/excluded
+    "Q924588":  None,          # mechanical puzzle — generic/excluded
+    "Q945895":  None,          # decadence — generic/excluded
+    "Q94670589":  None,          # Christian organization — generic/excluded
+    "Q952080":  None,          # history of agriculture — generic/excluded
+    "Q955824":  None,          # learned society — generic/excluded
+    "Q9570352":  None,          # recyclable waste — generic/excluded
 }
 
 

@@ -638,16 +638,18 @@ def print_coverage(events: list[dict], loaded: int, skipped: int) -> None:
     has_cat     = sum(1 for e in events if e.get("categories"))
     needs_loc   = sum(1 for e in events if e.get("_needs_location"))
 
+    pct = lambda n: f"{n*100//total}%" if total else "—"
+
     print("\n" + "=" * 60)
     print("RUN 1 COVERAGE REPORT")
     print("=" * 60)
     print(f"  Total events extracted:  {total}")
-    print(f"  With date:               {has_date}/{total} ({has_date*100//total}%)")
-    print(f"  With direct coords:      {has_coord}/{total} ({has_coord*100//total}%)")
+    print(f"  With date:               {has_date}/{total} ({pct(has_date)})")
+    print(f"  With direct coords:      {has_coord}/{total} ({pct(has_coord)})")
     print(f"  With location QID (P276):{has_loc_qid}/{total}")
-    print(f"  Any location:            {has_loc_any}/{total} ({has_loc_any*100//total}%)")
-    print(f"  With Wikipedia summary:  {has_summary}/{total} ({has_summary*100//total}%)")
-    print(f"  With category:           {has_cat}/{total} ({has_cat*100//total}%)")
+    print(f"  Any location:            {has_loc_any}/{total} ({pct(has_loc_any)})")
+    print(f"  With Wikipedia summary:  {has_summary}/{total} ({pct(has_summary)})")
+    print(f"  With category:           {has_cat}/{total} ({pct(has_cat)})")
     print()
     print(f"  Loaded to Postgres:      {loaded}")
     print(f"  Skipped (needs enrich):  {skipped}")
