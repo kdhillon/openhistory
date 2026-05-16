@@ -624,6 +624,51 @@ async def add_polity_parent(polity_id: str, request: Request, _: None = Depends(
         conn.close()
 
 
+@app.delete("/api/polities/{polity_id}/parents/manual")
+def clear_polity_manual_parents(polity_id: str, _: None = Depends(require_write_secret)):
+    """
+    Remove all manual ("Part of") parent entries from a polity. Wikidata-sourced
+    entries are left intact. Returns the updated polity as a GeoJSON Feature so
+    the client can splice it back into the live geojson.
+    """
+    stub_match = re.match(r"^wd:(Q\d+)$", polity_id)
+    is_stub = stub_match is not None
+    lookup_qid = stub_match.group(1) if stub_match else None
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        if is_stub:
+            cur.execute("SELECT id, parents FROM polities WHERE wikidata_qid = %s", (lookup_qid,))
+        else:
+            if not re.match(r"^[0-9a-fA-F-]{36}$", polity_id):
+                raise HTTPException(400, f"Invalid polity id {polity_id!r}; expected UUID or 'wd:Q…' stub.")
+            cur.execute("SELECT id, parents FROM polities WHERE id = %s", (polity_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, f"Polity {polity_id} not found.")
+        polity_id = str(row["id"])
+        existing = row["parents"] or []
+        kept = [p for p in existing if not (isinstance(p, dict) and p.get("source") == "manual")]
+        cur.execute("""
+            UPDATE polities
+               SET parents = %s,
+                   manually_edited_at = NOW()
+             WHERE id = %s
+        """, (json.dumps(kept), polity_id))
+        conn.commit()
+        cur.execute("""
+            SELECT id, wikidata_qid, slug, name, aliases, wikipedia_title, wikipedia_summary, wikipedia_url,
+                   year_start, year_end, date_is_fuzzy, polity_type,
+                   capital_name, capital_wikidata_qid, lng, lat,
+                   preceded_by_qid, succeeded_by_qid, sovereign_qids, p31_qids,
+                   parents, sitelinks_count, data_version, pipeline_run
+            FROM polities WHERE id = %s
+        """, (polity_id,))
+        return _build_polity_feature(dict(cur.fetchone()))
+    finally:
+        conn.close()
+
+
 # ── Wikidata polity import helpers ─────────────────────────────────────────────
 
 def _wd_fetch(qid: str) -> dict:

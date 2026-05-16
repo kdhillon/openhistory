@@ -995,7 +995,7 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
             qid: p.wikidataQid,
             polityType: p.polityType,
             parents: p.parents,
-            polityKey: p.capitalWikidataQid ?? p.title,
+            polityKey: p.capitalWikidataQid ?? p.wikidataQid ?? p.title,
             capitalName: p.capitalName ?? null,
             yearStart: p.yearStart ?? null,
             yearEnd: p.yearEnd ?? null,

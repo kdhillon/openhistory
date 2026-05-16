@@ -97,6 +97,22 @@ export async function addPolityParent(polityId: string, parentQid: string): Prom
 }
 
 /**
+ * Remove all manual "Part of" entries from a polity. Wikidata-sourced parents
+ * are left intact. Returns the updated polity Feature.
+ */
+export async function clearPolityManualParents(polityId: string): Promise<GeoJSON.Feature> {
+  const res = await fetch(`${API_BASE}/polities/${polityId}/parents/manual`, {
+    method: 'DELETE',
+    headers: withWriteSecret({}),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`API clear polity manual parents failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
+/**
  * Fetch all manually-edited events since the last GeoJSON generation.
  * Returns a FeatureCollection to merge over the static seed.geojson.
  */

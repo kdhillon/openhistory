@@ -8,7 +8,7 @@ import { WikiEditForm } from './WikiEditForm';
 import { fetchArticleInLanguage } from '../lib/wikidataApi';
 import { useWikidataEntity } from '../hooks/useWikidataEntity';
 import { LANG_CODE_TO_NAME } from '../lib/languages';
-import { patchFeature, patchPolity, searchOhm, importPolityFromWikidata, addPolityParent, searchAll } from '../lib/api';
+import { patchFeature, patchPolity, searchOhm, importPolityFromWikidata, addPolityParent, clearPolityManualParents, searchAll } from '../lib/api';
 import type { SearchPolityResult } from '../lib/api';
 import { EVENT_CATEGORIES, POLITY_CATEGORIES } from '../theme/categories';
 import { getPolityColorAtYear, activeParentAt, isValidPaletteId, DEFAULT_PALETTE_ID, POLITY_PALETTES } from '../theme/polityPalettes';
@@ -1151,6 +1151,42 @@ export function InfoPanel({ feature: rawFeature, stack, onAdvanceStack, onClose,
                           </button>
                         ))}
                     </div>
+                    {(() => {
+                      const rawParents = (feature as Partial<FeatureProperties>).parents;
+                      const hasManual = Array.isArray(rawParents) && rawParents.some(
+                        (p) => p && typeof p === 'object' && (p as { source?: string }).source === 'manual'
+                      );
+                      return (
+                        <>
+                          <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
+                          <button
+                            disabled={!hasManual || parentSaving}
+                            onClick={async () => {
+                              setParentSaving(true);
+                              try {
+                                const updated = await clearPolityManualParents(feature.id);
+                                onFeatureUpdated(updated.properties as Partial<FeatureProperties>);
+                                setCategoryPickerOpen(false);
+                              } catch (e) {
+                                console.error('Clear Part-of failed', e);
+                              } finally {
+                                setParentSaving(false);
+                              }
+                            }}
+                            style={{
+                              ...typeListRow,
+                              color: hasManual ? '#888' : '#444',
+                              cursor: hasManual && !parentSaving ? 'pointer' : 'default',
+                            }}
+                            title={hasManual
+                              ? 'Remove the manual Part-of mapping (Wikidata-sourced parents are kept)'
+                              : 'No manual Part-of mapping to remove'}
+                          >
+                            Reset
+                          </button>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
