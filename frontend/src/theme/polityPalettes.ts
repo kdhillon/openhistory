@@ -173,6 +173,15 @@ export function getPolityColorAtYear(
       return getPolityColorAtYear(parentPolity, year, paletteId, resolve, findCapitalSibling, seen);
     }
   }
+  // No active parent. Before falling through to the capital-sibling cascade
+  // (which can walk sideways into a subdivision of a third nation — e.g. CSA
+  // → Alabama → USA), honor an explicit override on this polity's own key.
+  const selfKey = polity.polityKey ?? polity.qid;
+  if (paletteId !== 'polity-type' && selfKey) {
+    if (getUserColorOverride(selfKey) !== undefined || POLITY_COLOR_OVERRIDES[selfKey] !== undefined) {
+      return getPolityColor(selfKey, polity.polityType, paletteId);
+    }
+  }
   // Capital-sibling fallback: same capital active at this year → follow its chain.
   if (findCapitalSibling && polity.capitalName) {
     const sibling = findCapitalSibling(polity.capitalName, year, polity.qid);

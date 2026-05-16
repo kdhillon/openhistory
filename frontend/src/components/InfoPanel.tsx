@@ -14,7 +14,7 @@ import { EVENT_CATEGORIES, POLITY_CATEGORIES } from '../theme/categories';
 import { getPolityColorAtYear, activeParentAt, isValidPaletteId, DEFAULT_PALETTE_ID, POLITY_PALETTES } from '../theme/polityPalettes';
 import type { PaletteId, PolityForColor, ParentEntry } from '../theme/polityPalettes';
 import { POLITY_COLOR_OVERRIDES } from '../theme/polityColorOverrides';
-import { getUserColorOverride, setUserColorOverride, clearUserColorOverride } from '../lib/userColorOverrides';
+import { getUserColorOverride, setUserColorOverride, clearUserColorOverride, useUserColorOverrides } from '../lib/userColorOverrides';
 
 interface WikiSection {
   title: string;
@@ -229,6 +229,10 @@ export function InfoPanel({ feature: rawFeature, stack, onAdvanceStack, onClose,
   const [parentResults, setParentResults] = useState<SearchPolityResult[]>([]);
   const [parentSearching, setParentSearching] = useState(false);
   const [parentSaving, setParentSaving] = useState(false);
+  // Subscribe so the picker re-renders when the user sets/clears an override.
+  // Map rendering already reacts via its own listener; this keeps the swatch
+  // ticks and Reset button's disabled state in sync.
+  useUserColorOverrides();
 
   // Debounced search effect. Resets results when the query is < 2 chars to
   // keep the dropdown short on the empty/initial state.
@@ -787,6 +791,7 @@ export function InfoPanel({ feature: rawFeature, stack, onAdvanceStack, onClose,
             (() => {
               const { text, color, targetFeature } = polityStatusTag;
               const clickable = !!(targetFeature && onNavigateToFeature);
+              const isEditable = feature.featureType === 'polity';
               return (
                 <span
                   title={clickable ? `Navigate to ${text.replace(/^Part of /, '')}` : undefined}
@@ -803,6 +808,16 @@ export function InfoPanel({ feature: rawFeature, stack, onAdvanceStack, onClose,
                   }}
                 >
                   {text}
+                  {isEditable && (
+                    <span
+                      role="button"
+                      title="Edit parent / category / color"
+                      onClick={(e) => { e.stopPropagation(); setCategoryPickerOpen((v) => !v); }}
+                      style={{ opacity: 0.6, marginLeft: 2, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+                    >
+                      <PencilIcon />
+                    </span>
+                  )}
                 </span>
               );
             })()
@@ -1063,12 +1078,12 @@ export function InfoPanel({ feature: rawFeature, stack, onAdvanceStack, onClose,
                   </div>
                 )}
 
-                {/* THIRD — "Part of" parent picker (polities only, gated on
-                    no active parent at currentYear). Once a manual parent is
-                    saved the cascade promotes it to source: 'manual' (rank -1),
-                    polityStatusTag flips to kind: 'parent', and this column
-                    disappears on the next render. */}
-                {isPolityPicker && polityStatusTag?.kind !== 'parent' && (
+                {/* THIRD — "Part of" parent picker (polities only). Picking a
+                    new parent adds a manual entry (source: 'manual', rank -1)
+                    which outranks any Wikidata-sourced parent in the cascade,
+                    so this works both for setting a missing parent and for
+                    reassigning an existing one. */}
+                {isPolityPicker && (
                   <div style={{ padding: '4px 0', minWidth: 220, borderLeft: '1px solid #333' }}>
                     <div
                       style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '2px 12px 4px' }}
