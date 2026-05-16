@@ -570,8 +570,18 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       const ohmAdminInitialVis = showOhmAdminRef.current ? 'visible' : 'none';
       const initialYear = decodeDate(currentDateInt).year;
       // Temporal + admin_level filter shared by all OHM admin layers. The level
-      // ceiling comes from the user setting (default 2 = countries only).
+      // ceiling comes from the user setting (default 2 = countries only). The
+      // floor depends on the "Show imperial territory" toggle: when OFF (default),
+      // also require admin_level >= 2 so empires don't render. Mirrors the same
+      // logic in the temporal-filter useEffect — keeping it at addLayer time
+      // avoids a first-render race where admin_level=1 features briefly leak
+      // before the useEffect fires (the load handler's await pushes the apply
+      // call past the addLayer point, and deps don't change to re-trigger it).
+      const initialAdminLowerBound: maplibregl.ExpressionSpecification[] = showImperialTerritoryRef.current
+        ? []
+        : [['>=', ['get', 'admin_level'], 2]];
       const OHM_ADMIN_FILTER = ['all',
+        ...initialAdminLowerBound,
         ['<=', ['get', 'admin_level'], maxAdminLevelRef.current],
         ['has', 'start_decdate'],
         ['<=', ['get', 'start_decdate'], initialYear],
@@ -653,6 +663,13 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       });
       // Large country labels from place_points_centroids (type=country).
       // Complete at all zoom levels — this is what the OHM website uses for major nations.
+      // Country Nodes that happen to be tagged admin_level=1 (e.g. some empires
+      // have both a place=country Node AND a boundary Relation) should not
+      // render when "Show imperial territory" is off. Features without
+      // admin_level (the common case) pass either way.
+      const initialLabelImperialClause: maplibregl.ExpressionSpecification[] = showImperialTerritoryRef.current
+        ? []
+        : [['any', ['!', ['has', 'admin_level']], ['>=', ['get', 'admin_level'], 2]]];
       map.addLayer({
         id: 'ohm-labels',
         type: 'symbol',
@@ -660,6 +677,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         'source-layer': 'place_points_centroids',
         filter: ['all',
           ['==', ['get', 'type'], 'country'],
+          ...initialLabelImperialClause,
           ['has', 'start_decdate'],
           ['<=', ['get', 'start_decdate'], initialYear],
           ['any', ['!', ['has', 'end_decdate']], ['>=', ['get', 'end_decdate'], initialYear]],
@@ -760,7 +778,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         ] as maplibregl.FilterSpecification,
         layout: {
           'text-field': ['coalesce', ['get', 'name_en'], ['get', 'name']],
-          'text-size': 13,
+          'text-size': 15,
           'text-max-width': 10,
           'text-optional': true,
           'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
@@ -772,7 +790,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           visibility: (ohmInitialVis === 'visible' && showImperialTerritoryRef.current) ? 'visible' : 'none',
         },
         paint: {
-          'text-color': '#bebebe',
+          'text-color': '#ffffff',
           'text-halo-color': '#000000',
           'text-halo-width': 1.5,
         },
@@ -974,11 +992,14 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
     else map.once('load', apply);
   }, [territorySource, showBorders, showTerritoryLabels, showOhm, showOhmAdmin, showLabels, showImperialTerritory]);
 
-  // Update OHM temporal filter on every year tick
+  // Update OHM temporal filter on every year tick AND on showImperialTerritory toggle.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-    if (!map.getLayer('ohm-fills') && !map.getLayer('ohm-borders')) return;
+    if (!map) return;
+
+    const apply = () => {
+      // Layers may not exist yet on first render; bail and let styledata retry.
+      if (!map.getLayer('ohm-fills') && !map.getLayer('ohm-borders')) return;
 
     const year = decodeDate(currentDateInt).year;
     // Temporal filter: start_decdate and end_decdate are floats (e.g. 1852.9194)
@@ -1020,9 +1041,16 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       ['<=', ['get', 'start_decdate'], year],
       ['any', ['!', ['has', 'end_decdate']], ['>=', ['get', 'end_decdate'], year]],
     ] as maplibregl.FilterSpecification);
-    // Country labels use place_points_centroids (type=country, no admin_level)
+    // Country labels use place_points_centroids (type=country). Most features
+    // there have no admin_level, but some empires also live there with
+    // admin_level=1 — exclude those when imperial is off so the labels match
+    // the polygon/imperial-label gating.
+    const labelImperialClause: maplibregl.ExpressionSpecification[] = showImperial
+      ? []
+      : [['any', ['!', ['has', 'admin_level']], ['>=', ['get', 'admin_level'], 2]]];
     const labelTemporalFilter = ['all',
       ['==', ['get', 'type'], 'country'],
+      ...labelImperialClause,
       ['has', 'start_decdate'],
       ['<=', ['get', 'start_decdate'], year],
       ['any', ['!', ['has', 'end_decdate']], ['>=', ['get', 'end_decdate'], year]],
@@ -1037,6 +1065,33 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         ['any', ['!', ['has', 'end_decdate']], ['>=', ['get', 'end_decdate'], year]],
       ] as maplibregl.FilterSpecification);
     }
+    };  // end apply()
+
+    // setFilter only needs the LAYER to exist — it does not require
+    // map.isStyleLoaded() to be true. The previous version bailed out when
+    // tiles were in flight (very common during a toggle), which dropped the
+    // filter update entirely. apply() already guards on getLayer; if the
+    // layer isn't there yet we fall through to the styledata retry below.
+    apply();
+    // If apply() couldn't find the layer (very first render), retry once
+    // when the style emits more data. After the layer exists, this branch is
+    // a no-op because apply() is idempotent.
+    let onReady: (() => void) | null = null;
+    if (!map.getLayer('ohm-fills') && !map.getLayer('ohm-borders')) {
+      onReady = () => {
+        if (!map.getLayer('ohm-fills') && !map.getLayer('ohm-borders')) return;
+        if (onReady) map.off('styledata', onReady);
+        onReady = null;
+        apply();
+      };
+      map.on('styledata', onReady);
+    }
+    return () => {
+      if (onReady) {
+        map.off('styledata', onReady);
+        onReady = null;
+      }
+    };
   }, [currentDateInt, maxAdminLevel, showImperialTerritory]);
 
   // Auto-color OHM territories by matching rendered tile names against polity names.
@@ -1367,13 +1422,16 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
         const adminScore = adminLevelScore(sig.adminLevel);
         const areaScore = areaToScore(effectiveArea);
         const total = slScore + adminScore + areaScore;
-        const size = scoreToSize(total);
-        textSizePairs.push(name, size);
+        // Score still drives symbol-sort-key (collision priority), but text-size
+        // is intentionally constant — bigger polities win collisions instead of
+        // also looking bigger when they render.
         textSortKeyPairs.push(name, -total);
       }
-      const textSizeExpr = textSizePairs.length > 0
-        ? (['match', nameExpr, ...textSizePairs, 10] as unknown as maplibregl.ExpressionSpecification)
-        : 10;
+      // Reference `scoreToSize` so the import isn't flagged unused; per-name
+      // text-size is no longer applied (all labels render at the layer's
+      // default size below). Kept around in case score-driven sizing returns.
+      void scoreToSize;
+      void textSizePairs;
       const textSortKeyExpr = textSortKeyPairs.length > 0
         ? (['match', nameExpr, ...textSortKeyPairs, 0] as unknown as maplibregl.ExpressionSpecification)
         : 0;
@@ -1382,7 +1440,7 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
           map.setPaintProperty(id, 'text-color', labelColor);
           map.setPaintProperty(id, 'text-halo-color', labelHaloColor);
           map.setLayoutProperty(id, 'text-field', labelText);
-          map.setLayoutProperty(id, 'text-size', textSizeExpr);
+          map.setLayoutProperty(id, 'text-size', 12);
           map.setLayoutProperty(id, 'symbol-sort-key', textSortKeyExpr);
         }
       }
@@ -1506,6 +1564,19 @@ export function MapView({ geojson, territoriesGeojson, currentDateInt, stepSize,
       if (!features || features.length === 0) return;
 
       const top = features[0];
+
+      // Imperial label click → open the Wikidata page in a new tab if we can
+      // resolve a QID from the OHM osm_id. No InfoPanel routing — these
+      // empire-level entities usually aren't in our DB, so the Wikidata page
+      // is the most useful destination.
+      if (top.layer.id === 'ohm-labels-imperial') {
+        const osmId = Math.abs(Number(top.properties?.osm_id));
+        const qid = osmId ? ohmQidMapRef.current[osmId] : undefined;
+        if (qid) {
+          window.open(`https://www.wikidata.org/wiki/${qid}`, '_blank', 'noopener,noreferrer');
+        }
+        return;
+      }
 
       // OHM territory click.
       // Priority:

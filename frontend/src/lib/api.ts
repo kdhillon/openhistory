@@ -78,6 +78,25 @@ export async function patchPolity(polityId: string, patch: PolityPatch): Promise
 }
 
 /**
+ * Append a manual "Part of" parent to a polity. The new entry's year range is
+ * the polity's own [year_start, year_end] and its source is `'manual'`, which
+ * outranks every Wikidata-derived parent in the cascade. Returns the updated
+ * polity Feature for splicing back into the live geojson.
+ */
+export async function addPolityParent(polityId: string, parentQid: string): Promise<GeoJSON.Feature> {
+  const res = await fetch(`${API_BASE}/polities/${polityId}/parents`, {
+    method: 'POST',
+    headers: withWriteSecret({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ parentQid }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`API add polity parent failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
+/**
  * Fetch all manually-edited events since the last GeoJSON generation.
  * Returns a FeatureCollection to merge over the static seed.geojson.
  */

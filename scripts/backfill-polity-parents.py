@@ -59,17 +59,27 @@ def main() -> int:
     fetched = fetch_parents(qids, polity_meta=polity_meta)
     print(f"Wikidata returned parent links for {len(fetched)} children.", file=sys.stderr)
 
+    # Preserve manual entries across backfills. The InfoPanel "Part of" picker
+    # appends `{source: 'manual'}` rows to polities.parents; those reflect a
+    # user's curated correction and must not be clobbered by a Wikidata refresh.
+    # We strip Wikidata-derived rows from `old`, replace them with the freshly
+    # fetched set, then re-append any preserved manual rows on top.
     added = changed = removed = unchanged = 0
     updates: list[tuple[str, list[dict]]] = []
+    preserved_manuals_total = 0
     for qid in qids:
-        new_parents = fetched.get(qid, [])
+        wd_parents = fetched.get(qid, [])
         old_parents = existing.get(qid, [])
-        if json.dumps(new_parents, sort_keys=True) == json.dumps(old_parents, sort_keys=True):
+        manual_parents = [p for p in old_parents if isinstance(p, dict) and p.get("source") == "manual"]
+        old_wd_only = [p for p in old_parents if not (isinstance(p, dict) and p.get("source") == "manual")]
+        new_parents = wd_parents + manual_parents
+        preserved_manuals_total += len(manual_parents)
+        if json.dumps(wd_parents, sort_keys=True) == json.dumps(old_wd_only, sort_keys=True):
             unchanged += 1
             continue
-        if not old_parents and new_parents:
+        if not old_wd_only and wd_parents:
             added += 1
-        elif old_parents and not new_parents:
+        elif old_wd_only and not wd_parents:
             removed += 1
         else:
             changed += 1
@@ -77,7 +87,7 @@ def main() -> int:
 
     print(
         f"Diff: +{added} added, ~{changed} changed, -{removed} removed, ={unchanged} unchanged "
-        f"(total {len(qids)})",
+        f"(total {len(qids)}); preserved {preserved_manuals_total} manual entries",
         file=sys.stderr,
     )
 

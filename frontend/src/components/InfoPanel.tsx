@@ -8,10 +8,13 @@ import { WikiEditForm } from './WikiEditForm';
 import { fetchArticleInLanguage } from '../lib/wikidataApi';
 import { useWikidataEntity } from '../hooks/useWikidataEntity';
 import { LANG_CODE_TO_NAME } from '../lib/languages';
-import { patchFeature, patchPolity, searchOhm } from '../lib/api';
+import { patchFeature, patchPolity, searchOhm, importPolityFromWikidata, addPolityParent, searchAll } from '../lib/api';
+import type { SearchPolityResult } from '../lib/api';
 import { EVENT_CATEGORIES, POLITY_CATEGORIES } from '../theme/categories';
-import { getPolityColorAtYear, activeParentAt, isValidPaletteId, DEFAULT_PALETTE_ID } from '../theme/polityPalettes';
+import { getPolityColorAtYear, activeParentAt, isValidPaletteId, DEFAULT_PALETTE_ID, POLITY_PALETTES } from '../theme/polityPalettes';
 import type { PaletteId, PolityForColor, ParentEntry } from '../theme/polityPalettes';
+import { POLITY_COLOR_OVERRIDES } from '../theme/polityColorOverrides';
+import { getUserColorOverride, setUserColorOverride, clearUserColorOverride } from '../lib/userColorOverrides';
 
 interface WikiSection {
   title: string;
@@ -51,6 +54,10 @@ interface Props {
   onAddToOhm?: (feature: FeatureProperties) => void;
   /** Open the OHM mapping modal for the OHM element this feature came from (when known). */
   onEditOhm?: (ctx: { osmType: 'relation' | 'node'; osmId: number; name: string; currentQid: string | null; yearStart: number | null; yearEnd: number | null }) => void;
+  /** Merge a freshly-imported polity (from Wikidata) into the live geojson. Powers
+   *  the "Promote to polity" button on region features that have a wikidataQid
+   *  but no polity twin yet (e.g. Rupert's Land). */
+  onPolityImported?: (feature: GeoJSON.Feature) => void;
 }
 
 function wikiApi(lang: string) {
@@ -129,7 +136,7 @@ function PencilIcon() {
   );
 }
 
-export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated, hiddenNations, onToggleHiddenNation, onHideFeature, selectedLang = 'en', onStartStory, isMobile, currentDateInt, isOhmMapped, onAddToOhm, onEditOhm }: Props) {
+export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavigateToFeature, wikiAuth, onAuth, onFeatureUpdated, hiddenNations, onToggleHiddenNation, onHideFeature, selectedLang = 'en', onStartStory, isMobile, currentDateInt, isOhmMapped, onAddToOhm, onEditOhm, onPolityImported }: Props) {
   // Live-fetch Wikidata when either:
   //   (a) the feature is a Wikidata stub (synthesized in MapView for OHM polygons
   //       with no matching local feature — id starts with `wd:`), or
@@ -188,6 +195,41 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
   const [showImages, setShowImages] = useState(!isMobile);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const [categorySaving, setCategorySaving] = useState(false);
+  // "Part of" parent picker state — only rendered for polities with no active
+  // parent at currentYear. Search runs against /api/search filtered to polities.
+  const [parentQuery, setParentQuery] = useState('');
+  const [parentResults, setParentResults] = useState<SearchPolityResult[]>([]);
+  const [parentSearching, setParentSearching] = useState(false);
+  const [parentSaving, setParentSaving] = useState(false);
+
+  // Debounced search effect. Resets results when the query is < 2 chars to
+  // keep the dropdown short on the empty/initial state.
+  useEffect(() => {
+    const q = parentQuery.trim();
+    if (q.length < 2) { setParentResults([]); return; }
+    let cancelled = false;
+    setParentSearching(true);
+    const t = setTimeout(() => {
+      // Year range matters here — we surface polities active in a wide window
+      // centred on the polity being edited, so a query like "Empire" returns
+      // candidates that overlap, not millennia-distant unrelated entries.
+      const yr = decodeDate(currentDateInt).year;
+      searchAll(q, yr - 500, yr + 500)
+        .then((r) => { if (!cancelled) setParentResults(r.polities); })
+        .catch(() => { if (!cancelled) setParentResults([]); })
+        .finally(() => { if (!cancelled) setParentSearching(false); });
+    }, 200);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [parentQuery, currentDateInt]);
+
+  // Reset the parent-picker state whenever the picker closes or feature changes
+  // so stale results don't bleed across polities.
+  useEffect(() => {
+    if (!categoryPickerOpen) {
+      setParentQuery('');
+      setParentResults([]);
+    }
+  }, [categoryPickerOpen, rawFeature?.id]);
 
   const [storyIndex, setStoryIndex] = useState<StoryIndexEntry[]>([]);
 
@@ -293,6 +335,44 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
     });
     return () => { cancelled = true; };
   }, [feature?.wikidataQid, selectedLang]);
+
+  // Silent auto-promote: any time the user opens a card for an entity that
+  // has a wikidataQid but no polity twin in our DB, fire off the import.
+  // Three concrete cases this covers today:
+  //   1. Region features (e.g. Rupert's Land — `featureType: 'region'`,
+  //      QID set, no polity row).
+  //   2. OHM polygon clicks that hit `makeWikidataStub` in MapView and
+  //      mint a synthetic feature with id `wd:Q…` and `featureType: 'polity'`
+  //      — those have no DB row at all, so even the picker would 500 on
+  //      Part-of writes.
+  //   3. Any other entity with a QID that the pipeline didn't import as a
+  //      polity (cities that are also polities, etc.).
+  //
+  // Events are explicitly excluded — they're never polities. The endpoint
+  // is idempotent (returns existing row if the QID is already in `polities`)
+  // so re-firing is safe; non-polity QIDs get classified `polity_type: 'other'`
+  // by the backend rather than failing.
+  useEffect(() => {
+    if (!feature) return;
+    if (feature.featureType === 'event') return;
+    const qid = feature.wikidataQid;
+    if (!qid || !onPolityImported || !geojson) return;
+    // Skip if a polity twin already exists in the live geojson.
+    const hasTwin = geojson.features.some((f) => {
+      const p = f.properties as FeatureProperties;
+      return p.featureType === 'polity' && p.wikidataQid === qid && !(p.id ?? '').startsWith('wd:');
+    });
+    if (hasTwin) return;
+    let cancelled = false;
+    importPolityFromWikidata(qid)
+      .then((newFeature) => { if (!cancelled) onPolityImported(newFeature); })
+      .catch((e) => { if (!cancelled) console.warn(`[InfoPanel] auto-promote of ${qid} to polity failed:`, e); });
+    return () => { cancelled = true; };
+  // We deliberately omit `geojson` from the deps — it gets mutated by the
+  // very call below (via onPolityImported), and including it would loop the
+  // effect. The qid alone is the right re-trigger key.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feature?.featureType, feature?.wikidataQid]);
 
   // On-demand summary fetch for features with no pre-populated wikipediaSummary
   useEffect(() => {
@@ -444,9 +524,12 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
   // Also applies to region features that have a polity twin (same wikidataQid) — these
   // are entities like Viceroyalty of Peru that exist in both the locations and polities
   // tables; the region card should still surface the parent relationship.
+  // polityType is intentionally widened to also accept Category strings
+  // (e.g. 'region') for the "region rendered as an OHM polygon" case below —
+  // the render branches cast it to Category anyway, this just keeps TS honest.
   type PolityTagInfo =
     | { kind: 'parent'; text: string; color: string; targetFeature: GeoJSON.Feature | null }
-    | { kind: 'independent'; color: string; polityType: PolityType | undefined };
+    | { kind: 'independent'; color: string; polityType: PolityType | Category | undefined };
   const polityStatusTag: PolityTagInfo | null = (() => {
     if (!isPolity && feature.featureType !== 'region') return null;
 
@@ -462,7 +545,21 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
       });
       if (twin) polityFeature = twin.properties as FeatureProperties;
     }
-    if (!polityFeature) return null;
+    if (!polityFeature) {
+      // Region features without a polity twin (e.g. Rupert's Land — Q738395 —
+      // exists only as a region but renders as an OHM polygon). MapView's
+      // rebuildColors hashes the bare qid for these polygons. Match that
+      // exactly so the InfoPanel chip color tracks the on-map fill color.
+      if (feature.featureType === 'region' && feature.wikidataQid) {
+        const savedPalette = localStorage.getItem('oh-polity-palette');
+        const paletteId: PaletteId = isValidPaletteId(savedPalette) ? savedPalette : DEFAULT_PALETTE_ID;
+        const selfPolity: PolityForColor = { qid: feature.wikidataQid };
+        const noResolver = () => null;
+        const color = getPolityColorAtYear(selfPolity, decodeDate(currentDateInt).year, paletteId, noResolver);
+        return { kind: 'independent', color, polityType: (feature.primaryCategory ?? 'region') as Category };
+      }
+      return null;
+    }
 
     // Defensive parse of parents (matches the partOfResolved handling above).
     const rawParents = polityFeature.parents;
@@ -479,7 +576,9 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
       (p.yearStart == null || p.yearStart <= currentYear) &&
       (p.yearEnd == null || p.yearEnd >= currentYear)
     );
-    const rank = (s: string) => s === 'P150' ? 0 : s === 'P361' ? 1 : s === 'P131' ? 2 : s === 'P127' ? 3 : 4;
+    // Manual entries outrank every Wikidata-sourced parent so a user's pick
+    // wins the cascade. Must stay in sync with polityPalettes.ts SOURCE_RANK.
+    const rank = (s: string) => s === 'manual' ? -1 : s === 'P150' ? 0 : s === 'P361' ? 1 : s === 'P131' ? 2 : s === 'P127' ? 3 : 4;
     active.sort((a, b) => rank(a.source) - rank(b.source));
 
     // Read the user's chosen palette so the tag color matches the map exactly.
@@ -737,7 +836,30 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
           )}
           {/* Category picker dropdown */}
           {categoryPickerOpen && (feature.featureType === 'event' || feature.featureType === 'polity') && (() => {
-            const options = feature.featureType === 'polity' ? POLITY_CATEGORIES : EVENT_CATEGORIES;
+            const isPolityPicker = feature.featureType === 'polity';
+            const options = isPolityPicker ? POLITY_CATEGORIES : EVENT_CATEGORIES;
+            // For polities, also surface a color-override picker on the right.
+            // Color hashing uses the polityKey (capital QID → cascades across
+            // shared-capital polities; falls back to qid/title). Same key
+            // POLITY_COLOR_OVERRIDES uses, so user edits stack with the
+            // shipped defaults.
+            const polityKey = isPolityPicker
+              ? (feature.capitalWikidataQid ?? feature.wikidataQid ?? feature.title)
+              : null;
+            // Pull the user's current saved palette so the swatches the user
+            // sees match what's actually rendered on the map.
+            const savedPalette = localStorage.getItem('oh-polity-palette');
+            const activePaletteId: PaletteId = isValidPaletteId(savedPalette) ? savedPalette : DEFAULT_PALETTE_ID;
+            const paletteColors = POLITY_PALETTES[activePaletteId].colors;
+            const currentUserOverride = polityKey ? getUserColorOverride(polityKey) : undefined;
+            const currentFileOverride = polityKey ? POLITY_COLOR_OVERRIDES[polityKey] : undefined;
+            const effectiveOverride = currentUserOverride ?? currentFileOverride;
+            const typeListRow: React.CSSProperties = {
+              display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+              padding: '6px 12px', background: 'transparent', border: 'none',
+              color: '#ccc', fontSize: 12, cursor: 'pointer', textAlign: 'left',
+              opacity: categorySaving ? 0.5 : 1,
+            };
             return (
               <div ref={categoryPickerRef} style={{
                 position: 'absolute',
@@ -747,97 +869,224 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
                 background: '#1e1e1e',
                 border: '1px solid #444',
                 borderRadius: 6,
-                padding: '4px 0',
                 marginTop: 4,
-                minWidth: 140,
                 boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+                display: 'flex',
               }}>
-                {options.map((opt) => {
-                  const color = CATEGORY_COLORS[opt] ?? '#9E9E9E';
-                  const isCurrent = (feature.categories ?? []).includes(opt);
-                  return (
-                    <button
-                      key={opt}
-                      disabled={categorySaving || isCurrent}
-                      onClick={async () => {
-                        if (isCurrent) return;
-                        setCategorySaving(true);
-                        try {
-                          let updated: GeoJSON.Feature;
-                          if (feature.featureType === 'polity') {
-                            updated = await patchPolity(feature.id, { polity_type: opt });
-                          } else {
-                            updated = await patchFeature(feature.id, { categories: [opt] });
+                {/* LEFT — type list. For polities no per-row color dot
+                    (colors are now driven by capital QID, not type). */}
+                <div style={{ padding: '4px 0', minWidth: 150 }}>
+                  <div style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '2px 12px 4px' }}>Type</div>
+                  {options.map((opt) => {
+                    const color = CATEGORY_COLORS[opt] ?? '#9E9E9E';
+                    const isCurrent = isPolityPicker
+                      ? feature.polityType === opt
+                      : (feature.categories ?? []).includes(opt);
+                    const dotColor = isPolityPicker ? null : color;
+                    return (
+                      <button
+                        key={opt}
+                        disabled={categorySaving || isCurrent}
+                        onClick={async () => {
+                          if (isCurrent) return;
+                          setCategorySaving(true);
+                          try {
+                            let updated: GeoJSON.Feature;
+                            if (isPolityPicker) {
+                              updated = await patchPolity(feature.id, { polity_type: opt });
+                            } else {
+                              updated = await patchFeature(feature.id, { categories: [opt] });
+                            }
+                            onFeatureUpdated(updated.properties as Partial<FeatureProperties>);
+                            if (!isPolityPicker) setCategoryPickerOpen(false);
+                          } catch (e) {
+                            console.error('Category save failed', e);
+                          } finally {
+                            setCategorySaving(false);
                           }
-                          onFeatureUpdated(updated.properties as Partial<FeatureProperties>);
-                          setCategoryPickerOpen(false);
-                        } catch (e) {
-                          console.error('Category save failed', e);
-                        } finally {
-                          setCategorySaving(false);
+                        }}
+                        style={{
+                          ...typeListRow,
+                          background: isCurrent ? (isPolityPicker ? 'rgba(255,255,255,0.05)' : `${color}22`) : 'transparent',
+                          color: isCurrent ? (isPolityPicker ? '#fff' : color) : '#ccc',
+                          cursor: isCurrent ? 'default' : 'pointer',
+                        }}
+                      >
+                        {dotColor && (
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+                        )}
+                        {CATEGORY_LABELS[opt] ?? opt}
+                        {isCurrent && <span style={{ marginLeft: 'auto', fontSize: 10 }}>✓</span>}
+                      </button>
+                    );
+                  })}
+                  {/* Separator + None option */}
+                  <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
+                  <button
+                    disabled={categorySaving || (
+                      isPolityPicker
+                        ? feature.polityType === 'other'
+                        : (feature.categories ?? []).length === 0
+                    )}
+                    onClick={async () => {
+                      setCategorySaving(true);
+                      try {
+                        let updated: GeoJSON.Feature;
+                        if (isPolityPicker) {
+                          updated = await patchPolity(feature.id, { polity_type: 'other' });
+                        } else {
+                          updated = await patchFeature(feature.id, { categories: [] });
                         }
-                      }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        width: '100%',
-                        padding: '6px 12px',
-                        background: isCurrent ? `${color}22` : 'transparent',
-                        border: 'none',
-                        color: isCurrent ? color : '#ccc',
-                        fontSize: 12,
-                        cursor: isCurrent ? 'default' : 'pointer',
-                        textAlign: 'left',
-                        opacity: categorySaving ? 0.5 : 1,
-                      }}
-                    >
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                      {CATEGORY_LABELS[opt] ?? opt}
-                      {isCurrent && <span style={{ marginLeft: 'auto', fontSize: 10 }}>✓</span>}
-                    </button>
-                  );
-                })}
-                {/* Separator + None option */}
-                <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
-                <button
-                  disabled={categorySaving || (feature.categories ?? []).length === 0}
-                  onClick={async () => {
-                    setCategorySaving(true);
-                    try {
-                      let updated: GeoJSON.Feature;
-                      if (feature.featureType === 'polity') {
-                        updated = await patchPolity(feature.id, { polity_type: 'other' });
-                      } else {
-                        updated = await patchFeature(feature.id, { categories: [] });
+                        onFeatureUpdated(updated.properties as Partial<FeatureProperties>);
+                        if (!isPolityPicker) setCategoryPickerOpen(false);
+                      } catch (e) {
+                        console.error('Category clear failed', e);
+                      } finally {
+                        setCategorySaving(false);
                       }
-                      onFeatureUpdated(updated.properties as Partial<FeatureProperties>);
-                      setCategoryPickerOpen(false);
-                    } catch (e) {
-                      console.error('Category clear failed', e);
-                    } finally {
-                      setCategorySaving(false);
-                    }
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    width: '100%',
-                    padding: '6px 12px',
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#666',
-                    fontSize: 12,
-                    cursor: (feature.categories ?? []).length === 0 ? 'default' : 'pointer',
-                    textAlign: 'left',
-                    opacity: categorySaving ? 0.5 : 1,
-                  }}
-                >
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#444', flexShrink: 0 }} />
-                  None
-                  {(feature.categories ?? []).length === 0 && <span style={{ marginLeft: 'auto', fontSize: 10 }}>✓</span>}
-                </button>
+                    }}
+                    style={{ ...typeListRow, color: '#666' }}
+                  >
+                    {!isPolityPicker && (
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#444', flexShrink: 0 }} />
+                    )}
+                    None
+                    {((isPolityPicker && feature.polityType === 'other') ||
+                      (!isPolityPicker && (feature.categories ?? []).length === 0)) && (
+                      <span style={{ marginLeft: 'auto', fontSize: 10 }}>✓</span>
+                    )}
+                  </button>
+                </div>
+
+                {/* RIGHT — color override picker (polities only, and only when
+                    the active palette actually has colors to pick from). */}
+                {isPolityPicker && paletteColors.length > 0 && polityKey && (
+                  <div style={{ padding: '4px 0', minWidth: 130, borderLeft: '1px solid #333' }}>
+                    <div
+                      style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '2px 12px 4px' }}
+                      title={`Override the palette color for this polity (and any other polity sharing the same capital). Key: ${polityKey}`}
+                    >
+                      Color
+                    </div>
+                    {paletteColors.map((swatch, idx) => {
+                      const isCurrent = effectiveOverride === idx;
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            if (isCurrent) clearUserColorOverride(polityKey);
+                            else setUserColorOverride(polityKey, idx);
+                          }}
+                          title={isCurrent ? 'Click again to remove the override' : `Pin to palette slot ${idx}`}
+                          style={{
+                            ...typeListRow,
+                            cursor: 'pointer',
+                            background: isCurrent ? 'rgba(255,255,255,0.05)' : 'transparent',
+                            color: isCurrent ? '#fff' : '#ccc',
+                          }}
+                        >
+                          <span style={{
+                            width: 14, height: 14, borderRadius: 3, background: swatch, flexShrink: 0,
+                            border: isCurrent ? '2px solid #fff' : '1px solid rgba(255,255,255,0.15)',
+                          }} />
+                          <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11 }}>{idx}</span>
+                          {isCurrent && <span style={{ marginLeft: 'auto', fontSize: 10 }}>✓</span>}
+                        </button>
+                      );
+                    })}
+                    <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
+                    <button
+                      disabled={currentUserOverride === undefined}
+                      onClick={() => clearUserColorOverride(polityKey)}
+                      style={{
+                        ...typeListRow,
+                        color: currentUserOverride === undefined ? '#444' : '#888',
+                        cursor: currentUserOverride === undefined ? 'default' : 'pointer',
+                      }}
+                      title={currentFileOverride !== undefined
+                        ? `Falls back to the shipped default (slot ${currentFileOverride})`
+                        : 'Falls back to the hash-derived color'}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                )}
+
+                {/* THIRD — "Part of" parent picker (polities only, gated on
+                    no active parent at currentYear). Once a manual parent is
+                    saved the cascade promotes it to source: 'manual' (rank -1),
+                    polityStatusTag flips to kind: 'parent', and this column
+                    disappears on the next render. */}
+                {isPolityPicker && polityStatusTag?.kind !== 'parent' && (
+                  <div style={{ padding: '4px 0', minWidth: 220, borderLeft: '1px solid #333' }}>
+                    <div
+                      style={{ fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '2px 12px 4px' }}
+                      title="Mark this polity as part of another. Year range defaults to the polity's full lifetime. Hidden when an active parent already exists at the current year."
+                    >
+                      Part of
+                    </div>
+                    <div style={{ padding: '2px 10px 6px' }}>
+                      <input
+                        value={parentQuery}
+                        onChange={(e) => setParentQuery(e.target.value)}
+                        placeholder="Search polity…"
+                        disabled={parentSaving}
+                        style={{
+                          width: '100%', boxSizing: 'border-box',
+                          background: '#11172a', border: '1px solid #3a4560', borderRadius: 4,
+                          color: '#e8eaf0', padding: '4px 8px', fontSize: 12, outline: 'none',
+                          fontFamily: 'inherit',
+                        }}
+                      />
+                    </div>
+                    {parentSearching && parentResults.length === 0 && (
+                      <div style={{ padding: '4px 12px', fontSize: 11, color: '#556' }}>Searching…</div>
+                    )}
+                    {!parentSearching && parentQuery.trim().length >= 2 && parentResults.length === 0 && (
+                      <div style={{ padding: '4px 12px', fontSize: 11, color: '#556' }}>No matches.</div>
+                    )}
+                    <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                      {parentResults
+                        // Don't allow picking the polity as its own parent.
+                        .filter((r) => r.wikidataQid && r.wikidataQid !== feature.wikidataQid)
+                        .slice(0, 12)
+                        .map((r) => (
+                          <button
+                            key={r.id}
+                            disabled={parentSaving}
+                            onClick={async () => {
+                              if (!r.wikidataQid) return;
+                              setParentSaving(true);
+                              try {
+                                const updated = await addPolityParent(feature.id, r.wikidataQid);
+                                onFeatureUpdated(updated.properties as Partial<FeatureProperties>);
+                                setCategoryPickerOpen(false);
+                              } catch (e) {
+                                console.error('Set Part-of failed', e);
+                              } finally {
+                                setParentSaving(false);
+                              }
+                            }}
+                            style={{
+                              ...typeListRow,
+                              padding: '5px 12px',
+                              cursor: parentSaving ? 'default' : 'pointer',
+                              opacity: parentSaving ? 0.5 : 1,
+                              flexDirection: 'column',
+                              alignItems: 'flex-start',
+                              gap: 1,
+                            }}
+                          >
+                            <span style={{ fontSize: 12, color: '#e8eaf0' }}>{r.title}</span>
+                            <span style={{ fontSize: 10, color: '#778' }}>
+                              {r.yearStart ?? '?'}{r.yearEnd != null ? `–${r.yearEnd}` : ''}
+                              {r.polityType ? ` · ${r.polityType}` : ''}
+                            </span>
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -1060,6 +1309,32 @@ export function InfoPanel({ feature: rawFeature, stack, onClose, geojson, onNavi
               </div>
             )}
           </>
+        );
+      })()}
+
+      {/* Color-override key — polities only. Click to copy a ready-to-paste
+          line for polityColorOverrides.ts. Useful for breaking clashes
+          between adjacent polities that hash to the same palette slot. */}
+      {isPolity && (() => {
+        const polityKey = feature.capitalWikidataQid ?? feature.wikidataQid ?? feature.title;
+        const label = feature.capitalName ?? feature.title;
+        const snippet = `'${polityKey}': <0-6>,  // ${label}`;
+        return (
+          <div style={{ padding: '0 16px 6px' }}>
+            <button
+              onClick={() => {
+                navigator.clipboard?.writeText(snippet).catch(() => { /* clipboard blocked */ });
+              }}
+              title={`Copy '${snippet}' to clipboard — paste into polityColorOverrides.ts`}
+              style={{
+                background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                fontSize: 10, color: '#9a9a9a', textAlign: 'left',
+              }}
+            >
+              polityKey: {polityKey} ⎘
+            </button>
+          </div>
         );
       })()}
 

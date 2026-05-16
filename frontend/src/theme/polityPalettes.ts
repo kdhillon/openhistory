@@ -1,4 +1,6 @@
 import { CATEGORY_COLORS } from './categories';
+import { POLITY_COLOR_OVERRIDES, PALETTE_COLOR_COUNT } from './polityColorOverrides';
+import { getUserColorOverride } from '../lib/userColorOverrides';
 import type { PolityType } from '../types';
 
 export type PaletteId = 'polity-type' | 'muted-classic' | 'saturated-retro' | 'retro' | 'earth-tones' | 'none';
@@ -37,8 +39,32 @@ export function getPolityColor(polityKey: string, polityType: PolityType | undef
   }
   const colors = POLITY_PALETTES[paletteId].colors;
   if (colors.length === 0) return CATEGORY_COLORS.other;
-  const idx = fnv1a(polityKey || '') % colors.length;
+  // Override precedence:
+  //   1. user override (localStorage, set from InfoPanel color picker)
+  //   2. file override (POLITY_COLOR_OVERRIDES — shared baked-in defaults)
+  //   3. hash fallback
+  // Both override layers store an integer index into the palette's color
+  // array; all named palettes are kept at PALETTE_COLOR_COUNT (7) length
+  // so the same index works across every palette the user might switch to.
+  const userOverride = getUserColorOverride(polityKey);
+  const fileOverride = POLITY_COLOR_OVERRIDES[polityKey];
+  const override = userOverride ?? fileOverride;
+  const idx = (typeof override === 'number' && override >= 0 && override < colors.length)
+    ? override
+    : fnv1a(polityKey || '') % colors.length;
   return colors[idx];
+}
+
+// Dev-time invariant: every non-empty palette must have exactly
+// PALETTE_COLOR_COUNT colors so the override indices are interchangeable
+// across palettes. Throws loudly at module load if a palette drifts.
+for (const [id, p] of Object.entries(POLITY_PALETTES)) {
+  if (p.colors.length > 0 && p.colors.length !== PALETTE_COLOR_COUNT) {
+    throw new Error(
+      `Palette '${id}' has ${p.colors.length} colors but PALETTE_COLOR_COUNT is ${PALETTE_COLOR_COUNT}. ` +
+      `Either resize the palette or update PALETTE_COLOR_COUNT in polityColorOverrides.ts.`,
+    );
+  }
 }
 
 export function isValidPaletteId(id: string | null | undefined): id is PaletteId {
@@ -79,7 +105,24 @@ export type ParentResolver = (qid: string) => PolityForColor | null;
  *  have Rome as capital — so we let it inherit the Kingdom's color). */
 export type CapitalSiblingResolver = (capitalName: string, year: number, excludeQid: string) => PolityForColor | null;
 
-const SOURCE_RANK: Record<string, number> = { P150: 0, P361: 1, P131: 2, P127: 3 };
+// Manual entries (added via the InfoPanel "Part of" picker) outrank every
+// Wikidata-derived source so a user's curated correction always wins the
+// cascade.
+const SOURCE_RANK: Record<string, number> = { manual: -1, P150: 0, P361: 1, P131: 2, P127: 3 };
+
+/**
+ * Parents whose color the children should NOT inherit, but which still
+ * appear in the "Part of X" InfoPanel chip. The chip uses activeParentAt
+ * directly (so EU continues to be displayed as a part-of); only the color
+ * cascade in getPolityColorAtYear skips these entries.
+ *
+ * Q458 — European Union. France, Germany, Italy, etc. shouldn't all share
+ * the EU's color on a Mercator-style map; they're still distinct nations
+ * for coloring purposes.
+ */
+const COLOR_CASCADE_TRANSPARENT_PARENTS: Set<string> = new Set([
+  'Q458', // European Union
+]);
 
 function sourceRank(source: string): number {
   if (source.startsWith('P31:')) return 4;
@@ -116,7 +159,11 @@ export function getPolityColorAtYear(
   }
   seen.add(polity.qid);
   const parent = activeParentAt(polity.parents, year);
-  if (parent) {
+  // Skip transparent parents (e.g. the EU): don't inherit their color, but
+  // the InfoPanel "Part of X" chip continues to show them since it consults
+  // activeParentAt directly. Falls through to the capital-sibling cascade
+  // or self-hash below — exactly what we want for sovereign EU members.
+  if (parent && !COLOR_CASCADE_TRANSPARENT_PARENTS.has(parent.qid)) {
     const parentPolity = resolve(parent.qid);
     if (parentPolity) {
       return getPolityColorAtYear(parentPolity, year, paletteId, resolve, findCapitalSibling, seen);

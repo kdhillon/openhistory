@@ -315,8 +315,21 @@ export default function App() {
 
   const geojson = useMemo((): GeoJSON.FeatureCollection => {
     const baseFeatures = [...staticFeatures, ...eventFeatures];
+    // Shallow-merge override properties onto the base feature so the override
+    // endpoint can omit stable heavy fields (wikipedia_summary, wikipedia_url,
+    // p31_qids, etc.) without nulling them on the resulting feature. Override
+    // fields take precedence; anything missing from the override falls back
+    // to the seed.
     const withOverrides = overrideMap.size > 0
-      ? baseFeatures.map((f) => overrideMap.get((f.properties as { id: string }).id) ?? f)
+      ? baseFeatures.map((f) => {
+          const ov = overrideMap.get((f.properties as { id: string }).id);
+          if (!ov) return f;
+          return {
+            ...f,
+            geometry: ov.geometry ?? f.geometry,
+            properties: { ...f.properties, ...ov.properties },
+          };
+        })
       : baseFeatures;
     const features = hiddenFeatureIds.size > 0
       ? withOverrides.filter((f) => !hiddenFeatureIds.has((f.properties as { id: string }).id))
@@ -327,6 +340,31 @@ export default function App() {
   // Latest geojson available to imperative handlers without re-creating callbacks.
   const geojsonRef = useRef<GeoJSON.FeatureCollection>(geojson);
   geojsonRef.current = geojson;
+
+  // Re-sync selectedFeature from the live geojson whenever it changes.
+  // Without this, a click that happens BEFORE fetchPolityOverrides resolves
+  // snapshots an un-overridden feature into selectedFeature; subsequent
+  // override merges update the geojson but the InfoPanel keeps rendering
+  // the stale snapshot. Manual edits (parents picker, type/color, …) all
+  // funnel through overrideMap → geojson, so reading from there is the
+  // single source of truth.
+  useEffect(() => {
+    setSelectedFeature((prev) => {
+      if (!prev?.id) return prev;
+      const fresh = geojson.features.find(
+        (f) => (f.properties as { id?: string }).id === prev.id,
+      );
+      if (!fresh) return prev;
+      const next = fresh.properties as FeatureProperties;
+      // Cheap shallow equality on the fields that drive cascade + chip —
+      // avoids burning an extra re-render every time geojson identity flips
+      // without any actually-relevant change.
+      const a = (prev as { parents?: unknown }).parents;
+      const b = (next as { parents?: unknown }).parents;
+      if (prev.polityType === next.polityType && prev.title === next.title && a === b) return prev;
+      return next;
+    });
+  }, [geojson]);
 
   // Tracks the in-flight Wikidata batch — surfaces a "Translating labels"
   // entry in the bottom-right status indicator so users see progress instead
@@ -403,13 +441,16 @@ export default function App() {
     }
   }, [hiddenNations]);
 
-  // Merge API-persisted corrections over the baseline on startup (events + polities)
+  // Merge API-persisted corrections over the baseline on startup (events + polities).
+  // The endpoints return sparse features — only the fields that diverge from the
+  // seed — and `geojson` shallow-merges them on top of the base feature so
+  // unset properties fall back to the seed values.
   useEffect(() => {
     Promise.allSettled([fetchOverrides(), fetchPolityOverrides()])
       .then(([eventsResult, politiesResult]) => {
         const allFeatures: GeoJSON.Feature[] = [];
-        if (eventsResult.status === 'fulfilled') allFeatures.push(...eventsResult.value.features);
-        if (politiesResult.status === 'fulfilled') allFeatures.push(...politiesResult.value.features);
+        if (eventsResult.status === 'fulfilled') allFeatures.push(...(eventsResult.value?.features ?? []));
+        if (politiesResult.status === 'fulfilled') allFeatures.push(...(politiesResult.value?.features ?? []));
         if (allFeatures.length === 0) return;
         setOverrideMap(new Map(
           allFeatures.map((f) => [(f.properties as { id: string }).id, f]),
@@ -859,6 +900,12 @@ export default function App() {
         })}
         // onAddToOhm hidden — OHM API writes are blocked by Cloudflare on our backend.
         // Re-enable when we have a working path (iD editor deep-link, whitelisted IP, etc.).
+        onPolityImported={(feature) => {
+          setSeedFeatureCollection((prev) => ({
+            ...prev,
+            features: [...prev.features, feature],
+          }));
+        }}
       />
 
       {isMobile ? (

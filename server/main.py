@@ -506,47 +506,120 @@ async def patch_polity(polity_id: str, request: Request, _: None = Depends(requi
                    year_start, year_end, date_is_fuzzy, polity_type,
                    capital_name, capital_wikidata_qid, lng, lat,
                    preceded_by_qid, succeeded_by_qid, sovereign_qids, p31_qids,
-                   data_version, pipeline_run
+                   parents, sitelinks_count, data_version, pipeline_run
             FROM polities WHERE id = %s
         """, (polity_id,))
         row = cur.fetchone()
         if not row:
             raise HTTPException(500, "Polity not found after update.")
+        return _build_polity_feature(dict(row))
+    finally:
+        conn.close()
 
-        lng, lat = row["lng"], row["lat"]
-        return {
-            "type": "Feature",
-            "geometry": (
-                {"type": "Point", "coordinates": [float(lng), float(lat)]}
-                if lng is not None and lat is not None else None
-            ),
-            "properties": {
-                "featureType": "polity",
-                "id": str(row["id"]),
-                "wikidataQid": row["wikidata_qid"],
-                "slug": row["slug"],
-                "title": row["name"],
-                "wikipediaTitle": row["wikipedia_title"],
-                "wikipediaSummary": row["wikipedia_summary"] or "",
-                "wikipediaUrl": row["wikipedia_url"],
-                "yearStart": row["year_start"],
-                "yearEnd": row["year_end"],
-                "dateIsFuzzy": row["date_is_fuzzy"],
-                "polityType": row["polity_type"],
-                "capitalName": row["capital_name"],
-                "capitalWikidataQid": row["capital_wikidata_qid"],
-                "precededByQid": row["preceded_by_qid"],
-                "succeededByQid": row["succeeded_by_qid"],
-                "sovereignQids": row["sovereign_qids"] or [],
-                "categories": [row["polity_type"]],
-                "primaryCategory": row["polity_type"],
-                "wikidataClasses": row["p31_qids"] or [],
-                "hasTerritory": False,
-                "yearDisplay": display_year(row["year_start"]) if row["year_start"] is not None else "Unknown",
-                "dataVersion": row["data_version"],
-                "pipelineRun": row["pipeline_run"],
-            },
+
+@app.post("/api/polities/{polity_id}/parents")
+async def add_polity_parent(polity_id: str, request: Request, _: None = Depends(require_write_secret)):
+    """
+    Append a manual "Part of" parent to a polity's `parents` JSONB array.
+
+    Body: { "parentQid": "Q161885" }
+
+    Year range defaults to the polity's own [year_start, year_end] — i.e. the
+    user is asserting that this polity is part of the parent for its entire
+    lifetime. The new entry's source is `'manual'`, which outranks every
+    Wikidata-derived source in the cascade (see SOURCE_RANK in
+    polityPalettes.ts).
+
+    Idempotent: if a manual entry for this `parent_qid` already exists, it's
+    replaced (same year range). Non-manual entries are untouched — the picker
+    only fires when the polity has no active parent at the current year, so
+    Wikidata-sourced parents continue to exist alongside the manual override
+    if their year ranges don't overlap.
+
+    Returns the updated polity as a GeoJSON Feature so the caller can splice
+    it back into the live geojson without a reload.
+    """
+    body = await request.json()
+    parent_qid: str = (body.get("parentQid") or "").strip().upper()
+    if not parent_qid or not re.match(r"^Q\d+$", parent_qid):
+        raise HTTPException(400, "Invalid or missing parentQid.")
+
+    # The InfoPanel may pass either a real DB UUID (for polities in our seed)
+    # or a synthesized Wikidata stub id like "wd:Q12345" (for OHM polygons
+    # whose polity row doesn't exist yet — the auto-promote useEffect runs
+    # in parallel, so the click can race ahead of the DB insert). In the
+    # stub case, resolve to the QID and look up by wikidata_qid instead.
+    stub_match = re.match(r"^wd:(Q\d+)$", polity_id)
+    is_stub = stub_match is not None
+    lookup_qid = stub_match.group(1) if stub_match else None
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        if is_stub:
+            cur.execute("""
+                SELECT id, year_start, year_end, parents, wikidata_qid
+                FROM polities WHERE wikidata_qid = %s
+            """, (lookup_qid,))
+        else:
+            # Guard against the SQL crash that would otherwise fire on a non-
+            # UUID stub id passed by the client.
+            if not re.match(r"^[0-9a-fA-F-]{36}$", polity_id):
+                raise HTTPException(400, f"Invalid polity id {polity_id!r}; expected UUID or 'wd:Q…' stub.")
+            cur.execute("""
+                SELECT id, year_start, year_end, parents, wikidata_qid
+                FROM polities WHERE id = %s
+            """, (polity_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, f"Polity {polity_id} not found.")
+        # The remaining UPDATE / SELECT use the resolved DB UUID, not the
+        # incoming stub id.
+        polity_id = str(row["id"])
+        if row["wikidata_qid"] == parent_qid:
+            raise HTTPException(400, "A polity cannot be its own parent.")
+
+        # Build the new manual entry. Year range is intentionally unbounded
+        # (`null/null` → "always active" per activeParentAt) so the cascade
+        # reflects the user's intent — "this polity belongs to that parent"
+        # — regardless of the timeline year the user happened to be viewing
+        # when they saved. Avoids the gotcha where a polity's Wikidata P576
+        # ended earlier than its OHM polygon's end_date, leaving the manual
+        # entry inactive at the year the polygon is clickable.
+        new_entry = {
+            "qid": parent_qid,
+            "yearStart": None,
+            "yearEnd": None,
+            "source": "manual",
         }
+        # Drop any pre-existing manual row for the same parent (so the picker
+        # acts as upsert), keep everything else.
+        existing = row["parents"] or []
+        kept = [
+            p for p in existing
+            if not (isinstance(p, dict) and p.get("source") == "manual" and p.get("qid") == parent_qid)
+        ]
+        next_parents = kept + [new_entry]
+
+        cur.execute("""
+            UPDATE polities
+               SET parents = %s,
+                   manually_edited_at = NOW()
+             WHERE id = %s
+        """, (json.dumps(next_parents), polity_id))
+        conn.commit()
+        _capture("polity_parent_added", {"polity_id": polity_id, "parent_qid": parent_qid}, request)
+
+        # Return the updated polity so the client can patch the live geojson.
+        cur.execute("""
+            SELECT id, wikidata_qid, slug, name, aliases, wikipedia_title, wikipedia_summary, wikipedia_url,
+                   year_start, year_end, date_is_fuzzy, polity_type,
+                   capital_name, capital_wikidata_qid, lng, lat,
+                   preceded_by_qid, succeeded_by_qid, sovereign_qids, p31_qids,
+                   parents, sitelinks_count, data_version, pipeline_run
+            FROM polities WHERE id = %s
+        """, (polity_id,))
+        return _build_polity_feature(dict(cur.fetchone()))
     finally:
         conn.close()
 
@@ -890,13 +963,94 @@ def get_overrides():
 
     The frontend fetches this on startup and merges it over the static seed.geojson,
     so user corrections survive hard refreshes without requiring a pipeline re-run.
+
+    Implementation note: uses a single SELECT (+ one batch lookup for
+    part_of_qids titles) rather than `build_event_feature()` per row. With
+    thousands of manually-edited events that N+1 path took 2+ minutes on
+    Railway; this is sub-second. Heavy text fields (wikipedia_summary,
+    wikipedia_url) are intentionally omitted — they're stable across edits
+    and InfoPanel lazy-fetches the summary on demand when missing. The seed
+    geojson already carries them, so the override-merge inherits the values
+    from the base feature.
     """
     conn = get_conn()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT id FROM events WHERE manually_edited_at IS NOT NULL ORDER BY manually_edited_at DESC")
-        ids = [str(row["id"]) for row in cur.fetchall()]
-        features = [f for event_id in ids if (f := build_event_feature(cur, event_id)) is not None]
+        cur.execute("""
+            SELECT
+              e.id, e.wikidata_qid, e.slug, e.title, e.wikipedia_title,
+              e.year_start, e.month_start, e.day_start,
+              e.year_end, e.month_end, e.day_end,
+              e.date_is_fuzzy, e.date_range_min, e.date_range_max,
+              e.location_level, e.location_wikidata_qid,
+              CASE WHEN e.location_level = 'point' THEN e.lng ELSE l.lng END AS lng,
+              CASE WHEN e.location_level = 'point' THEN e.lat ELSE l.lat END AS lat,
+              e.location_name,
+              l.slug AS location_slug,
+              e.categories, e.part_of_qids,
+              e.sitelinks_count
+            FROM events e
+            LEFT JOIN locations l ON e.location_wikidata_qid = l.wikidata_qid
+            WHERE e.manually_edited_at IS NOT NULL
+            ORDER BY e.manually_edited_at DESC
+        """)
+        rows = cur.fetchall()
+
+        # Batch-resolve all part_of_qids titles in one query.
+        all_qids: list[str] = []
+        for r in rows:
+            all_qids.extend(r["part_of_qids"] or [])
+        qid_map: dict = {}
+        if all_qids:
+            cur.execute(
+                "SELECT wikidata_qid, title, slug FROM events WHERE wikidata_qid = ANY(%s)",
+                (list(set(all_qids)),),
+            )
+            qid_map = {r["wikidata_qid"]: {"title": r["title"], "slug": r["slug"]} for r in cur.fetchall()}
+
+        features: list[dict] = []
+        for row in rows:
+            part_of_resolved = [
+                {"qid": qid, "title": qid_map[qid]["title"], "slug": qid_map[qid]["slug"]}
+                for qid in (row["part_of_qids"] or [])
+                if qid in qid_map
+            ]
+            lng, lat = row["lng"], row["lat"]
+            geometry = (
+                {"type": "Point", "coordinates": [float(lng), float(lat)]}
+                if lng is not None and lat is not None else None
+            )
+            features.append({
+                "type": "Feature",
+                "geometry": geometry,
+                "properties": {
+                    "featureType": "event",
+                    "id": str(row["id"]),
+                    "wikidataQid": row["wikidata_qid"],
+                    "slug": row["slug"] or (row["wikipedia_title"] or "").replace(" ", "_"),
+                    "title": row["title"],
+                    "wikipediaTitle": row["wikipedia_title"],
+                    "yearStart": row["year_start"],
+                    "monthStart": row["month_start"],
+                    "dayStart": row["day_start"],
+                    "yearEnd": row["year_end"],
+                    "monthEnd": row["month_end"],
+                    "dayEnd": row["day_end"],
+                    "dateIsFuzzy": row["date_is_fuzzy"],
+                    "dateRangeMin": row["date_range_min"],
+                    "dateRangeMax": row["date_range_max"],
+                    "locationLevel": row["location_level"],
+                    "locationName": row["location_name"] or "",
+                    "locationSlug": row["location_slug"],
+                    "locationWikidataQid": row["location_wikidata_qid"],
+                    "categories": row["categories"] or [],
+                    "primaryCategory": (row["categories"] or ["unknown"])[0],
+                    "partOf": row["part_of_qids"] or [],
+                    "partOfResolved": part_of_resolved,
+                    "sitelinksCount": row["sitelinks_count"],
+                    "yearDisplay": display_year(row["year_start"]) if row["year_start"] is not None else "Unknown",
+                },
+            })
         return {"type": "FeatureCollection", "features": features, "count": len(features)}
     finally:
         conn.close()
@@ -907,23 +1061,59 @@ def get_polity_overrides():
     """
     Return all manually-edited polities as a GeoJSON FeatureCollection.
 
-    The frontend fetches this on startup and merges it over the static seed.geojson,
-    so user corrections (year_start, year_end, etc.) survive hard refreshes without
-    requiring a pipeline re-run.
+    The frontend fetches this on startup and shallow-merges over the static
+    seed.geojson, so user corrections (year_start, parents, capital, etc.)
+    survive hard refreshes without requiring a pipeline re-run.
+
+    Heavy text fields (wikipedia_summary, wikipedia_url, aliases, p31_qids)
+    are intentionally omitted — they're stable across edits, the seed already
+    carries them, and the App-side merge is shallow (override fields layer on
+    top of the seed). Cut the wire size by an order of magnitude.
     """
     conn = get_conn()
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT id, wikidata_qid, slug, name, aliases, wikipedia_title, wikipedia_summary, wikipedia_url,
+            SELECT id, wikidata_qid, slug, name, wikipedia_title,
                    year_start, year_end, date_is_fuzzy, polity_type,
                    capital_name, capital_wikidata_qid, lng, lat,
-                   preceded_by_qid, succeeded_by_qid, sovereign_qids, p31_qids, parents
+                   preceded_by_qid, succeeded_by_qid, sovereign_qids,
+                   parents, sitelinks_count
             FROM polities
             WHERE manually_edited_at IS NOT NULL
             ORDER BY manually_edited_at DESC
         """)
-        features = [_build_polity_feature(dict(r)) for r in cur.fetchall()]
+        features: list[dict] = []
+        for r in cur.fetchall():
+            lng, lat = r["lng"], r["lat"]
+            features.append({
+                "type": "Feature",
+                "geometry": (
+                    {"type": "Point", "coordinates": [float(lng), float(lat)]}
+                    if lng is not None and lat is not None else None
+                ),
+                "properties": {
+                    "featureType": "polity",
+                    "id": str(r["id"]),
+                    "wikidataQid": r["wikidata_qid"],
+                    "slug": r["slug"],
+                    "title": r["name"],
+                    "wikipediaTitle": r["wikipedia_title"],
+                    "yearStart": r["year_start"],
+                    "yearEnd": r["year_end"],
+                    "dateIsFuzzy": r["date_is_fuzzy"],
+                    "polityType": r["polity_type"],
+                    "capitalName": r["capital_name"],
+                    "capitalWikidataQid": r["capital_wikidata_qid"],
+                    "precededByQid": r["preceded_by_qid"],
+                    "succeededByQid": r["succeeded_by_qid"],
+                    "parents": r["parents"] or [],
+                    "sitelinksCount": r["sitelinks_count"],
+                    "categories": [r["polity_type"]],
+                    "primaryCategory": r["polity_type"],
+                    "yearDisplay": display_year(r["year_start"]) if r["year_start"] is not None else "Unknown",
+                },
+            })
         return {"type": "FeatureCollection", "features": features, "count": len(features)}
     finally:
         conn.close()
