@@ -180,7 +180,7 @@ interface Props {
   /** Called once after the MapLibre map finishes loading — provides the map instance for editor components. */
   onMapReady?: (map: Map) => void;
   /** Imperative handle for the InfoPanel stack dots: jump to a specific cycle index. */
-  stackApiRef?: React.MutableRefObject<{ advanceStack: (targetIndex: number) => void } | null>;
+  stackApiRef?: React.MutableRefObject<{ advanceStack: (targetIndex: number) => void; clearStack: () => void } | null>;
   /** Called when user clicks an OHM territory that has no Wikidata QID matched in our polities */
   onOhmTerritoryClick?: (
     ohmName: string,
@@ -824,6 +824,16 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
       const labelVis = showLabels ? 'visible' : 'none';
       for (const id of ['ohm-labels', 'ohm-labels-small']) {
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', labelVis);
+      }
+      // Basemap water/waterway labels (rivers, oceans) — also follow showLabels
+      // so the toggle has a consistent meaning across all label sources.
+      const BASEMAP_LABEL_LAYERS = new Set(['water_name', 'waterway', 'water']);
+      for (const layer of map.getStyle().layers) {
+        if (layer.type !== 'symbol') continue;
+        const srcLayer = (layer as { 'source-layer'?: string })['source-layer'];
+        if (srcLayer && BASEMAP_LABEL_LAYERS.has(srcLayer)) {
+          map.setLayoutProperty(layer.id, 'visibility', labelVis);
+        }
       }
       // Imperial labels (admin_level=1) have an extra gate: the "Show imperial
       // territory" toggle. When unchecked, no admin_level=1 fills, borders, or
@@ -1624,10 +1634,16 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
       if (unique.length === 0) return;
 
       const ids = unique.map((f) => String(f.properties?.id ?? ''));
-      let index = 0;
-      if (stackRef.current?.ids.length === ids.length && stackRef.current.ids.every((id, i) => id === ids[i])) {
-        index = (stackRef.current.index + 1) % ids.length;
-      }
+      // Advance the cycle ONLY when the click hit the exact same set of
+      // features as the previous click. A different stack (or no stack at all,
+      // because the panel was closed and clearStack reset stackRef) opens the
+      // clicked event at index 0.
+      const prev = stackRef.current;
+      const prevSet = prev ? new Set(prev.ids) : null;
+      const sameStack = prevSet
+        && prevSet.size === ids.length
+        && ids.every((id) => prevSet.has(id));
+      const index = sameStack ? (prev!.index + 1) % ids.length : 0;
       stackRef.current = { ids, index };
       stackFeaturesRef.current = new globalThis.Map(unique.map((f, i) => [ids[i], f]));
 
@@ -1671,6 +1687,10 @@ export function MapView({ geojson, currentDateInt, stepSize, activeCategories, s
 
     if (stackApiRef) {
       stackApiRef.current = {
+        clearStack: () => {
+          stackRef.current = null;
+          stackFeaturesRef.current = new globalThis.Map();
+        },
         advanceStack: (targetIndex: number) => {
           const cur = stackRef.current;
           if (!cur || targetIndex < 0 || targetIndex >= cur.ids.length) return;

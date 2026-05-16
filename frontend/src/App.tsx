@@ -123,7 +123,7 @@ export default function App() {
 
   const [selectedFeature, setSelectedFeature] = useState<FeatureProperties | null>(null);
   const [stack, setStack] = useState<StackInfo>({ index: 0, total: 1 });
-  const stackApiRef = useRef<{ advanceStack: (i: number) => void } | null>(null);
+  const stackApiRef = useRef<{ advanceStack: (i: number) => void; clearStack: () => void } | null>(null);
   const handleAdvanceStack = useCallback((i: number) => stackApiRef.current?.advanceStack(i), []);
   const [activeCategories, setActiveCategories] = useState<Set<Category>>(
     new Set(EVENT_CATEGORIES as Category[]),
@@ -491,6 +491,7 @@ export default function App() {
 
   const handleClosePanel = useCallback(() => {
     setSelectedFeature(null);
+    stackApiRef.current?.clearStack();
   }, []);
 
   const handleFeatureUpdated = useCallback((updates: Partial<FeatureProperties> & { _coords?: [number, number] }) => {
